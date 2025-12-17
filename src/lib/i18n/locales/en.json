@@ -1,0 +1,110 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close"
+  },
+  "home": {
+    "title": "Welcome to Minito",
+    "subtitle": "Break down your tasks into manageable steps",
+    "inputPlaceholder": "What to Minitize? (e.g. Clean room)",
+    "breakButton": "Minitize It!",
+    "breaking": "Minitizing...",
+    "noSteps": "No steps available. Please go back and try again."
+  },
+  "focus": {
+    "step": "Step {{current}} of {{total}}",
+    "completed": "✓ Completed",
+    "next": "Next",
+    "previous": "Previous",
+    "complete": "DONE",
+    "startWith": "Start with:",
+    "ready": "I'm Ready"
+  },
+  "success": {
+    "title": "You Minitized {{count}} steps!",
+    "subtitle": "You Minitized {{count}} steps!",
+    "breakAnother": "Minitize Another"
+  },
+  "login": {
+    "title": "Welcome to Minito",
+    "subtitle": "Sign in to sync your tasks across devices",
+    "continueWithApple": "Continue with Apple",
+    "continueWithGoogle": "Continue with Google",
+    "continueAsGuest": "Continue as Guest"
+  },
+  "privacy": {
+    "title": "Privacy & Data",
+    "subtitle": "Manage your data and account settings",
+    "signedInAs": "Signed in as",
+    "userId": "User ID",
+    "gdpr": "Your Rights (GDPR)",
+    "exportData": {
+      "title": "Export Your Data",
+      "description": "Download a copy of all your data stored in Minito. Note: Original task inputs are not stored for privacy - only hashed values are available.",
+      "button": "Export Data",
+      "success": "Your data has been exported and is ready to share"
+    },
+    "deleteAccount": {
+      "title": "Delete Account",
+      "description": "Permanently delete your account and all associated data. This action cannot be undone.",
+      "button": "Delete Account",
+      "confirmTitle": "Delete Account",
+      "confirmMessage": "Are you sure you want to delete your account? This action cannot be undone. All your data will be permanently deleted.",
+      "success": "Your account has been deleted"
+    },
+    "signOut": "Sign Out",
+    "privacyNotice": {
+      "title": "Privacy First:",
+      "text": "Minito follows a privacy-first design. Your task inputs are never stored in plain text - only hashed values (HMAC_SHA256) are saved for analytics purposes. This means we cannot reconstruct your original tasks, ensuring your privacy is protected."
+    }
+  },
+  "panic": {
+    "headline": "We can't show this content for security reasons",
+    "description": "Take your time. These steps are here to help you feel grounded.",
+    "footer": "Remember: You're not alone. It's okay to ask for help.",
+    "steps": {
+      "pause": {
+        "title": "Let's pause and take a breath",
+        "body": "What you're feeling right now is valid and important. Take a deep breath, inhale for 4 seconds, hold for 4 seconds, exhale for 4 seconds. Repeat this 3 times."
+      },
+      "grounding": {
+        "title": "Bring your attention to your surroundings",
+        "body": "Try to notice 5 things you can see, 4 things you can touch, 3 sounds you can hear, 2 things you can smell, and 1 thing you're grateful for in your current environment."
+      },
+      "support": {
+        "title": "You're not alone",
+        "body": "If you have a trusted friend, family member, or professional support line, consider reaching out to them. Asking for help when you need it is not a sign of weakness, but of strength."
+      }
+    }
+  },
+  "offline": {
+    "banner": "You're offline. Using fallback content.",
+    "title": "Offline Mode"
+  },
+  "errors": {
+    "network": "Network error occurred",
+    "unknown": "An unknown error occurred",
+    "signInFailed": "Failed to sign in",
+    "signOutFailed": "Failed to sign out",
+    "exportFailed": "Failed to export data",
+    "deleteFailed": "Failed to delete account",
+    "cancelled": "Operation was cancelled"
+  },
+  "timer": {
+    "title": "Timer",
+    "completed": "Completed!",
+    "start": "Start",
+    "pause": "Pause",
+    "reset": "Reset",
+    "back": "Back",
+    "stop": "Stop",
+    "tapToStop": "Tap to stop"
+  }
+}

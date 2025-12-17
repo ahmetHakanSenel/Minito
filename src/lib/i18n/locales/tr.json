@@ -1,0 +1,110 @@
+{
+  "common": {
+    "loading": "Yükleniyor...",
+    "error": "Hata",
+    "success": "Başarılı",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "save": "Kaydet",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "close": "Kapat"
+  },
+  "home": {
+    "title": "Minito'ya Hoş Geldiniz",
+    "subtitle": "Görevlerinizi yönetilebilir adımlara bölün",
+    "inputPlaceholder": "Neyi Minito'layalım? (örn: Evi topla)",
+    "breakButton": "Minito'la!",
+    "breaking": "Minito'luyor...",
+    "noSteps": "Adım bulunamadı. Lütfen geri dönüp tekrar deneyin."
+  },
+  "focus": {
+    "step": "Adım {{current}} / {{total}}",
+    "completed": "✓ Tamamlandı",
+    "next": "İleri",
+    "previous": "Geri",
+    "complete": "YAPTIM",
+    "startWith": "İlk adım:",
+    "ready": "Hazırım"
+  },
+  "success": {
+    "title": "{{count}} adımı Minito'ladın!",
+    "subtitle": "{{count}} adımı Minito'ladın!",
+    "breakAnother": "Yenisini Minito'la"
+  },
+  "login": {
+    "title": "Minito'ya Hoş Geldiniz",
+    "subtitle": "Görevlerinizi cihazlar arasında senkronize etmek için giriş yapın",
+    "continueWithApple": "Apple ile Devam Et",
+    "continueWithGoogle": "Google ile Devam Et",
+    "continueAsGuest": "Misafir Olarak Devam Et"
+  },
+  "privacy": {
+    "title": "Gizlilik ve Veri",
+    "subtitle": "Verilerinizi ve hesap ayarlarınızı yönetin",
+    "signedInAs": "Giriş yapıldı",
+    "userId": "Kullanıcı ID",
+    "gdpr": "Haklarınız (GDPR)",
+    "exportData": {
+      "title": "Verilerinizi Dışa Aktarın",
+      "description": "Minito'da saklanan tüm verilerinizin bir kopyasını indirin. Not: Gizlilik için orijinal görev girişleri saklanmaz - yalnızca hash değerleri mevcuttur.",
+      "button": "Verileri Dışa Aktar",
+      "success": "Verileriniz dışa aktarıldı ve paylaşıma hazır"
+    },
+    "deleteAccount": {
+      "title": "Hesabı Sil",
+      "description": "Hesabınızı ve tüm ilişkili verileri kalıcı olarak silin. Bu işlem geri alınamaz.",
+      "button": "Hesabı Sil",
+      "confirmTitle": "Hesabı Sil",
+      "confirmMessage": "Hesabınızı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz. Tüm verileriniz kalıcı olarak silinecektir.",
+      "success": "Hesabınız silindi"
+    },
+    "signOut": "Çıkış Yap",
+    "privacyNotice": {
+      "title": "Gizlilik Öncelikli:",
+      "text": "Minito gizlilik öncelikli bir tasarım izler. Görev girişleriniz asla düz metin olarak saklanmaz - yalnızca analitik amaçlı hash değerleri (HMAC_SHA256) kaydedilir. Bu, orijinal görevlerinizi yeniden oluşturamayacağımız anlamına gelir, gizliliğinizin korunduğundan emin olur."
+    }
+  },
+  "panic": {
+    "headline": "Güvenlik nedeniyle bu içeriği gösteremiyoruz",
+    "description": "Acelemiz yok. Bu adımlar seni sakinleştirmek ve toparlamak için burada.",
+    "footer": "Unutma: Yalnız değilsin. Yardım istemekten çekinme.",
+    "steps": {
+      "pause": {
+        "title": "Biraz durup nefes alalım",
+        "body": "Şu an hissettiğin şeyler geçerli ve önemli. Derin bir nefes al, 4 saniye boyunca nefes al, 4 saniye tut, 4 saniyede ver. Bunu 3 kez tekrarla."
+      },
+      "grounding": {
+        "title": "Etrafına dikkatini getir",
+        "body": "Bulunduğun ortamda görebildiğin 5 şeyi, dokunabildiğin 4 şeyi, duyabildiğin 3 sesi, koklayabildiğin 2 şeyi ve minnettar olduğun 1 şeyi fark etmeye çalış."
+      },
+      "support": {
+        "title": "Yalnız değilsin",
+        "body": "Güvendiğin bir arkadaşın, aile üyen ya da profesyonel bir destek hattı varsa, onlarla iletişime geçmeyi düşünebilirsin. İhtiyaç duyduğunda yardım istemek güçsüzlük değil, güç göstergesidir."
+      }
+    }
+  },
+  "offline": {
+    "banner": "Çevrimdışısınız. Yedek içerik kullanılıyor.",
+    "title": "Çevrimdışı Mod"
+  },
+  "errors": {
+    "network": "Ağ hatası oluştu",
+    "unknown": "Bilinmeyen bir hata oluştu",
+    "signInFailed": "Giriş yapılamadı",
+    "signOutFailed": "Çıkış yapılamadı",
+    "exportFailed": "Veri dışa aktarılamadı",
+    "deleteFailed": "Hesap silinemedi",
+    "cancelled": "İşlem iptal edildi"
+  },
+  "timer": {
+    "title": "Zamanlayıcı",
+    "completed": "Tamamlandı!",
+    "start": "Başla",
+    "pause": "Duraklat",
+    "reset": "Sıfırla",
+    "back": "Geri",
+    "stop": "Durdur",
+    "tapToStop": "Durdurmak için dokun"
+  }
+}

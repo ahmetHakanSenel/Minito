@@ -1,0 +1,1 @@
+export { HeaderUserWidget } from './HeaderUserWidget';

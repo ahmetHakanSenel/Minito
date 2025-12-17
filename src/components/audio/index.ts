@@ -1,0 +1,1 @@
+export { FloatingMiniPlayer } from './FloatingMiniPlayer';

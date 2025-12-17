@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "minito",
+    "slug": "minito",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./logo.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "scheme": "minito",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#121212"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8b24b394-3e75-471c-937c-7622eced1e56"
+      }
+    },
+    "owner": "hsenels-organization"
+  }
+}
