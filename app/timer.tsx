@@ -13,18 +13,28 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Target } from 'lucide-react-native';
+import { useProjects } from '../src/context/ProjectContext';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 type TimerParams = {
     minutes?: string;
     seconds?: string;
+    taskContext?: string;
+    projectId?: string;
+    taskId?: string;
 };
 
 export default function TimerScreen() {
     const router = useRouter();
     const params = useLocalSearchParams<TimerParams>();
+    const { completeTaskById } = useProjects();
+
+    // Task context from Planner (Flow Bridge)
+    const taskContext = params.taskContext;
+    const projectId = params.projectId;
+    const taskId = params.taskId;
 
     // Default to 25 minutes (Pomodoro)
     const initialMinutes = Number(params.minutes ?? '25') || 25;
@@ -124,6 +134,11 @@ export default function TimerScreen() {
         completionTimeoutsRef.current = [];
 
         tripleHapticBurst();
+
+        // FLOW BRIDGE: Mark task as complete when timer ends successfully
+        if (projectId && taskId) {
+            completeTaskById(projectId, taskId);
+        }
 
         pulseOpacity.value = withRepeat(
             withTiming(0.55, { duration: 1400, easing: Easing.inOut(Easing.sin) }),
@@ -249,6 +264,16 @@ export default function TimerScreen() {
                     <Text style={styles.headerTitle}>Zamanlayıcı</Text>
                     <View style={styles.backButton} />
                 </View>
+
+                {/* Task Context Banner (Flow Bridge) */}
+                {taskContext && (
+                    <View style={styles.taskContextBanner}>
+                        <Target size={16} color="#8B5CF6" />
+                        <Text style={styles.taskContextText} numberOfLines={1}>
+                            {taskContext}
+                        </Text>
+                    </View>
+                )}
 
                 {/* Timer card */}
                 <AnimatedView
@@ -392,6 +417,24 @@ const styles = StyleSheet.create({
         bottom: 0,
         backgroundColor: 'rgba(139, 92, 246, 0.35)',
         zIndex: 1,
+    },
+    taskContextBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.3)',
+    },
+    taskContextText: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#FFFFFF',
     },
     timerCard: {
         backgroundColor: '#1E1E1E',

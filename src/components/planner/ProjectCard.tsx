@@ -1,0 +1,485 @@
+import React, { useCallback, useEffect } from 'react';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    StyleSheet,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { ChevronDown, ChevronUp, Circle, CheckCircle2, Play } from 'lucide-react-native';
+import Animated, {
+    FadeInDown,
+    FadeInRight,
+    LinearTransition,
+    useSharedValue,
+    useAnimatedStyle,
+    withSpring,
+    withTiming,
+    Easing,
+    interpolate,
+    Extrapolation,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { Project, Task, formatDueDate, useProjects } from '../../context/ProjectContext';
+
+const AnimatedView = Animated.createAnimatedComponent(View);
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
+// ============================================================================
+// ANIMATED PROGRESS BAR COMPONENT
+// ============================================================================
+
+interface AnimatedProgressBarProps {
+    progress: number;
+    color: string;
+}
+
+const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({ progress, color }) => {
+    const animatedProgress = useSharedValue(0);
+
+    useEffect(() => {
+        animatedProgress.value = withTiming(progress, {
+            duration: 400,
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        });
+    }, [progress]);
+
+    const progressStyle = useAnimatedStyle(() => ({
+        width: `${animatedProgress.value}%`,
+        backgroundColor: color,
+    }));
+
+    return (
+        <View style={styles.progressBar}>
+            <Animated.View style={[styles.progressFill, progressStyle]} />
+        </View>
+    );
+};
+
+// ============================================================================
+// TASK ITEM COMPONENT
+// ============================================================================
+
+interface TaskItemProps {
+    task: Task;
+    projectId: string;
+    projectTitle: string;
+    onToggle: () => void;
+    isNextStep?: boolean;
+}
+
+const TaskItem: React.FC<TaskItemProps> = ({
+    task,
+    projectId,
+    projectTitle,
+    onToggle,
+    isNextStep = false,
+}) => {
+    const router = useRouter();
+
+    const handleStartFocus = useCallback(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // Navigate to timer with task context
+        router.push({
+            pathname: '/timer',
+            params: {
+                minutes: '25', // Default Pomodoro
+                taskContext: `Minito'luyor: ${task.title}`,
+                projectId,
+                taskId: task.id,
+            },
+        });
+    }, [router, task, projectId]);
+
+    const handleToggle = useCallback(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onToggle();
+    }, [onToggle]);
+
+    return (
+        <View style={styles.taskItem}>
+            <TouchableOpacity
+                onPress={handleToggle}
+                style={styles.taskCheckbox}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+                {task.isCompleted ? (
+                    <CheckCircle2 size={20} color="#34D399" strokeWidth={2} />
+                ) : (
+                    <Circle size={20} color="rgba(255,255,255,0.3)" strokeWidth={2} />
+                )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={styles.taskTextContainer}
+                onPress={handleStartFocus}
+                disabled={task.isCompleted}
+            >
+                <Text
+                    style={[
+                        styles.taskText,
+                        task.isCompleted && styles.taskTextCompleted,
+                        isNextStep && !task.isCompleted && styles.taskTextNextStep,
+                    ]}
+                >
+                    {task.title}
+                </Text>
+            </TouchableOpacity>
+
+            {!task.isCompleted && (
+                <TouchableOpacity
+                    onPress={handleStartFocus}
+                    style={styles.taskPlayButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                    <Play size={14} color="#8B5CF6" fill="#8B5CF6" />
+                </TouchableOpacity>
+            )}
+        </View>
+    );
+};
+
+// ============================================================================
+// NEXT STEP PREVIEW COMPONENT (Collapsed State)
+// ============================================================================
+
+interface NextStepPreviewProps {
+    task: Task;
+    projectId: string;
+    projectTitle: string;
+}
+
+const NextStepPreview: React.FC<NextStepPreviewProps> = ({ task, projectId, projectTitle }) => {
+    const router = useRouter();
+
+    const handleStartFocus = useCallback(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        router.push({
+            pathname: '/timer',
+            params: {
+                minutes: '25',
+                taskContext: `Minito'luyor: ${task.title}`,
+                projectId,
+                taskId: task.id,
+            },
+        });
+    }, [router, task, projectId]);
+
+    return (
+        <TouchableOpacity
+            style={styles.nextStepContainer}
+            onPress={handleStartFocus}
+            activeOpacity={0.7}
+        >
+            <View style={styles.nextStepLabelRow}>
+                <Text style={styles.nextStepLabel}>Sonraki Adım:</Text>
+                <Play size={12} color="#8B5CF6" fill="#8B5CF6" style={{ marginLeft: 4 }} />
+            </View>
+            <Text style={styles.nextStepText}>{task.title}</Text>
+        </TouchableOpacity>
+    );
+};
+
+// ============================================================================
+// PROJECT CARD COMPONENT
+// ============================================================================
+
+interface ProjectCardProps {
+    project: Project;
+    index: number;
+    isExpanded: boolean;
+    onToggle: () => void;
+    totalProjects: number;
+}
+
+export const ProjectCard: React.FC<ProjectCardProps> = ({
+    project,
+    index,
+    isExpanded,
+    onToggle,
+    totalProjects,
+}) => {
+    const { toggleTask, getNextStep } = useProjects();
+    const scale = useSharedValue(1);
+    const chevronRotation = useSharedValue(0);
+
+    useEffect(() => {
+        chevronRotation.value = withTiming(isExpanded ? 180 : 0, {
+            duration: 200,
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        });
+    }, [isExpanded]);
+
+    const handlePressIn = () => {
+        scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });
+    };
+
+    const handlePressOut = () => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    };
+
+    const handlePress = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onToggle();
+    };
+
+    const handleToggleTask = useCallback((taskId: string) => {
+        toggleTask(project.id, taskId);
+    }, [project.id, toggleTask]);
+
+    const cardAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
+
+    const chevronAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{
+            rotate: `${interpolate(
+                chevronRotation.value,
+                [0, 180],
+                [0, 180],
+                Extrapolation.CLAMP
+            )}deg`
+        }],
+    }));
+
+    const nextStep = getNextStep(project);
+    const formattedDueDate = formatDueDate(project.dueDate);
+
+    return (
+        <AnimatedView
+            entering={FadeInRight.delay(index * 80).duration(300)}
+            layout={LinearTransition.duration(200)}
+            style={styles.timelineItem}
+        >
+            {/* Timeline connector */}
+            <View style={styles.timelineConnector}>
+                <View style={[styles.timelineDot, { backgroundColor: project.color }]} />
+                {index < totalProjects - 1 && <View style={styles.timelineLine} />}
+            </View>
+
+            {/* Project Card */}
+            <AnimatedTouchableOpacity
+                style={[styles.projectCard, cardAnimatedStyle]}
+                onPress={handlePress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                activeOpacity={1}
+            >
+                {/* Header */}
+                <View style={styles.cardHeader}>
+                    <View style={styles.cardTitleRow}>
+                        <View style={[styles.colorIndicator, { backgroundColor: project.color }]} />
+                        <Text style={styles.projectTitle}>{project.title}</Text>
+                    </View>
+                    <Animated.View style={chevronAnimatedStyle}>
+                        <ChevronDown size={20} color="rgba(255,255,255,0.5)" />
+                    </Animated.View>
+                </View>
+
+                {/* Progress Bar - Animated */}
+                <View style={styles.progressContainer}>
+                    <AnimatedProgressBar progress={project.progress} color={project.color} />
+                    <Text style={styles.progressText}>{project.progress}%</Text>
+                </View>
+
+                {/* Next Step (Collapsed) or All Tasks (Expanded) */}
+                {!isExpanded && nextStep && (
+                    <NextStepPreview
+                        task={nextStep}
+                        projectId={project.id}
+                        projectTitle={project.title}
+                    />
+                )}
+
+                {/* Due Date */}
+                {formattedDueDate && !isExpanded && (
+                    <Text style={styles.dueDate}>Bitiş: {formattedDueDate}</Text>
+                )}
+
+                {/* Expanded Tasks */}
+                {isExpanded && (
+                    <AnimatedView
+                        entering={FadeInDown.duration(200)}
+                        style={styles.tasksContainer}
+                    >
+                        <View style={styles.tasksDivider} />
+                        <Text style={styles.tasksTitle}>Alt Görevler</Text>
+                        {project.tasks.map((task, taskIndex) => (
+                            <TaskItem
+                                key={task.id}
+                                task={task}
+                                projectId={project.id}
+                                projectTitle={project.title}
+                                onToggle={() => handleToggleTask(task.id)}
+                                isNextStep={taskIndex === project.tasks.findIndex(t => !t.isCompleted)}
+                            />
+                        ))}
+
+                        {/* Due Date in expanded view */}
+                        {formattedDueDate && (
+                            <Text style={[styles.dueDate, { marginTop: 12 }]}>
+                                Bitiş: {formattedDueDate}
+                            </Text>
+                        )}
+                    </AnimatedView>
+                )}
+            </AnimatedTouchableOpacity>
+        </AnimatedView>
+    );
+};
+
+// ============================================================================
+// STYLES
+// ============================================================================
+
+const styles = StyleSheet.create({
+    timelineItem: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    timelineConnector: {
+        width: 20,
+        alignItems: 'center',
+    },
+    timelineDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginTop: 20,
+    },
+    timelineLine: {
+        flex: 1,
+        width: 2,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        marginTop: 4,
+    },
+    projectCard: {
+        flex: 1,
+        marginLeft: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 20,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    cardTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    colorIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    projectTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
+    },
+    progressContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 12,
+    },
+    progressBar: {
+        flex: 1,
+        height: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    progressText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.6)',
+        width: 36,
+        textAlign: 'right',
+    },
+    nextStepContainer: {
+        marginBottom: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.2)',
+    },
+    nextStepLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 2,
+    },
+    nextStepLabel: {
+        fontSize: 11,
+        color: 'rgba(255, 255, 255, 0.4)',
+    },
+    nextStepText: {
+        fontSize: 14,
+        color: '#FFFFFF',
+        fontWeight: '500',
+    },
+    dueDate: {
+        fontSize: 12,
+        color: 'rgba(255, 255, 255, 0.4)',
+    },
+    tasksContainer: {
+        marginTop: 12,
+    },
+    tasksDivider: {
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        marginBottom: 12,
+    },
+    tasksTitle: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.5)',
+        marginBottom: 10,
+    },
+    taskItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    taskCheckbox: {
+        marginRight: 10,
+    },
+    taskTextContainer: {
+        flex: 1,
+    },
+    taskText: {
+        fontSize: 14,
+        color: '#FFFFFF',
+    },
+    taskTextCompleted: {
+        color: 'rgba(255, 255, 255, 0.4)',
+        textDecorationLine: 'line-through',
+    },
+    taskTextNextStep: {
+        color: '#A78BFA',
+        fontWeight: '500',
+    },
+    taskPlayButton: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 8,
+    },
+});
+
+export default ProjectCard;

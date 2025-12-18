@@ -8,6 +8,7 @@ import { AuroraBackground } from '../src/components';
 import { FloatingMiniPlayer } from '../src/components/audio';
 import { AuroraProvider } from '../src/lib/aurora';
 import { AudioProvider } from '../src/context';
+import { ProjectProvider } from '../src/context/ProjectContext';
 import '../global.css';
 import { initSentry } from '../src/lib/monitoring/sentry';
 import { useEffect } from 'react';
@@ -32,36 +33,38 @@ export default function RootLayout() {
     <SafeAreaProvider style={styles.safeArea}>
       <AudioProvider>
         <AuroraProvider>
-          <View style={styles.container}>
-            {/* Global Aurora Background - visible across all screens */}
-            <AuroraBackground />
+          <ProjectProvider>
+            <View style={styles.container}>
+              {/* Global Aurora Background - visible across all screens */}
+              <AuroraBackground />
 
-            <I18nProvider>
-              <AuthProvider>
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: 'transparent', flex: 1 },
-                    animation: 'fade',
-                  }}
-                >
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="focus" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="success" />
-                  <Stack.Screen name="panic" options={{ presentation: 'fullScreenModal' }} />
-                  <Stack.Screen name="planner" />
-                  <Stack.Screen name="sounds" />
-                  <Stack.Screen name="stats" />
-                  <Stack.Screen name="settings" />
-                  <Stack.Screen name="login" />
-                  <Stack.Screen name="privacy" />
-                </Stack>
-              </AuthProvider>
-            </I18nProvider>
+              <I18nProvider>
+                <AuthProvider>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: 'transparent', flex: 1 },
+                      animation: 'fade',
+                    }}
+                  >
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="focus" options={{ presentation: 'fullScreenModal' }} />
+                    <Stack.Screen name="success" />
+                    <Stack.Screen name="panic" options={{ presentation: 'fullScreenModal' }} />
+                    <Stack.Screen name="planner" />
+                    <Stack.Screen name="sounds" />
+                    <Stack.Screen name="stats" />
+                    <Stack.Screen name="settings" />
+                    <Stack.Screen name="login" />
+                    <Stack.Screen name="privacy" />
+                  </Stack>
+                </AuthProvider>
+              </I18nProvider>
 
-            {/* Global Floating Mini Player - persistent across screens */}
-            <FloatingMiniPlayer />
-          </View>
+              {/* Global Floating Mini Player - persistent across screens */}
+              <FloatingMiniPlayer />
+            </View>
+          </ProjectProvider>
         </AuroraProvider>
       </AudioProvider>
     </SafeAreaProvider>

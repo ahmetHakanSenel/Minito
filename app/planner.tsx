@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -6,200 +6,335 @@ import {
     TouchableOpacity,
     StyleSheet,
     StatusBar,
+    TextInput,
+    Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, ChevronDown, ChevronUp, Circle, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, Plus, X, Sparkles } from 'lucide-react-native';
 import Animated, {
-    FadeInDown,
-    FadeInRight,
-    LinearTransition,
-    useSharedValue,
-    useAnimatedStyle,
-    withSpring,
+    FadeIn,
+    FadeOut,
+    SlideInUp,
+    Easing,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useProjects, formatDueDate } from '../src/context/ProjectContext';
+import { ProjectCard } from '../src/components/planner/ProjectCard';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
-const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
-// Sample project data
-interface ProjectTask {
-    id: string;
-    title: string;
-    completed: boolean;
+// ============================================================================
+// ADD PROJECT MODAL COMPONENT
+// ============================================================================
+
+interface AddProjectModalProps {
+    visible: boolean;
+    onClose: () => void;
+    onAdd: (title: string, color: string) => void;
+    onGenerateSubtasks: (title: string) => Promise<string[]>;
 }
 
-interface Project {
-    id: string;
-    title: string;
-    color: string;
-    progress: number; // 0-100
-    nextStep: string;
-    dueDate?: string;
-    tasks: ProjectTask[];
-}
-
-const SAMPLE_PROJECTS: Project[] = [
-    {
-        id: '1',
-        title: 'Bitirme Tezi',
-        color: '#8B5CF6',
-        progress: 35,
-        nextStep: 'Literatür taramasını bitir',
-        dueDate: '15 Ocak 2025',
-        tasks: [
-            { id: '1-1', title: 'Konu belirleme', completed: true },
-            { id: '1-2', title: 'Danışman ile görüşme', completed: true },
-            { id: '1-3', title: 'Literatür taraması', completed: false },
-            { id: '1-4', title: 'Metodoloji yazımı', completed: false },
-        ],
-    },
-    {
-        id: '2',
-        title: 'Fitness Hedefi',
-        color: '#34D399',
-        progress: 60,
-        nextStep: 'Bu hafta 3 antrenman yap',
-        tasks: [
-            { id: '2-1', title: 'Spor salonu üyeliği', completed: true },
-            { id: '2-2', title: 'Antrenman programı oluştur', completed: true },
-            { id: '2-3', title: '12 haftalık program', completed: false },
-        ],
-    },
-    {
-        id: '3',
-        title: 'Yeni Dil Öğren',
-        color: '#60A5FA',
-        progress: 15,
-        nextStep: 'Günlük 15 dakika pratik',
-        tasks: [
-            { id: '3-1', title: 'Uygulama indir', completed: true },
-            { id: '3-2', title: 'İlk 100 kelime', completed: false },
-            { id: '3-3', title: 'Temel gramer', completed: false },
-        ],
-    },
+const PROJECT_COLORS = [
+    '#8B5CF6', // Purple
+    '#34D399', // Green
+    '#60A5FA', // Blue
+    '#F472B6', // Pink
+    '#FBBF24', // Yellow
+    '#F87171', // Red
 ];
 
-interface ProjectCardProps {
-    project: Project;
-    index: number;
-    isExpanded: boolean;
-    onToggle: () => void;
-}
+const AddProjectModal: React.FC<AddProjectModalProps> = ({
+    visible,
+    onClose,
+    onAdd,
+    onGenerateSubtasks,
+}) => {
+    const [title, setTitle] = useState('');
+    const [selectedColor, setSelectedColor] = useState(PROJECT_COLORS[0]);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [suggestedTasks, setSuggestedTasks] = useState<string[]>([]);
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, index, isExpanded, onToggle }) => {
-    const scale = useSharedValue(1);
-
-    const handlePressIn = () => {
-        scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });
+    const handleClose = () => {
+        setTitle('');
+        setSelectedColor(PROJECT_COLORS[0]);
+        setSuggestedTasks([]);
+        onClose();
     };
 
-    const handlePressOut = () => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    const handleAdd = () => {
+        if (title.trim()) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onAdd(title.trim(), selectedColor);
+            handleClose();
+        }
     };
 
-    const handlePress = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onToggle();
+    const handleGenerateSubtasks = async () => {
+        if (!title.trim()) return;
+        setIsGenerating(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        try {
+            const tasks = await onGenerateSubtasks(title.trim());
+            setSuggestedTasks(tasks);
+        } catch (error) {
+            console.error('Failed to generate subtasks:', error);
+        } finally {
+            setIsGenerating(false);
+        }
     };
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }],
-    }));
 
     return (
-        <AnimatedView
-            entering={FadeInRight.delay(index * 80).duration(300)}
-            layout={LinearTransition.duration(200)}
-            style={styles.timelineItem}
+        <Modal
+            visible={visible}
+            transparent
+            animationType="fade"
+            onRequestClose={handleClose}
         >
-            {/* Timeline connector */}
-            <View style={styles.timelineConnector}>
-                <View style={[styles.timelineDot, { backgroundColor: project.color }]} />
-                {index < SAMPLE_PROJECTS.length - 1 && <View style={styles.timelineLine} />}
-            </View>
-
-            {/* Project Card */}
-            <AnimatedTouchableOpacity
-                style={[styles.projectCard, animatedStyle]}
-                onPress={handlePress}
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
-                activeOpacity={1}
-            >
-                {/* Header */}
-                <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                        <View style={[styles.colorIndicator, { backgroundColor: project.color }]} />
-                        <Text style={styles.projectTitle}>{project.title}</Text>
+            <View style={modalStyles.overlay}>
+                <AnimatedView
+                    entering={SlideInUp.duration(300).easing(Easing.out(Easing.cubic))}
+                    exiting={FadeOut.duration(200)}
+                    style={modalStyles.container}
+                >
+                    {/* Header */}
+                    <View style={modalStyles.header}>
+                        <Text style={modalStyles.title}>Yeni Proje</Text>
+                        <TouchableOpacity onPress={handleClose} style={modalStyles.closeButton}>
+                            <X size={24} color="rgba(255,255,255,0.6)" />
+                        </TouchableOpacity>
                     </View>
-                    {isExpanded ? (
-                        <ChevronUp size={20} color="rgba(255,255,255,0.5)" />
-                    ) : (
-                        <ChevronDown size={20} color="rgba(255,255,255,0.5)" />
-                    )}
-                </View>
 
-                {/* Progress Bar */}
-                <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                        <View
-                            style={[
-                                styles.progressFill,
-                                { width: `${project.progress}%`, backgroundColor: project.color },
-                            ]}
+                    {/* Title Input */}
+                    <View style={modalStyles.inputContainer}>
+                        <Text style={modalStyles.label}>Proje Adı</Text>
+                        <TextInput
+                            style={modalStyles.input}
+                            value={title}
+                            onChangeText={setTitle}
+                            placeholder="Örn: Bitirme Tezi"
+                            placeholderTextColor="rgba(255,255,255,0.3)"
                         />
                     </View>
-                    <Text style={styles.progressText}>{project.progress}%</Text>
-                </View>
 
-                {/* Next Step */}
-                <View style={styles.nextStepContainer}>
-                    <Text style={styles.nextStepLabel}>Sonraki Adım:</Text>
-                    <Text style={styles.nextStepText}>{project.nextStep}</Text>
-                </View>
-
-                {/* Due Date */}
-                {project.dueDate && (
-                    <Text style={styles.dueDate}>Bitiş: {project.dueDate}</Text>
-                )}
-
-                {/* Expanded Tasks */}
-                {isExpanded && (
-                    <AnimatedView
-                        entering={FadeInDown.duration(200)}
-                        style={styles.tasksContainer}
-                    >
-                        <View style={styles.tasksDivider} />
-                        <Text style={styles.tasksTitle}>Alt Görevler</Text>
-                        {project.tasks.map((task) => (
-                            <View key={task.id} style={styles.taskItem}>
-                                {task.completed ? (
-                                    <CheckCircle2 size={18} color="#34D399" strokeWidth={2} />
-                                ) : (
-                                    <Circle size={18} color="rgba(255,255,255,0.3)" strokeWidth={2} />
-                                )}
-                                <Text
+                    {/* Color Picker */}
+                    <View style={modalStyles.colorSection}>
+                        <Text style={modalStyles.label}>Renk</Text>
+                        <View style={modalStyles.colorGrid}>
+                            {PROJECT_COLORS.map((color) => (
+                                <TouchableOpacity
+                                    key={color}
                                     style={[
-                                        styles.taskText,
-                                        task.completed && styles.taskTextCompleted,
+                                        modalStyles.colorOption,
+                                        { backgroundColor: color },
+                                        selectedColor === color && modalStyles.colorSelected,
                                     ]}
-                                >
-                                    {task.title}
+                                    onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setSelectedColor(color);
+                                    }}
+                                />
+                            ))}
+                        </View>
+                    </View>
+
+                    {/* AI Subtask Generation */}
+                    <TouchableOpacity
+                        style={[
+                            modalStyles.aiButton,
+                            !title.trim() && { opacity: 0.5 },
+                        ]}
+                        onPress={handleGenerateSubtasks}
+                        disabled={!title.trim() || isGenerating}
+                    >
+                        <Sparkles size={18} color="#FBBF24" />
+                        <Text style={modalStyles.aiButtonText}>
+                            {isGenerating ? 'Düşünüyorum...' : 'AI ile Görev Öner'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Suggested Tasks Preview */}
+                    {suggestedTasks.length > 0 && (
+                        <AnimatedView
+                            entering={FadeIn.duration(200)}
+                            style={modalStyles.suggestedContainer}
+                        >
+                            <Text style={modalStyles.suggestedTitle}>Önerilen Görevler:</Text>
+                            {suggestedTasks.slice(0, 3).map((task, index) => (
+                                <Text key={index} style={modalStyles.suggestedTask}>
+                                    • {task}
                                 </Text>
-                            </View>
-                        ))}
-                    </AnimatedView>
-                )}
-            </AnimatedTouchableOpacity>
-        </AnimatedView>
+                            ))}
+                            {suggestedTasks.length > 3 && (
+                                <Text style={modalStyles.suggestedMore}>
+                                    +{suggestedTasks.length - 3} daha fazla...
+                                </Text>
+                            )}
+                        </AnimatedView>
+                    )}
+
+                    {/* Add Button */}
+                    <TouchableOpacity
+                        style={[
+                            modalStyles.addButton,
+                            !title.trim() && { opacity: 0.5 },
+                        ]}
+                        onPress={handleAdd}
+                        disabled={!title.trim()}
+                    >
+                        <LinearGradient
+                            colors={['#8B5CF6', '#6D28D9']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={modalStyles.addButtonGradient}
+                        >
+                            <Text style={modalStyles.addButtonText}>Proje Oluştur</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </AnimatedView>
+            </View>
+        </Modal>
     );
 };
 
+const modalStyles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+    },
+    container: {
+        backgroundColor: 'rgba(30, 30, 46, 0.98)',
+        borderRadius: 24,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    closeButton: {
+        padding: 4,
+    },
+    inputContainer: {
+        marginBottom: 20,
+    },
+    label: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.6)',
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    input: {
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        color: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    colorSection: {
+        marginBottom: 20,
+    },
+    colorGrid: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    colorOption: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 3,
+        borderColor: 'transparent',
+    },
+    colorSelected: {
+        borderColor: '#FFFFFF',
+        transform: [{ scale: 1.1 }],
+    },
+    aiButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 14,
+        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(251, 191, 36, 0.3)',
+        marginBottom: 16,
+    },
+    aiButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#FBBF24',
+    },
+    suggestedContainer: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 16,
+    },
+    suggestedTitle: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.5)',
+        marginBottom: 8,
+    },
+    suggestedTask: {
+        fontSize: 14,
+        color: '#FFFFFF',
+        marginBottom: 4,
+    },
+    suggestedMore: {
+        fontSize: 12,
+        color: 'rgba(255, 255, 255, 0.4)',
+        marginTop: 4,
+    },
+    addButton: {
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    addButtonGradient: {
+        paddingVertical: 16,
+        alignItems: 'center',
+    },
+    addButtonText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+});
+
+// ============================================================================
+// PLANNER SCREEN
+// ============================================================================
+
 export default function PlannerScreen() {
     const router = useRouter();
+    const { projects, addProject, addTask, generateSubtasks } = useProjects();
     const [expandedProject, setExpandedProject] = useState<string | null>(null);
+    const [showAddModal, setShowAddModal] = useState(false);
+
+    // Sort projects by due date (earliest first, undefined dates at end)
+    const sortedProjects = [...projects].sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.getTime() - b.dueDate.getTime();
+    });
 
     const handleBack = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -208,6 +343,27 @@ export default function PlannerScreen() {
 
     const handleToggleProject = (projectId: string) => {
         setExpandedProject(expandedProject === projectId ? null : projectId);
+    };
+
+    const handleAddProject = useCallback(async (title: string, color: string) => {
+        // Generate subtasks for the new project
+        const subtasks = await generateSubtasks(title);
+
+        addProject({
+            title,
+            color,
+            dueDate: undefined,
+            tasks: subtasks.map((taskTitle, index) => ({
+                id: `new-${Date.now()}-${index}`,
+                title: taskTitle,
+                isCompleted: false,
+            })),
+        });
+    }, [addProject, generateSubtasks]);
+
+    const handleOpenAddModal = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setShowAddModal(true);
     };
 
     return (
@@ -220,7 +376,7 @@ export default function PlannerScreen() {
                     <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Planlayıcı</Text>
-                <TouchableOpacity style={styles.addButton}>
+                <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal}>
                     <Plus size={24} color="#FFFFFF" strokeWidth={2} />
                 </TouchableOpacity>
             </View>
@@ -234,27 +390,53 @@ export default function PlannerScreen() {
                 {/* Section Title */}
                 <Text style={styles.sectionTitle}>Aktif Projeler</Text>
 
+                {/* Empty State */}
+                {sortedProjects.length === 0 && (
+                    <AnimatedView
+                        entering={FadeIn.duration(300)}
+                        style={styles.emptyState}
+                    >
+                        <Text style={styles.emptyStateEmoji}>📋</Text>
+                        <Text style={styles.emptyStateTitle}>Henüz proje yok</Text>
+                        <Text style={styles.emptyStateText}>
+                            İlk projenizi ekleyerek başlayın
+                        </Text>
+                    </AnimatedView>
+                )}
+
                 {/* Timeline View */}
                 <View style={styles.timeline}>
-                    {SAMPLE_PROJECTS.map((project, index) => (
+                    {sortedProjects.map((project, index) => (
                         <ProjectCard
                             key={project.id}
                             project={project}
                             index={index}
                             isExpanded={expandedProject === project.id}
                             onToggle={() => handleToggleProject(project.id)}
+                            totalProjects={sortedProjects.length}
                         />
                     ))}
                 </View>
 
-                {/* Empty state or add new */}
-                <TouchableOpacity style={styles.addProjectButton}>
+                {/* Add New Project Button */}
+                <TouchableOpacity
+                    style={styles.addProjectButton}
+                    onPress={handleOpenAddModal}
+                >
                     <Plus size={20} color="#8B5CF6" strokeWidth={2} />
                     <Text style={styles.addProjectText}>Yeni Proje Ekle</Text>
                 </TouchableOpacity>
 
                 <View style={{ height: 100 }} />
             </ScrollView>
+
+            {/* Add Project Modal */}
+            <AddProjectModal
+                visible={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                onAdd={handleAddProject}
+                onGenerateSubtasks={generateSubtasks}
+            />
         </SafeAreaView>
     );
 }
@@ -306,124 +488,25 @@ const styles = StyleSheet.create({
     timeline: {
         paddingLeft: 20,
     },
-    timelineItem: {
-        flexDirection: 'row',
+    emptyState: {
+        alignItems: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 40,
+    },
+    emptyStateEmoji: {
+        fontSize: 48,
         marginBottom: 16,
     },
-    timelineConnector: {
-        width: 20,
-        alignItems: 'center',
-    },
-    timelineDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        marginTop: 20,
-    },
-    timelineLine: {
-        flex: 1,
-        width: 2,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        marginTop: 4,
-    },
-    projectCard: {
-        flex: 1,
-        marginLeft: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 20,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    cardTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    colorIndicator: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    projectTitle: {
-        fontSize: 16,
+    emptyStateTitle: {
+        fontSize: 18,
         fontWeight: '600',
         color: '#FFFFFF',
-    },
-    progressContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 12,
-    },
-    progressBar: {
-        flex: 1,
-        height: 6,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: 3,
-        overflow: 'hidden',
-    },
-    progressFill: {
-        height: '100%',
-        borderRadius: 3,
-    },
-    progressText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: 'rgba(255, 255, 255, 0.6)',
-        width: 36,
-        textAlign: 'right',
-    },
-    nextStepContainer: {
         marginBottom: 8,
     },
-    nextStepLabel: {
-        fontSize: 11,
-        color: 'rgba(255, 255, 255, 0.4)',
-        marginBottom: 2,
-    },
-    nextStepText: {
+    emptyStateText: {
         fontSize: 14,
-        color: '#FFFFFF',
-        fontWeight: '500',
-    },
-    dueDate: {
-        fontSize: 12,
-        color: 'rgba(255, 255, 255, 0.4)',
-    },
-    tasksContainer: {
-        marginTop: 12,
-    },
-    tasksDivider: {
-        height: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        marginBottom: 12,
-    },
-    tasksTitle: {
-        fontSize: 12,
-        fontWeight: '600',
         color: 'rgba(255, 255, 255, 0.5)',
-        marginBottom: 10,
-    },
-    taskItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        marginBottom: 8,
-    },
-    taskText: {
-        fontSize: 14,
-        color: '#FFFFFF',
-    },
-    taskTextCompleted: {
-        color: 'rgba(255, 255, 255, 0.4)',
-        textDecorationLine: 'line-through',
+        textAlign: 'center',
     },
     addProjectButton: {
         flexDirection: 'row',
