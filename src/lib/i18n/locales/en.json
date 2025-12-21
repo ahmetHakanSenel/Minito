@@ -106,5 +106,23 @@
     "back": "Back",
     "stop": "Stop",
     "tapToStop": "Tap to stop"
+  },
+  "focusMode": {
+    "warning": "Focus!",
+    "remainingMinutes": "{{minutes}} min left",
+    "pause": "Pause",
+    "resume": "Resume"
+  },
+  "session": {
+    "start": "START",
+    "focusSession": "FOCUS SESSION",
+    "duration": "DURATION",
+    "ambience": "AMBIENCE",
+    "customDuration": "Custom duration...",
+    "minutes": "minutes",
+    "mute": "Mute",
+    "brownNoise": "Brown Noise",
+    "rain": "Rain",
+    "lofi": "Lo-Fi"
   }
 }

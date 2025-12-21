@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, ScrollView, StatusBar, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { TaskInput, OfflineBanner, MinitoIcon, NativeAdCard } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
@@ -17,8 +17,18 @@ export default function HomeScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const [isDashboardVisible, setIsDashboardVisible] = useState(false);
   const router = useRouter();
+  const params = useLocalSearchParams<{ openDashboard?: string }>();
   const insets = useSafeAreaInsets();
   const lastHapticTime = useRef<number>(0);
+
+  // Open DashboardModal when coming back from sub-screens with openDashboard param
+  useEffect(() => {
+    if (params.openDashboard === 'true') {
+      setIsDashboardVisible(true);
+      // Clear the param to prevent reopening on re-render
+      router.setParams({ openDashboard: undefined });
+    }
+  }, [params.openDashboard]);
 
   // GOD MODE: Selection haptic on scroll/swipe (debounced to avoid spam)
   const handleScroll = () => {

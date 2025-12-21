@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -6,7 +6,7 @@ import {
     StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronDown, ChevronUp, Circle, CheckCircle2, Play } from 'lucide-react-native';
+import { ChevronDown, Circle, CheckCircle2, Play } from 'lucide-react-native';
 import Animated, {
     FadeInDown,
     FadeInRight,
@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Project, Task, formatDueDate, useProjects } from '../../context/ProjectContext';
+import { FocusMode, SessionCompletionModal, SessionSetupModal, SessionConfig, SoundType } from '../../modals';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -65,6 +66,7 @@ interface TaskItemProps {
     projectId: string;
     projectTitle: string;
     onToggle: () => void;
+    onStartFocus: (task: Task) => void;
     isNextStep?: boolean;
 }
 
@@ -73,23 +75,13 @@ const TaskItem: React.FC<TaskItemProps> = ({
     projectId,
     projectTitle,
     onToggle,
+    onStartFocus,
     isNextStep = false,
 }) => {
-    const router = useRouter();
-
     const handleStartFocus = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        // Navigate to timer with task context
-        router.push({
-            pathname: '/timer',
-            params: {
-                minutes: '25', // Default Pomodoro
-                taskContext: `Minito'luyor: ${task.title}`,
-                projectId,
-                taskId: task.id,
-            },
-        });
-    }, [router, task, projectId]);
+        onStartFocus(task);
+    }, [task, onStartFocus]);
 
     const handleToggle = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -147,23 +139,19 @@ interface NextStepPreviewProps {
     task: Task;
     projectId: string;
     projectTitle: string;
+    onStartFocus: (task: Task) => void;
 }
 
-const NextStepPreview: React.FC<NextStepPreviewProps> = ({ task, projectId, projectTitle }) => {
-    const router = useRouter();
-
+const NextStepPreview: React.FC<NextStepPreviewProps> = ({
+    task,
+    projectId,
+    projectTitle,
+    onStartFocus,
+}) => {
     const handleStartFocus = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        router.push({
-            pathname: '/timer',
-            params: {
-                minutes: '25',
-                taskContext: `Minito'luyor: ${task.title}`,
-                projectId,
-                taskId: task.id,
-            },
-        });
-    }, [router, task, projectId]);
+        onStartFocus(task);
+    }, [task, onStartFocus]);
 
     return (
         <TouchableOpacity
@@ -199,9 +187,23 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     onToggle,
     totalProjects,
 }) => {
-    const { toggleTask, getNextStep } = useProjects();
+    const { toggleTask, getNextStep, completeTaskById } = useProjects();
     const scale = useSharedValue(1);
     const chevronRotation = useSharedValue(0);
+
+    // Focus Mode State
+    const [setupModalVisible, setSetupModalVisible] = useState(false);
+    const [focusModeVisible, setFocusModeVisible] = useState(false);
+    const [sessionModalVisible, setSessionModalVisible] = useState(false);
+    const [activeTask, setActiveTask] = useState<Task | null>(null);
+    const [sessionConfig, setSessionConfig] = useState<SessionConfig>({
+        duration: 25,
+        sound: 'mute',
+    });
+    const [sessionData, setSessionData] = useState({
+        duration: 0,
+        pickupCount: 0,
+    });
 
     useEffect(() => {
         chevronRotation.value = withTiming(isExpanded ? 180 : 0, {
@@ -227,6 +229,71 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         toggleTask(project.id, taskId);
     }, [project.id, toggleTask]);
 
+    // ========================================================================
+    // SESSION SETUP & FOCUS MODE HANDLERS
+    // ========================================================================
+
+    // Step 1: Play button opens Setup Modal
+    const handleStartFocus = useCallback((task: Task) => {
+        setActiveTask(task);
+        setSetupModalVisible(true);
+    }, []);
+
+    // Step 2: User confirms in Setup Modal -> Open Focus Mode
+    const handleSessionConfigured = useCallback((config: SessionConfig) => {
+        setSessionConfig(config);
+        setSetupModalVisible(false);
+        // Small delay to allow setup modal to close smoothly
+        setTimeout(() => {
+            setFocusModeVisible(true);
+        }, 100);
+    }, []);
+
+    const handleSetupModalClose = useCallback(() => {
+        setSetupModalVisible(false);
+        setActiveTask(null);
+    }, []);
+
+    const handleFocusModeClose = useCallback(() => {
+        setFocusModeVisible(false);
+        setActiveTask(null);
+    }, []);
+
+    const handleSessionComplete = useCallback((data: {
+        duration: number;
+        pickupCount: number;
+        completed: boolean;
+        projectId?: string;
+        taskId?: string;
+    }) => {
+        setFocusModeVisible(false);
+        // Convert seconds to minutes for display
+        setSessionData({
+            duration: Math.ceil(data.duration / 60),
+            pickupCount: data.pickupCount,
+        });
+        // Show session completion modal
+        setSessionModalVisible(true);
+    }, []);
+
+    const handleTaskCompleted = useCallback(() => {
+        if (activeTask) {
+            completeTaskById(project.id, activeTask.id);
+        }
+        setSessionModalVisible(false);
+        setActiveTask(null);
+    }, [activeTask, project.id, completeTaskById]);
+
+    const handleJustSession = useCallback(() => {
+        // Task remains active, user gets XP (would integrate with gamification context)
+        setSessionModalVisible(false);
+        setActiveTask(null);
+    }, []);
+
+    // ========================================================================
+    // ANIMATIONS
+    // ========================================================================
+
     const cardAnimatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
     }));
@@ -246,85 +313,119 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     const formattedDueDate = formatDueDate(project.dueDate);
 
     return (
-        <AnimatedView
-            entering={FadeInRight.delay(index * 80).duration(300)}
-            layout={LinearTransition.duration(200)}
-            style={styles.timelineItem}
-        >
-            {/* Timeline connector */}
-            <View style={styles.timelineConnector}>
-                <View style={[styles.timelineDot, { backgroundColor: project.color }]} />
-                {index < totalProjects - 1 && <View style={styles.timelineLine} />}
-            </View>
-
-            {/* Project Card */}
-            <AnimatedTouchableOpacity
-                style={[styles.projectCard, cardAnimatedStyle]}
-                onPress={handlePress}
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
-                activeOpacity={1}
+        <>
+            <AnimatedView
+                entering={FadeInRight.delay(index * 80).duration(300)}
+                layout={LinearTransition.duration(200)}
+                style={styles.timelineItem}
             >
-                {/* Header */}
-                <View style={styles.cardHeader}>
-                    <View style={styles.cardTitleRow}>
-                        <View style={[styles.colorIndicator, { backgroundColor: project.color }]} />
-                        <Text style={styles.projectTitle}>{project.title}</Text>
+                {/* Timeline connector */}
+                <View style={styles.timelineConnector}>
+                    <View style={[styles.timelineDot, { backgroundColor: project.color }]} />
+                    {index < totalProjects - 1 && <View style={styles.timelineLine} />}
+                </View>
+
+                {/* Project Card */}
+                <AnimatedTouchableOpacity
+                    style={[styles.projectCard, cardAnimatedStyle]}
+                    onPress={handlePress}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    activeOpacity={1}
+                >
+                    {/* Header */}
+                    <View style={styles.cardHeader}>
+                        <View style={styles.cardTitleRow}>
+                            <View style={[styles.colorIndicator, { backgroundColor: project.color }]} />
+                            <Text style={styles.projectTitle}>{project.title}</Text>
+                        </View>
+                        <Animated.View style={chevronAnimatedStyle}>
+                            <ChevronDown size={20} color="rgba(255,255,255,0.5)" />
+                        </Animated.View>
                     </View>
-                    <Animated.View style={chevronAnimatedStyle}>
-                        <ChevronDown size={20} color="rgba(255,255,255,0.5)" />
-                    </Animated.View>
-                </View>
 
-                {/* Progress Bar - Animated */}
-                <View style={styles.progressContainer}>
-                    <AnimatedProgressBar progress={project.progress} color={project.color} />
-                    <Text style={styles.progressText}>{project.progress}%</Text>
-                </View>
+                    {/* Progress Bar - Animated */}
+                    <View style={styles.progressContainer}>
+                        <AnimatedProgressBar progress={project.progress} color={project.color} />
+                        <Text style={styles.progressText}>{project.progress}%</Text>
+                    </View>
 
-                {/* Next Step (Collapsed) or All Tasks (Expanded) */}
-                {!isExpanded && nextStep && (
-                    <NextStepPreview
-                        task={nextStep}
-                        projectId={project.id}
-                        projectTitle={project.title}
-                    />
-                )}
+                    {/* Next Step (Collapsed) or All Tasks (Expanded) */}
+                    {!isExpanded && nextStep && (
+                        <NextStepPreview
+                            task={nextStep}
+                            projectId={project.id}
+                            projectTitle={project.title}
+                            onStartFocus={handleStartFocus}
+                        />
+                    )}
 
-                {/* Due Date */}
-                {formattedDueDate && !isExpanded && (
-                    <Text style={styles.dueDate}>Bitiş: {formattedDueDate}</Text>
-                )}
+                    {/* Due Date */}
+                    {formattedDueDate && !isExpanded && (
+                        <Text style={styles.dueDate}>Bitiş: {formattedDueDate}</Text>
+                    )}
 
-                {/* Expanded Tasks */}
-                {isExpanded && (
-                    <AnimatedView
-                        entering={FadeInDown.duration(200)}
-                        style={styles.tasksContainer}
-                    >
-                        <View style={styles.tasksDivider} />
-                        <Text style={styles.tasksTitle}>Alt Görevler</Text>
-                        {project.tasks.map((task, taskIndex) => (
-                            <TaskItem
-                                key={task.id}
-                                task={task}
-                                projectId={project.id}
-                                projectTitle={project.title}
-                                onToggle={() => handleToggleTask(task.id)}
-                                isNextStep={taskIndex === project.tasks.findIndex(t => !t.isCompleted)}
-                            />
-                        ))}
+                    {/* Expanded Tasks */}
+                    {isExpanded && (
+                        <AnimatedView
+                            entering={FadeInDown.duration(200)}
+                            style={styles.tasksContainer}
+                        >
+                            <View style={styles.tasksDivider} />
+                            <Text style={styles.tasksTitle}>Alt Görevler</Text>
+                            {project.tasks.map((task, taskIndex) => (
+                                <TaskItem
+                                    key={task.id}
+                                    task={task}
+                                    projectId={project.id}
+                                    projectTitle={project.title}
+                                    onToggle={() => handleToggleTask(task.id)}
+                                    onStartFocus={handleStartFocus}
+                                    isNextStep={taskIndex === project.tasks.findIndex(t => !t.isCompleted)}
+                                />
+                            ))}
 
-                        {/* Due Date in expanded view */}
-                        {formattedDueDate && (
-                            <Text style={[styles.dueDate, { marginTop: 12 }]}>
-                                Bitiş: {formattedDueDate}
-                            </Text>
-                        )}
-                    </AnimatedView>
-                )}
-            </AnimatedTouchableOpacity>
-        </AnimatedView>
+                            {/* Due Date in expanded view */}
+                            {formattedDueDate && (
+                                <Text style={[styles.dueDate, { marginTop: 12 }]}>
+                                    Bitiş: {formattedDueDate}
+                                </Text>
+                            )}
+                        </AnimatedView>
+                    )}
+                </AnimatedTouchableOpacity>
+            </AnimatedView>
+
+            {/* Session Setup Modal (The Cockpit) */}
+            <SessionSetupModal
+                visible={setupModalVisible}
+                onClose={handleSetupModalClose}
+                taskTitle={activeTask?.title || ''}
+                onStartSession={handleSessionConfigured}
+            />
+
+            {/* Focus Mode Modal */}
+            <FocusMode
+                visible={focusModeVisible}
+                onClose={handleFocusModeClose}
+                duration={sessionConfig.duration * 60} // Convert minutes to seconds
+                taskTitle={activeTask?.title || ''}
+                projectId={project.id}
+                taskId={activeTask?.id}
+                onSessionComplete={handleSessionComplete}
+            />
+
+            {/* Session Completion Modal */}
+            <SessionCompletionModal
+                visible={sessionModalVisible}
+                onClose={() => setSessionModalVisible(false)}
+                sessionDuration={sessionData.duration}
+                pickupCount={sessionData.pickupCount}
+                taskTitle={activeTask?.title || ''}
+                onTaskCompleted={handleTaskCompleted}
+                onJustSession={handleJustSession}
+            />
+        </>
     );
 };
 

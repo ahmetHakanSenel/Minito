@@ -99,7 +99,11 @@ export default function SettingsScreen() {
 
     const handleBack = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.back();
+        // Navigate back to home and open DashboardModal (Control Center)
+        router.replace({
+            pathname: '/',
+            params: { openDashboard: 'true' },
+        });
     };
 
     return (

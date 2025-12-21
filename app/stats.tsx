@@ -56,7 +56,11 @@ export default function StatsScreen() {
 
     const handleBack = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.back();
+        // Navigate back to home and open DashboardModal (Control Center)
+        router.replace({
+            pathname: '/',
+            params: { openDashboard: 'true' },
+        });
     };
 
     const weeklyProgress = Math.round((STATS.weekMinutes / STATS.weeklyGoal) * 100);

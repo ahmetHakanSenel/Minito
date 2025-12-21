@@ -19,7 +19,8 @@
         "backgroundColor": "#121212"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.hsenelsorganization.minito"
     },
     "ios": {
       "supportsTablet": true

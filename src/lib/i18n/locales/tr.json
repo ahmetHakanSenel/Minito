@@ -106,5 +106,23 @@
     "back": "Geri",
     "stop": "Durdur",
     "tapToStop": "Durdurmak için dokun"
+  },
+  "focusMode": {
+    "warning": "Odaklan!",
+    "remainingMinutes": "{{minutes}} dk kaldı",
+    "pause": "Duraklat",
+    "resume": "Devam Et"
+  },
+  "session": {
+    "start": "BAŞLAT",
+    "focusSession": "ODAK OTURUMU",
+    "duration": "SÜRE",
+    "ambience": "AMBİYANS",
+    "customDuration": "Özel süre...",
+    "minutes": "dakika",
+    "mute": "Sessiz",
+    "brownNoise": "Brown Noise",
+    "rain": "Yağmur",
+    "lofi": "Lo-Fi"
   }
 }
