@@ -8,6 +8,7 @@ import {
     Modal,
     Dimensions,
     Platform,
+    StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Pause, Play, Smartphone } from 'lucide-react-native';
@@ -20,12 +21,11 @@ import Animated, {
     withSpring,
     Easing,
     cancelAnimation,
-    interpolate,
-    runOnJS,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Accelerometer } from 'expo-sensors';
 import { useTranslation } from 'react-i18next';
@@ -124,6 +124,25 @@ export const FocusMode: React.FC<FocusModeProps> = ({
                     orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
                 setIsLandscape(landscape);
 
+                // Handle FULL immersive mode for landscape (hide everything)
+                if (Platform.OS === 'android') {
+                    if (landscape) {
+                        // Hide navigation bar completely
+                        NavigationBar.setVisibilityAsync('hidden');
+                        NavigationBar.setBehaviorAsync('overlay-swipe');
+                        // Set navigation bar to transparent and position absolute
+                        NavigationBar.setBackgroundColorAsync('transparent');
+                        NavigationBar.setPositionAsync('absolute');
+                        // Hide status bar for true fullscreen
+                        StatusBar.setHidden(true, 'fade');
+                    } else {
+                        NavigationBar.setVisibilityAsync('visible');
+                        NavigationBar.setBackgroundColorAsync('#050510');
+                        NavigationBar.setPositionAsync('relative');
+                        StatusBar.setHidden(false, 'fade');
+                    }
+                }
+
                 // Update dimensions
                 const { width, height } = Dimensions.get('window');
                 setDimensions({ width, height });
@@ -145,6 +164,13 @@ export const FocusMode: React.FC<FocusModeProps> = ({
                 cleanup();
                 // Lock orientation back to portrait when leaving
                 ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+                // Restore navigation bar and status bar
+                if (Platform.OS === 'android') {
+                    NavigationBar.setVisibilityAsync('visible');
+                    NavigationBar.setBackgroundColorAsync('#050510');
+                    NavigationBar.setPositionAsync('relative');
+                    StatusBar.setHidden(false, 'fade');
+                }
             };
         } else {
             cleanup();
@@ -326,18 +352,25 @@ export const FocusMode: React.FC<FocusModeProps> = ({
     const triggerPickupWarning = useCallback(() => {
         setPickupCount((prev) => prev + 1);
         setShowPickupWarning(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        warningOpacity.value = withTiming(1, { duration: 200 });
+        // Smooth cross-fade animation (800ms as per spec)
+        warningOpacity.value = withTiming(1, {
+            duration: 800,
+            easing: Easing.inOut(Easing.ease)
+        });
 
         if (warningTimeoutRef.current) {
             clearTimeout(warningTimeoutRef.current);
         }
 
         warningTimeoutRef.current = setTimeout(() => {
-            warningOpacity.value = withTiming(0, { duration: 300 });
-            setTimeout(() => setShowPickupWarning(false), 300);
-        }, 3000);
+            warningOpacity.value = withTiming(0, {
+                duration: 800,
+                easing: Easing.inOut(Easing.ease)
+            });
+            setTimeout(() => setShowPickupWarning(false), 800);
+        }, 4000);
     }, []);
 
     // ========================================================================
@@ -352,7 +385,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
     const formatRemainingMinutes = (seconds: number) => {
         const minutes = Math.ceil(seconds / 60);
-        return `${minutes} dk kaldı`;
+        return t('focusMode.remainingMinutes', { minutes });
     };
 
     // ========================================================================
@@ -381,20 +414,40 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
     const renderLandscapeMode = () => (
         <View style={styles.landscapeContainer}>
-            {/* Pure black OLED background */}
-            <View style={StyleSheet.absoluteFill} />
+            {/* StatusBar hidden for true fullscreen - we hide it programmatically too */}
+            <StatusBar
+                translucent
+                backgroundColor="transparent"
+                hidden={true}
+                barStyle="light-content"
+            />
 
-            {/* Pickup Warning */}
-            {showPickupWarning && (
-                <AnimatedView style={[styles.landscapeWarning, warningStyle]}>
-                    <Text style={styles.landscapeWarningText}>{t('focusMode.warning')}</Text>
-                </AnimatedView>
-            )}
+            {/* Pure black OLED background - fills entire screen including notch */}
+            <View style={styles.landscapeBackground} />
 
             {/* Centered Clock */}
             <View style={styles.landscapeClockContainer}>
                 <Text style={styles.landscapeClock}>{formatClockTime(currentTime)}</Text>
-                <Text style={styles.landscapeRemaining}>{formatRemainingMinutes(remaining)}</Text>
+                {/* Ghost Text: Remaining or Warning - smooth cross-fade */}
+                <View style={styles.ghostTextContainer}>
+                    <Animated.Text
+                        style={[
+                            styles.landscapeRemaining,
+                            { opacity: showPickupWarning ? 0 : 1 }
+                        ]}
+                    >
+                        {formatRemainingMinutes(remaining)}
+                    </Animated.Text>
+                    <Animated.Text
+                        style={[
+                            styles.landscapeWarningText,
+                            warningStyle,
+                            { position: 'absolute' }
+                        ]}
+                    >
+                        {t('focusMode.gentleWarning')}
+                    </Animated.Text>
+                </View>
             </View>
 
             {/* Bottom Progress Line */}
@@ -470,21 +523,31 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
                     {/* Main Content */}
                     <View style={styles.content}>
-                        {/* Pickup Warning */}
-                        {showPickupWarning && (
-                            <AnimatedView style={[styles.warningContainer, warningStyle]}>
-                                <Smartphone size={24} color="#FBBF24" />
-                                <Text style={styles.warningText}>Odaklan! 🧘</Text>
-                            </AnimatedView>
-                        )}
-
                         {/* Current Clock Time (Large) */}
                         <View style={styles.clockContainer}>
                             <Text style={styles.clockTime}>{formatClockTime(currentTime)}</Text>
                         </View>
 
-                        {/* Remaining Time (Subtle, minutes only) */}
-                        <Text style={styles.remainingText}>{formatRemainingMinutes(remaining)}</Text>
+                        {/* Ghost Text: Remaining Time or Warning - smooth cross-fade */}
+                        <View style={styles.portraitGhostContainer}>
+                            <Animated.Text
+                                style={[
+                                    styles.remainingText,
+                                    { opacity: showPickupWarning ? 0 : 1 }
+                                ]}
+                            >
+                                {formatRemainingMinutes(remaining)}
+                            </Animated.Text>
+                            <Animated.Text
+                                style={[
+                                    styles.portraitWarningText,
+                                    warningStyle,
+                                    { position: 'absolute' }
+                                ]}
+                            >
+                                {t('focusMode.gentleWarning')}
+                            </Animated.Text>
+                        </View>
 
                         {/* Progress Bar (No percentage, smooth) */}
                         <View style={styles.progressContainer}>
@@ -633,18 +696,41 @@ const styles = StyleSheet.create({
     },
     clockTime: {
         fontSize: 96,
-        fontWeight: '200',
+        fontWeight: '700',
         color: '#FFFFFF',
         letterSpacing: -4,
         fontVariant: ['tabular-nums'],
-        fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-thin',
+        // Monospace font + Neon glow
+        fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+        textShadowColor: 'rgba(139, 92, 246, 0.6)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 15,
     },
     remainingText: {
         fontSize: 18,
-        fontWeight: '400',
-        color: 'rgba(255,255,255,0.35)',
-        marginBottom: 48,
+        fontWeight: '500',
+        // Normal state: greyish white
+        color: 'rgba(255,255,255,0.5)',
         letterSpacing: 1,
+        fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    },
+    portraitGhostContainer: {
+        // Container for the cross-fade effect in portrait mode
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 48,
+        minHeight: 30,
+    },
+    portraitWarningText: {
+        fontSize: 18,
+        fontWeight: '700',
+        // Warning state: Soft red with glow
+        color: '#F87171',
+        letterSpacing: 1,
+        fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+        textShadowColor: 'rgba(248, 113, 113, 0.6)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 10,
     },
     progressContainer: {
         width: '70%',
@@ -696,73 +782,94 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.25)',
     },
 
-    // Landscape Mode Styles (Desk Clock)
+    // Landscape Mode Styles (Desk Clock - True Fullscreen behind notch)
     landscapeContainer: {
         flex: 1,
         backgroundColor: '#000000',
         justifyContent: 'center',
         alignItems: 'center',
+        // Critical: These ensure we draw behind the notch cutout
+        position: 'absolute',
+        top: 0,
+        left: 0,
         width: '100%',
         height: '100%',
     },
-    landscapeWarning: {
-        position: 'absolute',
-        top: '40%',
-        zIndex: 10,
-    },
-    landscapeWarningText: {
-        fontSize: 64,
-        fontWeight: '700',
-        color: '#FBBF24',
-        textShadowColor: 'rgba(251, 191, 36, 0.5)',
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 30,
+    landscapeBackground: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#000000',
     },
     landscapeClockContainer: {
         alignItems: 'center',
+        justifyContent: 'center',
     },
     landscapeClock: {
-        fontSize: 160,
-        fontWeight: '100',
+        // Dynamic font size that scales - massive in landscape
+        fontSize: Math.min(Dimensions.get('window').width * 0.18, 160),
+        fontWeight: '700',
         color: '#FFFFFF',
-        letterSpacing: -8,
+        letterSpacing: -2,
         fontVariant: ['tabular-nums'],
-        fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-thin',
+        // Monospace font family as per spec
+        fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+        // Neon Tube glow effect
+        textShadowColor: 'rgba(139, 92, 246, 0.6)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 15,
+    },
+    ghostTextContainer: {
+        // Container for the cross-fade effect
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 8,
+        minHeight: 30,
     },
     landscapeRemaining: {
-        fontSize: 24,
-        fontWeight: '300',
-        color: 'rgba(255,255,255,0.25)',
-        marginTop: -10,
+        fontSize: 20,
+        fontWeight: '500',
+        // Normal state: greyish white
+        color: 'rgba(255,255,255,0.5)',
         letterSpacing: 2,
+        fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    },
+    landscapeWarningText: {
+        fontSize: 20,
+        fontWeight: '700',
+        // Warning state: Soft red with glow
+        color: '#F87171',
+        letterSpacing: 2,
+        fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+        textShadowColor: 'rgba(248, 113, 113, 0.6)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 10,
     },
     landscapeProgressContainer: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        height: 4,
+        height: 3,
         backgroundColor: 'rgba(255,255,255,0.05)',
     },
     landscapeProgressFill: {
         height: '100%',
         overflow: 'hidden',
         shadowColor: '#A855F7',
-        shadowOpacity: 0.8,
-        shadowRadius: 10,
+        shadowOpacity: 0.6,
+        shadowRadius: 8,
         shadowOffset: { width: 0, height: 0 },
     },
     landscapeControls: {
         position: 'absolute',
-        top: 20,
-        right: 20,
+        top: 16,
+        right: 16,
         flexDirection: 'row',
-        gap: 16,
+        gap: 12,
     },
     landscapeButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         backgroundColor: 'rgba(255,255,255,0.08)',
         justifyContent: 'center',
         alignItems: 'center',

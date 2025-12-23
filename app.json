@@ -20,6 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "windowLayoutInDisplayCutoutMode": "shortEdges",
       "package": "com.hsenelsorganization.minito"
     },
     "ios": {

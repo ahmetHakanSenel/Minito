@@ -109,6 +109,7 @@
   },
   "focusMode": {
     "warning": "Odaklan!",
+    "gentleWarning": "⚠️ DİKKATİN DAĞILIYOR",
     "remainingMinutes": "{{minutes}} dk kaldı",
     "pause": "Duraklat",
     "resume": "Devam Et"
