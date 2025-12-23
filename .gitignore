@@ -42,4 +42,5 @@ yarn-error.*
 /ios
 /android
 
+.expo/
 
