@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../src/lib/auth';
 import { I18nProvider } from '../src/lib/i18n/I18nProvider';
 import { AuroraBackground } from '../src/components';
-import { FloatingMiniPlayer } from '../src/components/audio';
+import { FloatingAudioButton } from '../src/components/audio';
 import { AuroraProvider } from '../src/lib/aurora';
 import { AudioProvider } from '../src/context';
 import { ProjectProvider } from '../src/context/ProjectContext';
@@ -61,8 +61,8 @@ export default function RootLayout() {
                 </AuthProvider>
               </I18nProvider>
 
-              {/* Global Floating Mini Player - persistent across screens */}
-              <FloatingMiniPlayer />
+              {/* Global floating audio orb — tap for the track sheet */}
+              <FloatingAudioButton />
             </View>
           </ProjectProvider>
         </AuroraProvider>

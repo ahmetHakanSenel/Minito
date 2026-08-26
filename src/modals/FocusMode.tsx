@@ -26,7 +26,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
-import { useKeepAwake } from 'expo-keep-awake';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Accelerometer } from 'expo-sensors';
 import { useTranslation } from 'react-i18next';
 
@@ -69,8 +69,30 @@ export const FocusMode: React.FC<FocusModeProps> = ({
     taskId,
     onSessionComplete,
 }) => {
-    // Keep screen awake
-    useKeepAwake();
+    // Keep the screen awake only while a session is actually on screen.
+    // This component stays mounted (hidden) inside every ProjectCard, so an
+    // unconditional useKeepAwake() would fire one activation per card — and
+    // an activation attempted with no resumed Activity rejects with
+    // "Unable to activate keep awake", surfacing as an unhandled rejection.
+    useEffect(() => {
+        if (!visible) return;
+
+        let released = false;
+        const tag = `minito-focus-${Math.random().toString(36).slice(2, 9)}`;
+
+        activateKeepAwakeAsync(tag).catch((error) => {
+            console.warn('Keep awake could not be activated:', error);
+        });
+
+        return () => {
+            if (released) return;
+            released = true;
+            // Returns a promise: a rejection here must be caught, not thrown
+            deactivateKeepAwake(tag).catch((error) => {
+                console.warn('Keep awake could not be deactivated:', error);
+            });
+        };
+    }, [visible]);
 
     // Localization
     const { t } = useTranslation();
@@ -116,6 +138,19 @@ export const FocusMode: React.FC<FocusModeProps> = ({
             // Unlock orientation for this screen
             ScreenOrientation.unlockAsync();
 
+            // IMMERSIVE MODE: Hide status bar immediately for zero distractions
+            if (Platform.OS === 'android') {
+                StatusBar.setHidden(true, 'fade');
+                // Also hide navigation bar initially for full immersion
+                NavigationBar.setVisibilityAsync('hidden');
+                NavigationBar.setBehaviorAsync('overlay-swipe');
+                NavigationBar.setBackgroundColorAsync('transparent');
+                NavigationBar.setPositionAsync('absolute');
+            } else {
+                // iOS
+                StatusBar.setHidden(true, 'fade');
+            }
+
             // Listen for orientation changes
             const subscription = ScreenOrientation.addOrientationChangeListener((event) => {
                 const orientation = event.orientationInfo.orientation;
@@ -124,22 +159,19 @@ export const FocusMode: React.FC<FocusModeProps> = ({
                     orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
                 setIsLandscape(landscape);
 
-                // Handle FULL immersive mode for landscape (hide everything)
+                // Keep status bar hidden in ALL orientations for Focus mode
                 if (Platform.OS === 'android') {
+                    StatusBar.setHidden(true, 'fade');
                     if (landscape) {
-                        // Hide navigation bar completely
+                        // Full immersive for landscape
                         NavigationBar.setVisibilityAsync('hidden');
                         NavigationBar.setBehaviorAsync('overlay-swipe');
-                        // Set navigation bar to transparent and position absolute
                         NavigationBar.setBackgroundColorAsync('transparent');
                         NavigationBar.setPositionAsync('absolute');
-                        // Hide status bar for true fullscreen
-                        StatusBar.setHidden(true, 'fade');
                     } else {
-                        NavigationBar.setVisibilityAsync('visible');
-                        NavigationBar.setBackgroundColorAsync('#050510');
-                        NavigationBar.setPositionAsync('relative');
-                        StatusBar.setHidden(false, 'fade');
+                        // Portrait: keep nav bar hidden too for consistency
+                        NavigationBar.setVisibilityAsync('hidden');
+                        NavigationBar.setBehaviorAsync('overlay-swipe');
                     }
                 }
 
@@ -169,6 +201,8 @@ export const FocusMode: React.FC<FocusModeProps> = ({
                     NavigationBar.setVisibilityAsync('visible');
                     NavigationBar.setBackgroundColorAsync('#050510');
                     NavigationBar.setPositionAsync('relative');
+                    StatusBar.setHidden(false, 'fade');
+                } else {
                     StatusBar.setHidden(false, 'fade');
                 }
             };
@@ -385,7 +419,8 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
     const formatRemainingMinutes = (seconds: number) => {
         const minutes = Math.ceil(seconds / 60);
-        return t('focusMode.remainingMinutes', { minutes });
+        // Zen-Engineer format: No "remaining/kaldı" - just clean info
+        return `${minutes} dk • ${t('focusMode.focusLabel')}`;
     };
 
     // ========================================================================
@@ -708,9 +743,10 @@ const styles = StyleSheet.create({
     },
     remainingText: {
         fontSize: 18,
-        fontWeight: '500',
-        // Normal state: greyish white
-        color: 'rgba(255,255,255,0.5)',
+        fontWeight: '600',
+        // Zen-Engineer: Monospace Bold, 0.8 opacity (less aggressive than clock)
+        color: 'rgba(255,255,255,0.8)',
+        opacity: 0.8,
         letterSpacing: 1,
         fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
     },
@@ -737,15 +773,21 @@ const styles = StyleSheet.create({
         marginBottom: 48,
     },
     progressBar: {
-        height: 4,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 2,
+        // Neon Rail design: 6px height, visible in all lighting
+        height: 6,
+        backgroundColor: 'rgba(139,92,246,0.15)', // Faint violet track
+        borderRadius: 3,
         overflow: 'hidden',
     },
     progressFill: {
         height: '100%',
-        borderRadius: 2,
+        borderRadius: 3,
         overflow: 'hidden',
+        // Neon glow effect
+        shadowColor: '#A855F7',
+        shadowOpacity: 0.8,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 0 },
     },
     pauseContainer: {
         marginTop: 20,
@@ -826,9 +868,10 @@ const styles = StyleSheet.create({
     },
     landscapeRemaining: {
         fontSize: 20,
-        fontWeight: '500',
-        // Normal state: greyish white
-        color: 'rgba(255,255,255,0.5)',
+        fontWeight: '600',
+        // Zen-Engineer: Monospace Bold, 0.8 opacity (less aggressive than clock)
+        color: 'rgba(255,255,255,0.8)',
+        opacity: 0.8,
         letterSpacing: 2,
         fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
     },
@@ -848,8 +891,9 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        height: 3,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        // Neon Rail design: 5px height for landscape (desk mode visibility)
+        height: 5,
+        backgroundColor: 'rgba(139,92,246,0.12)', // Faint violet track
     },
     landscapeProgressFill: {
         height: '100%',

@@ -11,6 +11,11 @@ import Animated, {
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
 import { parseTimeFromStep } from '../src/lib/timeParser';
 import { useAuroraContext } from '../src/lib/aurora';
+import {
+  saveActiveSession,
+  clearActiveSession,
+} from '../src/lib/storage/activeSessionStore';
+import { recordFocusSession } from '../src/lib/stats/sessionStore';
 import * as Haptics from 'expo-haptics';
 // Ambient audio temporarily disabled until asset is added
 // import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
@@ -27,8 +32,13 @@ export default function FocusModeScreen() {
     input: string;
     empathyBridge?: string;
     firstStepHook?: string;
+    resumeStepIndex?: string;
   }>();
-  const [currentStepIndex, setCurrentStepIndex] = useState(-1); // -1 = empathy/hook screen
+  // Restoring a saved session skips the empathy intro and jumps to the step
+  const initialStepIndex = params.resumeStepIndex
+    ? Math.max(0, parseInt(params.resumeStepIndex, 10) || 0)
+    : -1;
+  const [currentStepIndex, setCurrentStepIndex] = useState(initialStepIndex); // -1 = empathy/hook screen
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [showStepAnimation, setShowStepAnimation] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -36,14 +46,47 @@ export default function FocusModeScreen() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // A timer's completion pulse belongs to the step that produced it. If the
+  // user advances/goes back without pressing that timer's own stop control,
+  // the InlineTimer instance unmounts but nothing else told the pulse to
+  // stop — it would otherwise drive the Aurora background forever. Leaving
+  // a step is always the authoritative "pulse over" signal.
+  useEffect(() => {
+    setTimerCompletionLoop(false);
+  }, [currentStepIndex]);
+
   // GOD MODE: Neuro-Sonic Ambience - Brown noise with fade in/out
   // const { startAmbience, stopAmbience } = useAmbientAudio();
 
-  const steps: string[] = params.steps ? JSON.parse(params.steps) : [];
+  // A malformed param must degrade to the empty state, never crash the screen
+  const steps: string[] = (() => {
+    if (!params.steps) return [];
+    try {
+      const parsed = JSON.parse(params.steps);
+      return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : [];
+    } catch (error) {
+      console.warn('focus: failed to parse steps param', error);
+      return [];
+    }
+  })();
   const empathyBridge = params.empathyBridge || '';
   const firstStepHook = params.firstStepHook || '';
   const hasEmpathyScreen = empathyBridge || firstStepHook;
   const totalSteps = steps.length;
+
+  // Persist progress so an OS kill (user left to actually do the step —
+  // the core use case) never loses the session
+  useEffect(() => {
+    if (steps.length === 0) return;
+    saveActiveSession({
+      input: params.input || '',
+      steps,
+      empathyBridge,
+      firstStepHook,
+      currentStepIndex: Math.max(0, currentStepIndex),
+      completedSteps: [...completedSteps],
+    });
+  }, [currentStepIndex, completedSteps, steps.length]);
 
   // Sync timer completion state with Aurora background pulse
   useEffect(() => {
@@ -137,6 +180,18 @@ export default function FocusModeScreen() {
   const handleConfettiComplete = async () => {
     // Navigate to success screen when confetti animation completes
     setShowConfetti(false);
+
+    // Session finished — nothing left to restore
+    clearActiveSession();
+
+    // Log the completed step-flow for the Insights screen
+    recordFocusSession({
+      durationSec: 0, // step flows are untimed; they count toward continuity, not focus minutes
+      pickupCount: 0,
+      completed: true,
+      source: 'steps',
+      stepsCompleted: totalSteps,
+    });
 
     // GOD MODE: Fade out ambient audio before leaving Focus Mode (disabled)
     // await stopAmbience();

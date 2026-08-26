@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text } from 'react-native';
+import { Megaphone } from 'lucide-react-native';
 
 interface NativeAdCardProps {
   /**
@@ -66,7 +67,7 @@ export const NativeAdCard: React.FC<NativeAdCardProps> = ({
             }}
           >
             <View className="flex-1 items-center justify-center">
-              <Text className="text-textMuted text-lg">📱</Text>
+              <Megaphone size={20} color="#A1A1AA" strokeWidth={1.8} />
             </View>
           </View>
 

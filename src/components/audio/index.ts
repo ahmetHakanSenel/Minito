@@ -1,1 +1,1 @@
-export { FloatingMiniPlayer } from './FloatingMiniPlayer';
+export { FloatingAudioButton } from './FloatingAudioButton';

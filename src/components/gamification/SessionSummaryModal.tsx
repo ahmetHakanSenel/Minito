@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PartyPopper, Clock, Flame, ArrowRight } from 'lucide-react-native';
+import { PartyPopper, Clock, Flame, ArrowRight, Check } from 'lucide-react-native';
 import Animated, {
     FadeIn,
     FadeInDown,
@@ -163,8 +163,9 @@ export const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                             entering={FadeInDown.delay(400).springify()}
                             style={styles.stepsInfo}
                         >
+                            <Check size={16} color="#34D399" strokeWidth={2.5} />
                             <Text style={styles.stepsText}>
-                                {stepsCompleted} adım tamamlandı ✓
+                                {stepsCompleted} adım tamamlandı
                             </Text>
                         </AnimatedView>
 
@@ -274,6 +275,9 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
     },
     stepsInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
         backgroundColor: 'rgba(52, 211, 153, 0.1)',
         paddingHorizontal: 20,
         paddingVertical: 12,

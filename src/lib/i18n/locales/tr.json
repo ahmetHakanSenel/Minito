@@ -16,7 +16,9 @@
     "inputPlaceholder": "Neyi Minito'layalım? (örn: Evi topla)",
     "breakButton": "Minito'la!",
     "breaking": "Minito'luyor...",
-    "noSteps": "Adım bulunamadı. Lütfen geri dönüp tekrar deneyin."
+    "noSteps": "Adım bulunamadı. Lütfen geri dönüp tekrar deneyin.",
+    "resumeTitle": "Kaldığın yerden devam et",
+    "resumeFallbackLabel": "Görevin"
   },
   "focus": {
     "step": "Adım {{current}} / {{total}}",
@@ -111,8 +113,35 @@
     "warning": "Odaklan!",
     "gentleWarning": "⚠️ DİKKATİN DAĞILIYOR",
     "remainingMinutes": "{{minutes}} dk kaldı",
+    "focusLabel": "Odak",
     "pause": "Duraklat",
     "resume": "Devam Et"
+  },
+  "dashboard": {
+    "guest": "Misafir"
+  },
+  "audio": {
+    "title": "Odak Sesleri",
+    "stop": "Sesi durdur"
+  },
+  "stats": {
+    "title": "İçgörüler",
+    "emptyTitle": "Henüz içgörü yok",
+    "emptyText": "Planlayıcıdan bir odak oturumu tamamladığında ritmin, devamlılığın ve akış verilerin burada görünecek — hepsi gerçek, hiçbiri uydurma değil."
+  },
+  "flowState": {
+    "flow": {
+      "title": "Sakin Akış",
+      "subtitle": "Zihnin pürüzsüz, kesinti yok."
+    },
+    "chaos": {
+      "title": "Yoğun Gün",
+      "subtitle": "Sık sık bölündün, ama çabalıyorsun."
+    },
+    "idle": {
+      "title": "Durgun",
+      "subtitle": "Henüz yeterli veri oluşmadı."
+    }
   },
   "session": {
     "start": "BAŞLAT",

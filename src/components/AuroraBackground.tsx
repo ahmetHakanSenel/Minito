@@ -106,25 +106,25 @@ export const AuroraBackground: React.FC = () => {
       >
         <Svg width="100%" height="100%">
           <Defs>
-            <RadialGradient id="primary1" cx="35%" cy="35%" r="70%">
+            {/*
+              Centred at 50%/50% with r=50% so the last (fully transparent)
+              stop lands exactly on the rect boundary. Any off-centre centre
+              or larger radius leaves residual opacity along the near edges,
+              which reads as a hard line against true black on OLED.
+            */}
+            <RadialGradient id="primary1" cx="50%" cy="50%" r="50%">
               <Stop offset="0%" stopColor="#A78BFA" stopOpacity="0.50" />
-              <Stop offset="40%" stopColor="#8B5CF6" stopOpacity="0.30" />
+              <Stop offset="45%" stopColor="#8B5CF6" stopOpacity="0.22" />
               <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
             </RadialGradient>
-            <RadialGradient id="primary2" cx="25%" cy="25%" r="60%">
-              <Stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.38" />
-              <Stop offset="50%" stopColor="#A78BFA" stopOpacity="0.20" />
+            <RadialGradient id="primary2" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.34" />
+              <Stop offset="55%" stopColor="#A78BFA" stopOpacity="0.14" />
               <Stop offset="100%" stopColor="#8B5CF6" stopOpacity="0" />
-            </RadialGradient>
-            <RadialGradient id="primary3" cx="40%" cy="40%" r="55%">
-              <Stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.32" />
-              <Stop offset="45%" stopColor="#7C3AED" stopOpacity="0.18" />
-              <Stop offset="100%" stopColor="#6D28D9" stopOpacity="0" />
             </RadialGradient>
           </Defs>
           <Rect width="100%" height="100%" fill="url(#primary1)" />
           <Rect width="100%" height="100%" fill="url(#primary2)" />
-          <Rect width="100%" height="100%" fill="url(#primary3)" />
         </Svg>
       </AnimatedView>
 
@@ -143,25 +143,20 @@ export const AuroraBackground: React.FC = () => {
       >
         <Svg width="100%" height="100%">
           <Defs>
-            <RadialGradient id="anchor1" cx="65%" cy="65%" r="75%">
-              <Stop offset="0%" stopColor="#3B82F6" stopOpacity="0.42" />
-              <Stop offset="45%" stopColor="#2563EB" stopOpacity="0.26" />
+            {/* Same rule as the primary blob: fade must complete on the edge */}
+            <RadialGradient id="anchor1" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor="#3B82F6" stopOpacity="0.40" />
+              <Stop offset="45%" stopColor="#2563EB" stopOpacity="0.18" />
               <Stop offset="100%" stopColor="#1E40AF" stopOpacity="0" />
             </RadialGradient>
-            <RadialGradient id="anchor2" cx="75%" cy="75%" r="60%">
-              <Stop offset="0%" stopColor="#60A5FA" stopOpacity="0.32" />
-              <Stop offset="50%" stopColor="#3B82F6" stopOpacity="0.18" />
+            <RadialGradient id="anchor2" cx="50%" cy="50%" r="50%">
+              <Stop offset="0%" stopColor="#60A5FA" stopOpacity="0.28" />
+              <Stop offset="55%" stopColor="#3B82F6" stopOpacity="0.12" />
               <Stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
-            </RadialGradient>
-            <RadialGradient id="anchor3" cx="60%" cy="60%" r="55%">
-              <Stop offset="0%" stopColor="#2563EB" stopOpacity="0.30" />
-              <Stop offset="45%" stopColor="#1E40AF" stopOpacity="0.16" />
-              <Stop offset="100%" stopColor="#1E3A8A" stopOpacity="0" />
             </RadialGradient>
           </Defs>
           <Rect width="100%" height="100%" fill="url(#anchor1)" />
           <Rect width="100%" height="100%" fill="url(#anchor2)" />
-          <Rect width="100%" height="100%" fill="url(#anchor3)" />
         </Svg>
       </AnimatedView>
     </View>

@@ -254,40 +254,53 @@ async function checkModeration(input: string, openaiKey: string): Promise<{ flag
   }
 }
 
+// Per-hour request ceilings. The endpoint is callable with the public anon
+// key, so without enforcement anyone extracting the key from the app binary
+// can burn the AI budget indefinitely.
+const RATE_LIMIT_PER_GUEST = 20;
+const RATE_LIMIT_PER_INPUT_HASH = 10; // anonymous requests without a guest_id
+
 /**
- * Check rate limit (Fail-Soft)
- * Logs errors but does not block the request
+ * Check rate limit (enforced).
+ * Fail-soft only on infrastructure errors: if the check itself cannot run,
+ * the request is allowed rather than blocking a legitimate user.
  */
 async function checkRateLimit(
   inputHash: string,
   guestId: string | undefined,
   supabase: any
-): Promise<void> {
+): Promise<{ limited: boolean }> {
   try {
-    // Check recent requests for this guest_id or input_hash
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('tasks')
-      .select('id')
-      .or(`guest_id.eq.${guestId},input_hash.eq.${inputHash}`)
-      .gte('created_at', oneHourAgo)
-      .limit(100); // Reasonable limit check
-    
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', oneHourAgo);
+
+    const limit = guestId ? RATE_LIMIT_PER_GUEST : RATE_LIMIT_PER_INPUT_HASH;
+    query = guestId
+      ? query.eq('guest_id', guestId)
+      : query.eq('input_hash', inputHash);
+
+    const { count, error } = await query;
+
     if (error) {
-      console.warn('Rate limit check failed:', error);
-      // Fail-soft: continue anyway
-      return;
+      console.warn('Rate limit check failed, allowing request:', error);
+      return { limited: false };
     }
-    
-    // Log if approaching limit (for monitoring)
-    if (data && data.length > 50) {
-      console.warn(`High request rate detected: ${data.length} requests in last hour`);
-      // Fail-soft: don't block, just log
+
+    if ((count ?? 0) >= limit) {
+      console.warn(
+        `Rate limit exceeded: ${count} requests in last hour (limit ${limit}, guest=${guestId ?? 'none'})`
+      );
+      return { limited: true };
     }
+
+    return { limited: false };
   } catch (error) {
-    console.error('Rate limit check error:', error);
-    // Fail-soft: continue anyway
+    console.error('Rate limit check error, allowing request:', error);
+    return { limited: false };
   }
 }
 
@@ -737,30 +750,10 @@ serve(async (req) => {
     const inputHash = sanitizeAndHash(sanitizedInput, hmacSecret);
     
     // Step 2: Moderation (Fail-Safe)
+    // The server sends only the reason code — the client renders panic-kit
+    // content in the user's own locale. Never ship crisis copy from here.
     const moderationResult = await checkModeration(sanitizedInput, openaiKey);
     if (moderationResult.flagged) {
-      // Return panic kit for CONTENT_FLAGGED
-      const panicKit = {
-        headline: 'Bu içeriği güvenlik nedeniyle gösteremiyoruz',
-        steps: [
-          {
-            id: 'pause',
-            title: 'Biraz durup nefes alalım',
-            body: 'Şu an hissettiğin şeyler geçerli ve önemli. Derin bir nefes al, 4 saniye boyunca nefes al, 4 saniye tut, 4 saniyede ver. Bunu 3 kez tekrarla.',
-          },
-          {
-            id: 'grounding',
-            title: 'Etrafına dikkatini getir',
-            body: 'Bulunduğun ortamda görebildiğin 5 şeyi, dokunabildiğin 4 şeyi, duyabildiğin 3 sesi, koklayabildiğin 2 şeyi ve minnettar olduğun 1 şeyi fark etmeye çalış.',
-          },
-          {
-            id: 'support',
-            title: 'Yalnız değilsin',
-            body: 'Güvendiğin bir arkadaşın, aile üyen ya da profesyonel bir destek hattı varsa, onlarla iletişime geçmeyi düşünebilirsin. İhtiyaç duyduğunda yardım istemek güçsüzlük değil, güç göstergesidir.',
-          },
-        ],
-      };
-      
       // Persist task record (fail-soft)
       const latencyMs = Date.now() - startTime;
       supabase
@@ -774,20 +767,19 @@ serve(async (req) => {
           fallback_reason: 'CONTENT_FLAGGED',
         })
         .then(() => {}, (err) => console.warn('Failed to persist task:', err));
-      
+
       const flaggedResponse: ResponseBody = {
         success: false,
         fallback_reason: 'CONTENT_FLAGGED',
-        panic_kit: panicKit,
       };
-      
+
       // Validate response (fail-soft)
       try {
         ResponseBodySchema.parse(flaggedResponse);
       } catch (validationError) {
         console.warn('Response validation warning:', validationError);
       }
-      
+
       return new Response(
         JSON.stringify(flaggedResponse),
         {
@@ -796,9 +788,23 @@ serve(async (req) => {
         }
       );
     }
-    
-    // Step 3: Rate Limit check (Fail-Soft)
-    await checkRateLimit(inputHash, guest_id, supabase);
+
+    // Step 3: Rate Limit check (enforced)
+    // Note: rate-limited attempts are NOT persisted to `tasks`, so a blocked
+    // user's retries never extend their own block window.
+    const { limited } = await checkRateLimit(inputHash, guest_id, supabase);
+    if (limited) {
+      const rateLimitedResponse: ResponseBody = {
+        success: false,
+        fallback_reason: 'RATE_DOWN',
+        error: 'Too many requests. Please try again later.',
+      };
+
+      return new Response(JSON.stringify(rateLimitedResponse), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     // Step 4: Get system prompt (with caching)
     const systemPrompt = await getSystemPrompt(supabase);

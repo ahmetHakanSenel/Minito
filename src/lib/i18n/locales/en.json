@@ -16,7 +16,9 @@
     "inputPlaceholder": "What to Minitize? (e.g. Clean room)",
     "breakButton": "Minitize It!",
     "breaking": "Minitizing...",
-    "noSteps": "No steps available. Please go back and try again."
+    "noSteps": "No steps available. Please go back and try again.",
+    "resumeTitle": "Pick up where you left off",
+    "resumeFallbackLabel": "Your task"
   },
   "focus": {
     "step": "Step {{current}} of {{total}}",
@@ -111,8 +113,35 @@
     "warning": "Focus!",
     "gentleWarning": "Seems like you're getting distracted...",
     "remainingMinutes": "{{minutes}} min left",
+    "focusLabel": "Focus",
     "pause": "Pause",
     "resume": "Resume"
+  },
+  "dashboard": {
+    "guest": "Guest"
+  },
+  "audio": {
+    "title": "Focus Sounds",
+    "stop": "Stop sound"
+  },
+  "stats": {
+    "title": "Insights",
+    "emptyTitle": "No insights yet",
+    "emptyText": "Complete a focus session from the Planner and your rhythm, consistency and flow data will appear here — all of it real, none of it made up."
+  },
+  "flowState": {
+    "flow": {
+      "title": "Calm Flow",
+      "subtitle": "Your mind is smooth, no interruptions."
+    },
+    "chaos": {
+      "title": "Intense Day",
+      "subtitle": "You got pulled away often, but you kept going."
+    },
+    "idle": {
+      "title": "Still",
+      "subtitle": "Not enough data yet."
+    }
   },
   "session": {
     "start": "START",

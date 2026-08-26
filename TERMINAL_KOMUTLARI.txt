@@ -1,0 +1,56 @@
+# Supabase Kurulum Terminal Komutları
+# Bu komutları sırayla terminal'de çalıştırın
+
+# ============================================
+# ADIM 6: Supabase CLI Kurulumu
+# ============================================
+# NOT: npm install -g supabase artık çalışmıyor!
+# Aşağıdaki yöntemlerden birini seçin:
+
+# YÖNTEM 1: Scoop ile (önerilen)
+# Önce Scoop kurulumu (PowerShell'de yönetici olarak):
+# Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+# irm get.scoop.sh | iex
+# Sonra:
+# scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+# scoop install supabase
+
+# YÖNTEM 2: npx ile (kurulum gerektirmez - ÖNERİLEN ✅)
+# Bu yöntem en kolay! Aşağıdaki tüm 'supabase' komutlarını 'npx supabase' olarak değiştirin
+# Bu durumda aşağıdaki tüm 'supabase' komutlarını 'npx supabase' olarak değiştirin
+
+# ============================================
+# ADIM 7: Supabase'e Login Olma
+# ============================================
+# Eğer npx kullanıyorsanız: npx supabase login
+supabase login
+
+# ============================================
+# ADIM 8: Projeyi Link Etme
+# ============================================
+# NOT: xxxxxxxxxxxxx yerine Supabase Dashboard → Settings → General → Reference ID'yi yazın
+# Eğer npx kullanıyorsanız: npx supabase link --project-ref xxxxxxxxxxxxx
+supabase link --project-ref xxxxxxxxxxxxx
+
+# ============================================
+# ADIM 9: Edge Functions Deploy Etme
+# ============================================
+# Eğer npx kullanıyorsanız, tüm komutların başına 'npx ' ekleyin
+supabase functions deploy break-task
+
+supabase functions deploy delete-user
+
+supabase functions deploy export-user-data
+
+# ============================================
+# ADIM 10: HMAC Secret Oluşturma (opsiyonel)
+# ============================================
+# Bu komut bir secret üretir, bunu Edge Function environment variable olarak ekleyeceksiniz
+openssl rand -hex 32
+
+# ============================================
+# ADIM 11: Uygulamayı Test Etme
+# ============================================
+# Cache temizleyerek uygulamayı başlat
+npm start -- --clear
+

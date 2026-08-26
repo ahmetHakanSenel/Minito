@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import * as Haptics from 'expo-haptics';
+import { readJson, writeJson } from '../lib/storage/jsonStore';
 
 // ============================================================================
 // DATA TYPES - ADHD "Next Action" focused Project Management
@@ -40,48 +41,74 @@ interface ProjectContextValue {
 const ProjectContext = createContext<ProjectContextValue | undefined>(undefined);
 
 // ============================================================================
-// SAMPLE DATA
+// PERSISTENCE
 // ============================================================================
 
-const INITIAL_PROJECTS: Project[] = [
-    {
-        id: '1',
-        title: 'Bitirme Tezi',
-        color: '#8B5CF6',
-        progress: 35,
-        dueDate: new Date('2025-01-15'),
-        tasks: [
-            { id: '1-1', title: 'Konu belirleme', isCompleted: true },
-            { id: '1-2', title: 'Danışman ile görüşme', isCompleted: true },
-            { id: '1-3', title: 'Literatür taraması', isCompleted: false },
-            { id: '1-4', title: 'Metodoloji yazımı', isCompleted: false },
-        ],
-    },
-    {
-        id: '2',
-        title: 'Fitness Hedefi',
-        color: '#34D399',
-        progress: 60,
-        dueDate: undefined,
-        tasks: [
-            { id: '2-1', title: 'Spor salonu üyeliği', isCompleted: true },
-            { id: '2-2', title: 'Antrenman programı oluştur', isCompleted: true },
-            { id: '2-3', title: '12 haftalık program', isCompleted: false },
-        ],
-    },
-    {
-        id: '3',
-        title: 'Yeni Dil Öğren',
-        color: '#60A5FA',
-        progress: 15,
-        dueDate: undefined,
-        tasks: [
-            { id: '3-1', title: 'Uygulama indir', isCompleted: true },
-            { id: '3-2', title: 'İlk 100 kelime', isCompleted: false },
-            { id: '3-3', title: 'Temel gramer', isCompleted: false },
-        ],
-    },
-];
+const STORAGE_KEY = 'projects';
+
+/** Shape written to disk — dueDate serialized as ISO string */
+type PersistedProject = Omit<Project, 'dueDate'> & { dueDate?: string };
+
+function hydrateProjects(persisted: PersistedProject[]): Project[] {
+    return persisted
+        .filter((p) => p && typeof p.id === 'string' && Array.isArray(p.tasks))
+        .map((p) => ({
+            ...p,
+            dueDate: p.dueDate ? new Date(p.dueDate) : undefined,
+        }));
+}
+
+// ============================================================================
+// DEV SEED
+// ============================================================================
+
+/**
+ * Sample projects for development only, so the planner and its analytics are
+ * not empty while working on them. Seeded once, on first launch with no
+ * stored data; `__DEV__` is false in release builds, so this never ships.
+ */
+function buildDevSeedProjects(): Project[] {
+    const inTwoWeeks = new Date();
+    inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
+
+    return [
+        {
+            id: 'seed-thesis',
+            title: 'Bitirme Tezi',
+            color: '#8B5CF6',
+            progress: 50,
+            dueDate: inTwoWeeks,
+            tasks: [
+                { id: 'seed-thesis-1', title: 'Konu belirleme', isCompleted: true },
+                { id: 'seed-thesis-2', title: 'Danışman ile görüşme', isCompleted: true },
+                { id: 'seed-thesis-3', title: 'Literatür taraması', isCompleted: false },
+                { id: 'seed-thesis-4', title: 'Metodoloji yazımı', isCompleted: false },
+            ],
+        },
+        {
+            id: 'seed-fitness',
+            title: 'Fitness Hedefi',
+            color: '#34D399',
+            progress: 67,
+            tasks: [
+                { id: 'seed-fitness-1', title: 'Spor salonu üyeliği', isCompleted: true },
+                { id: 'seed-fitness-2', title: 'Antrenman programı oluştur', isCompleted: true },
+                { id: 'seed-fitness-3', title: '12 haftalık program', isCompleted: false },
+            ],
+        },
+        {
+            id: 'seed-language',
+            title: 'Yeni Dil Öğren',
+            color: '#60A5FA',
+            progress: 33,
+            tasks: [
+                { id: 'seed-language-1', title: 'Uygulama indir', isCompleted: true },
+                { id: 'seed-language-2', title: 'İlk 100 kelime', isCompleted: false },
+                { id: 'seed-language-3', title: 'Temel gramer', isCompleted: false },
+            ],
+        },
+    ];
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -176,7 +203,34 @@ interface ProjectProviderProps {
 }
 
 export function ProjectProvider({ children }: ProjectProviderProps) {
-    const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const isHydratedRef = useRef(false);
+
+    // Load persisted projects once on mount
+    useEffect(() => {
+        let cancelled = false;
+        readJson<PersistedProject[]>(STORAGE_KEY).then((stored) => {
+            if (cancelled) return;
+            if (stored) {
+                setProjects(hydrateProjects(stored));
+            } else if (__DEV__) {
+                // No stored file at all = first launch. An existing but empty
+                // list stays empty, so clearing projects in dev stays cleared.
+                setProjects(buildDevSeedProjects());
+            }
+            isHydratedRef.current = true;
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    // Persist on every change — but never before hydration completes,
+    // or the initial empty state would wipe the stored data
+    useEffect(() => {
+        if (!isHydratedRef.current) return;
+        writeJson(STORAGE_KEY, projects);
+    }, [projects]);
 
     const addProject = useCallback((project: Omit<Project, 'id' | 'progress'>) => {
         const newProject: Project = {

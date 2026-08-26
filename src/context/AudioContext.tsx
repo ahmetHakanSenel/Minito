@@ -166,6 +166,8 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 soundRef.current = null;
             }
             setIsPlaying(false);
+            // Clearing the track dismisses the floating audio button too
+            setCurrentTrack(null);
         } catch (error) {
             console.error('Error stopping audio:', error);
         }

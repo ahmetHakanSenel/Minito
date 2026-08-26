@@ -22,6 +22,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { Project, Task, formatDueDate, useProjects } from '../../context/ProjectContext';
 import { FocusMode, SessionCompletionModal, SessionSetupModal, SessionConfig, SoundType } from '../../modals';
+import { recordFocusSession } from '../../lib/stats/sessionStore';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -88,8 +89,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
         onToggle();
     }, [onToggle]);
 
+    // Silent Focus: Next step is fully visible, others are muted
+    const itemOpacity = isNextStep && !task.isCompleted ? 1 : 0.6;
+
     return (
-        <View style={styles.taskItem}>
+        <View style={[styles.taskItem, { opacity: itemOpacity }]}>
             <TouchableOpacity
                 onPress={handleToggle}
                 style={styles.taskCheckbox}
@@ -98,7 +102,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
                 {task.isCompleted ? (
                     <CheckCircle2 size={20} color="#34D399" strokeWidth={2} />
                 ) : (
-                    <Circle size={20} color="rgba(255,255,255,0.3)" strokeWidth={2} />
+                    <Circle size={20} color="rgba(255,255,255,0.4)" strokeWidth={2} />
                 )}
             </TouchableOpacity>
 
@@ -118,13 +122,21 @@ const TaskItem: React.FC<TaskItemProps> = ({
                 </Text>
             </TouchableOpacity>
 
+            {/* Play button - static, no animations, monochrome unless next step */}
             {!task.isCompleted && (
                 <TouchableOpacity
                     onPress={handleStartFocus}
-                    style={styles.taskPlayButton}
+                    style={[
+                        styles.taskPlayButton,
+                        isNextStep && styles.taskPlayButtonActive,
+                    ]}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                    <Play size={14} color="#8B5CF6" fill="#8B5CF6" />
+                    <Play
+                        size={14}
+                        color={isNextStep ? '#8B5CF6' : '#71717a'}
+                        fill={isNextStep ? '#8B5CF6' : '#71717a'}
+                    />
                 </TouchableOpacity>
             )}
         </View>
@@ -160,9 +172,11 @@ const NextStepPreview: React.FC<NextStepPreviewProps> = ({
             activeOpacity={0.7}
         >
             <View style={styles.nextStepLabelRow}>
-                <Text style={styles.nextStepLabel}>Sonraki Adım:</Text>
-                <Play size={12} color="#8B5CF6" fill="#8B5CF6" style={{ marginLeft: 4 }} />
+                <Text style={styles.nextStepLabel}>Sonraki Adım</Text>
+                {/* Static play icon - no animation, monochrome */}
+                <Play size={12} color="#71717a" fill="#71717a" style={{ marginLeft: 6 }} />
             </View>
+            {/* Next step text is bright - full opacity white */}
             <Text style={styles.nextStepText}>{task.title}</Text>
         </TouchableOpacity>
     );
@@ -271,6 +285,15 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         setSessionData({
             duration: Math.ceil(data.duration / 60),
             pickupCount: data.pickupCount,
+        });
+        // Feed the Insights screen with real behavior (fire-and-forget)
+        recordFocusSession({
+            durationSec: data.duration,
+            pickupCount: data.pickupCount,
+            completed: data.completed,
+            source: 'timer',
+            projectId: data.projectId,
+            taskId: data.taskId,
         });
         // Show session completion modal
         setSessionModalVisible(true);
@@ -510,12 +533,13 @@ const styles = StyleSheet.create({
     },
     nextStepContainer: {
         marginBottom: 8,
-        paddingVertical: 8,
+        paddingVertical: 10,
         paddingHorizontal: 12,
-        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        // Silent Focus: Subtle container, not attention-grabbing
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: 'rgba(139, 92, 246, 0.2)',
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     nextStepLabelRow: {
         flexDirection: 'row',
@@ -524,12 +548,16 @@ const styles = StyleSheet.create({
     },
     nextStepLabel: {
         fontSize: 11,
-        color: 'rgba(255, 255, 255, 0.4)',
+        fontWeight: '500',
+        color: '#71717a', // Muted zinc
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     nextStepText: {
         fontSize: 14,
-        color: '#FFFFFF',
-        fontWeight: '500',
+        color: '#FFFFFF', // Full brightness - the "anchor"
+        fontWeight: '600',
+        marginTop: 2,
     },
     dueDate: {
         fontSize: 12,
@@ -576,10 +604,15 @@ const styles = StyleSheet.create({
         width: 28,
         height: 28,
         borderRadius: 14,
-        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        // Silent Focus: Muted background
+        backgroundColor: 'rgba(113, 113, 122, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 8,
+    },
+    taskPlayButtonActive: {
+        // Only the next step gets the accent color
+        backgroundColor: 'rgba(139, 92, 246, 0.15)',
     },
 });
 

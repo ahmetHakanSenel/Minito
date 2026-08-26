@@ -13,6 +13,7 @@ import Animated, {
   useAnimatedProps,
 } from 'react-native-reanimated';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { SoftGlow } from './SoftGlow';
 
 interface TaskInputProps {
   value: string;
@@ -151,8 +152,8 @@ export const TaskInput: React.FC<TaskInputProps> = ({
     ],
   }));
 
-  const inputContainerStyle = useAnimatedStyle(() => ({
-    shadowOpacity: glowOpacity.value,
+  const glowLayerStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
   }));
 
   const snakeBorderStyle = useAnimatedStyle(() => ({
@@ -171,10 +172,15 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   return (
     <View className="w-full px-4">
       {/* Input with BrainCircuit icon and dynamic glow */}
-      <Animated.View
-        style={[styles.inputWrapper, inputContainerStyle]}
+      <View
+        style={styles.inputWrapper}
         onLayout={handleInputWrapperLayout}
       >
+        {/* Ambient focus glow — fades to nothing, leaves no edge on OLED */}
+        <Animated.View style={[StyleSheet.absoluteFill, glowLayerStyle]} pointerEvents="none">
+          <SoftGlow color="#8B5CF6" intensity={0.5} spread={26} />
+        </Animated.View>
+
         {/* Processing State: Neon Snake Border (only when loading) */}
         {isLoading && borderSize && perimeter > 0 && (
           <Animated.View style={[styles.snakeBorderContainer, snakeBorderStyle]} pointerEvents="none">
@@ -249,8 +255,8 @@ export const TaskInput: React.FC<TaskInputProps> = ({
           <BrainCircuit size={20} color="#A1A1AA" strokeWidth={2.5} />
         </View>
       </View>
-      </Animated.View>
-      
+      </View>
+
       {/* Minitize It button with Sparkles icon - GOD MODE: Heavy Haptic */}
       <AnimatedTouchableOpacity
         onPressIn={() => {
@@ -282,10 +288,6 @@ export const TaskInput: React.FC<TaskInputProps> = ({
 const styles = StyleSheet.create({
   inputWrapper: {
     position: 'relative',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 12,
-    elevation: 8,
   },
   snakeBorderContainer: {
     position: 'absolute',

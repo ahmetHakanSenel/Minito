@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle2, Clock, Smartphone, Trophy, ArrowRight } from 'lucide-react-native';
+import { CheckCircle2, Clock, Smartphone, Trophy, ArrowRight, Target, ThumbsUp, Flame } from 'lucide-react-native';
 import Animated, {
     FadeIn,
     FadeInDown,
@@ -124,7 +124,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
     // Calculate focus score (less pickups = better)
     const focusScore = Math.max(0, 100 - pickupCount * 10);
-    const focusEmoji = focusScore >= 80 ? '🎯' : focusScore >= 50 ? '👍' : '💪';
+    const FocusIcon = focusScore >= 80 ? Target : focusScore >= 50 ? ThumbsUp : Flame;
 
     return (
         <Modal
@@ -163,7 +163,10 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
                         {/* Title */}
                         <AnimatedView entering={FadeInDown.delay(200).springify()}>
-                            <Text style={styles.title}>Harika! {focusEmoji}</Text>
+                            <View style={styles.titleRow}>
+                                <Text style={styles.title}>Harika!</Text>
+                                <FocusIcon size={22} color="#C4B5FD" strokeWidth={2} />
+                            </View>
                             <Text style={styles.subtitle} numberOfLines={2}>
                                 "{taskTitle}" için {formatDuration(sessionDuration)} odaklandın
                             </Text>
@@ -284,12 +287,18 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         shadowOffset: { width: 0, height: 0 },
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        marginBottom: 8,
+    },
     title: {
         fontSize: 32,
         fontWeight: '800',
         color: '#FFFFFF',
         textAlign: 'center',
-        marginBottom: 8,
     },
     subtitle: {
         fontSize: 16,

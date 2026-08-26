@@ -45,12 +45,25 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
     const pulseOpacity = useSharedValue(0);
     const borderPulseOpacity = useSharedValue(1);
 
-    // Cleanup on unmount
+    // Kept fresh via the render below so the unmount cleanup (a stale
+    // closure by nature) always calls the *current* callback.
+    const onCompletionStateChangeRef = useRef(onCompletionStateChange);
+    onCompletionStateChangeRef.current = onCompletionStateChange;
+
+    // Cleanup on unmount. This is the single source of truth for "this
+    // timer is gone": if it unmounts mid completion-loop (user tapped Next
+    // instead of this timer's own Stop), the parent must still be told the
+    // loop ended, or its Aurora/border pulse would run forever. `withRepeat`
+    // animations also outlive the unmounted view unless explicitly
+    // cancelled, so they're stopped here too.
     useEffect(() => {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
             if (completionHapticRef.current) clearInterval(completionHapticRef.current);
             completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
+            cancelAnimation(pulseOpacity);
+            cancelAnimation(borderPulseOpacity);
+            onCompletionStateChangeRef.current?.(false);
         };
     }, []);
 
@@ -90,20 +103,24 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
         setIsRunning(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+        // The updater only counts down. Completion side effects live in the
+        // effect below — an updater can run during render, and handleComplete
+        // sets state on the parent (focus.tsx) too, which React forbids
+        // mid-render ("Cannot update a component while rendering another").
         timerRef.current = setInterval(() => {
-            setRemaining((prev) => {
-                if (prev <= 1) {
-                    if (timerRef.current) {
-                        clearInterval(timerRef.current);
-                        timerRef.current = null;
-                    }
-                    handleComplete();
-                    return 0;
-                }
-                return prev - 1;
-            });
+            setRemaining((prev) => Math.max(0, prev - 1));
         }, 1000);
     };
+
+    // Completion detection — runs after commit, never during render
+    useEffect(() => {
+        if (!isRunning || remaining > 0) return;
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+        handleComplete();
+    }, [remaining, isRunning]);
 
     const handlePause = () => {
         if (timerRef.current) {

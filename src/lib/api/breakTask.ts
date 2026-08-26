@@ -1,6 +1,5 @@
 import { tracedAxios } from '../requestTracing';
 import { FallbackReason } from '../../safety';
-import { getContentFlaggedPanicKit } from '../../safety/emergencyService';
 import { getOfflineFallbackSteps } from '../offlineFallback';
 
 /**
@@ -48,7 +47,6 @@ export type BreakTaskResult =
   | {
       success: false;
       fallbackReason: FallbackReason;
-      panicKit?: ReturnType<typeof getContentFlaggedPanicKit>;
       error?: string;
     };
 
@@ -112,6 +110,10 @@ export async function breakTask(
       edgeFunctionUrl,
       requestPayload,
       {
+        // Hard ceiling on perceived latency: past this point the offline
+        // fallback is a better experience than continuing to wait. The
+        // server's own retry cascade can otherwise stretch to 30s+.
+        timeout: 8000,
         headers: {
           'Content-Type': 'application/json',
           // Supabase Edge Function auth: send anon key if available
@@ -138,22 +140,10 @@ export async function breakTask(
       };
     }
 
-    // Handle fallback cases
+    // Handle fallback cases. CONTENT_FLAGGED needs no payload — the panic
+    // screen renders its own localized content from the reason code alone.
     const fallbackReason =
       (data.fallback_reason as FallbackReason) || FallbackReason.VALIDATION;
-
-    if (fallbackReason === FallbackReason.CONTENT_FLAGGED && data.panic_kit) {
-      // Convert panic kit to our format
-      const panicKit = getContentFlaggedPanicKit({
-        traceId: response.headers['x-request-id'],
-      });
-
-      return {
-        success: false,
-        fallbackReason,
-        panicKit,
-      };
-    }
 
     return {
       success: false,

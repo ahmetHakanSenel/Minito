@@ -8,10 +8,12 @@ import {
     StatusBar,
     TextInput,
     Modal,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, X, Sparkles, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -522,9 +524,8 @@ export default function PlannerScreen() {
                     <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Planlayıcı</Text>
-                <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal}>
-                    <Plus size={24} color="#FFFFFF" strokeWidth={2} />
-                </TouchableOpacity>
+                {/* Removed header add button - using bottom bar instead */}
+                <View style={styles.headerSpacer} />
             </View>
 
             {/* Timeline */}
@@ -542,7 +543,9 @@ export default function PlannerScreen() {
                         entering={FadeIn.duration(300)}
                         style={styles.emptyState}
                     >
-                        <Text style={styles.emptyStateEmoji}>📋</Text>
+                        <View style={styles.emptyStateIcon}>
+                            <ListChecks size={28} color="#8B5CF6" strokeWidth={1.5} />
+                        </View>
                         <Text style={styles.emptyStateTitle}>Henüz proje yok</Text>
                         <Text style={styles.emptyStateText}>
                             İlk projenizi ekleyerek başlayın
@@ -564,16 +567,8 @@ export default function PlannerScreen() {
                     ))}
                 </View>
 
-                {/* Add New Project Button */}
-                <TouchableOpacity
-                    style={styles.addProjectButton}
-                    onPress={handleOpenAddModal}
-                >
-                    <Plus size={20} color="#8B5CF6" strokeWidth={2} />
-                    <Text style={styles.addProjectText}>Yeni Proje Ekle</Text>
-                </TouchableOpacity>
-
-                <View style={{ height: 100 }} />
+                {/* Bottom padding for docked bar */}
+                <View style={{ height: 80 }} />
             </ScrollView>
 
             {/* Add Project Modal */}
@@ -583,6 +578,33 @@ export default function PlannerScreen() {
                 onAdd={handleAddProject}
                 onGenerateSubtasks={generateSubtasks}
             />
+
+            {/* Docked Bottom Bar - "Silent Focus" Add Button */}
+            <View style={styles.dockedBottomBar}>
+                {Platform.OS === 'ios' ? (
+                    <BlurView intensity={80} tint="dark" style={styles.blurContainer}>
+                        <TouchableOpacity
+                            style={styles.dockedAddButton}
+                            onPress={handleOpenAddModal}
+                            activeOpacity={0.7}
+                        >
+                            <Plus size={18} color="#71717a" strokeWidth={2} />
+                            <Text style={styles.dockedAddText}>Yeni Proje</Text>
+                        </TouchableOpacity>
+                    </BlurView>
+                ) : (
+                    <View style={styles.androidBottomBar}>
+                        <TouchableOpacity
+                            style={styles.dockedAddButton}
+                            onPress={handleOpenAddModal}
+                            activeOpacity={0.7}
+                        >
+                            <Plus size={18} color="#71717a" strokeWidth={2} />
+                            <Text style={styles.dockedAddText}>Yeni Proje</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
 
             {/* Dashboard Modal (Navigation) */}
             <DashboardModal
@@ -617,11 +639,9 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#FFFFFF',
     },
-    addButton: {
+    headerSpacer: {
         width: 44,
         height: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
     scrollView: {
         flex: 1,
@@ -646,8 +666,15 @@ const styles = StyleSheet.create({
         paddingVertical: 60,
         paddingHorizontal: 40,
     },
-    emptyStateEmoji: {
-        fontSize: 48,
+    emptyStateIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(139, 92, 246, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.28)',
         marginBottom: 16,
     },
     emptyStateTitle: {
@@ -661,22 +688,39 @@ const styles = StyleSheet.create({
         color: 'rgba(255, 255, 255, 0.5)',
         textAlign: 'center',
     },
-    addProjectButton: {
+    // Docked Bottom Bar - "Silent Focus" Design
+    dockedBottomBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 60,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    blurContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    androidBottomBar: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dockedAddButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        paddingVertical: 16,
-        marginTop: 8,
-        marginLeft: 32,
-        borderWidth: 1,
-        borderColor: 'rgba(139, 92, 246, 0.3)',
-        borderRadius: 16,
-        borderStyle: 'dashed',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
     },
-    addProjectText: {
-        fontSize: 14,
+    dockedAddText: {
+        fontSize: 15,
         fontWeight: '500',
-        color: '#8B5CF6',
+        color: '#71717a', // Muted zinc tone
+        letterSpacing: 0.3,
     },
 });

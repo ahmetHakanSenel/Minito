@@ -1,25 +1,69 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, ScrollView, StatusBar, StyleSheet } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, StatusBar, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { TaskInput, OfflineBanner, MinitoIcon, NativeAdCard } from '../src/components';
+import { X } from 'lucide-react-native';
+import { TaskInput, OfflineBanner, MinitoIcon } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
 import { DashboardModal } from '../src/modals';
 import { breakTask } from '../src/lib/api';
+import { useAuth } from '../src/lib/auth';
 import { getOrCreateGuestId } from '../src/lib/guestIdentity';
 import { FallbackReason } from '../src/safety';
+import {
+  loadActiveSession,
+  clearActiveSession,
+  type ActiveSession,
+} from '../src/lib/storage/activeSessionStore';
 import * as Haptics from 'expo-haptics';
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [isDashboardVisible, setIsDashboardVisible] = useState(false);
+  const [resumableSession, setResumableSession] = useState<ActiveSession | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ openDashboard?: string }>();
   const insets = useSafeAreaInsets();
   const lastHapticTime = useRef<number>(0);
+
+  // Check for an interrupted focus session whenever home regains focus
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      loadActiveSession().then((session) => {
+        if (!cancelled) setResumableSession(session);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
+  const handleResumeSession = () => {
+    if (!resumableSession) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push({
+      pathname: '/focus',
+      params: {
+        steps: JSON.stringify(resumableSession.steps),
+        input: resumableSession.input,
+        empathyBridge: resumableSession.empathyBridge,
+        firstStepHook: resumableSession.firstStepHook,
+        resumeStepIndex: String(resumableSession.currentStepIndex),
+      },
+    });
+  };
+
+  const handleDismissSession = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    clearActiveSession();
+    setResumableSession(null);
+  };
 
   // Open DashboardModal when coming back from sub-screens with openDashboard param
   useEffect(() => {
@@ -69,13 +113,9 @@ export default function HomeScreen() {
         });
       } else if (!result.success) {
         // Handle fallback cases - TypeScript now knows result is the failure type
-        if (result.fallbackReason === FallbackReason.CONTENT_FLAGGED && result.panicKit) {
-          router.push({
-            pathname: '/panic',
-            params: {
-              panicKit: JSON.stringify(result.panicKit),
-            },
-          });
+        if (result.fallbackReason === FallbackReason.CONTENT_FLAGGED) {
+          // Panic screen renders its own localized content — no params needed
+          router.push('/panic');
         } else {
           // For DB_DOWN or AI_DOWN, try to show offline fallback as last resort
           if (
@@ -130,7 +170,12 @@ export default function HomeScreen() {
       <DashboardModal
         visible={isDashboardVisible}
         onClose={() => setIsDashboardVisible(false)}
-        userName="Kullanıcı"
+        userName={
+          (user?.user_metadata?.full_name as string) ||
+          (user?.user_metadata?.name as string) ||
+          user?.email?.split('@')[0] ||
+          t('dashboard.guest')
+        }
         isPremium={false}
         onNavigate={handleDashboardNavigate}
       />
@@ -142,7 +187,6 @@ export default function HomeScreen() {
             flexGrow: 1,
             justifyContent: 'center',
             paddingVertical: 40,
-            paddingBottom: 120, // Space for ad at bottom
           }}
           keyboardShouldPersistTaps="handled"
           onScroll={handleScroll}
@@ -152,6 +196,36 @@ export default function HomeScreen() {
             <View className="items-center mb-4">
               <MinitoIcon size={80} color="#8B5CF6" />
             </View>
+
+            {/* Resume interrupted session */}
+            {resumableSession && (
+              <TouchableOpacity
+                style={styles.resumeCard}
+                onPress={handleResumeSession}
+                activeOpacity={0.85}
+              >
+                <View style={styles.resumeTextContainer}>
+                  <Text style={styles.resumeTitle}>{t('home.resumeTitle')}</Text>
+                  <Text style={styles.resumeSubtitle} numberOfLines={1}>
+                    {resumableSession.input || t('home.resumeFallbackLabel')}
+                  </Text>
+                  <Text style={styles.resumeProgress}>
+                    {t('focus.step', {
+                      current: resumableSession.currentStepIndex + 1,
+                      total: resumableSession.steps.length,
+                    })}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleDismissSession}
+                  style={styles.resumeDismiss}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <X size={16} color="#A1A1AA" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+
             <TaskInput
               value={input}
               onChangeText={setInput}
@@ -160,19 +234,6 @@ export default function HomeScreen() {
             />
           </View>
         </ScrollView>
-
-        {/* Native Ad at bottom - Fixed position, responsive with safe area */}
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            paddingBottom: Math.max(insets.bottom, 16),
-          }}
-        >
-          <NativeAdCard showAd={true} />
-        </View>
       </View>
     </View>
   );
@@ -183,5 +244,39 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     zIndex: 100,
+  },
+  resumeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    borderColor: 'rgba(139, 92, 246, 0.35)',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  resumeTextContainer: {
+    flex: 1,
+  },
+  resumeTitle: {
+    color: '#C4B5FD',
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  resumeSubtitle: {
+    color: '#E5E5E5',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  resumeProgress: {
+    color: '#A1A1AA',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  resumeDismiss: {
+    padding: 6,
   },
 });

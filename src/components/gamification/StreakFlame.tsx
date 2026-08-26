@@ -217,7 +217,8 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.8,
         shadowRadius: 20,
-        elevation: 15,
+        // No `elevation`: on a transparent view Android falls back to the
+        // rectangular bounds and stamps a hard grey box onto the black.
         // Holographic glow effect
         borderWidth: 1,
         borderColor: 'rgba(247, 37, 133, 0.3)',
