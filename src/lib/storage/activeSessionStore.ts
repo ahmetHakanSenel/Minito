@@ -17,6 +17,7 @@ export interface ActiveSession {
   firstStepHook: string;
   currentStepIndex: number;
   completedSteps: number[];
+  taskId?: string;
   updatedAt: number;
 }
 

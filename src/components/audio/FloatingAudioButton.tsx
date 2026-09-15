@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
-import { AudioLines, Music2, Pause, Play, Square, Volume2 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Headphones, Pause, Play, Square, Volume2 } from 'lucide-react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -18,6 +19,7 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withRepeat,
+    withSequence,
     withTiming,
     cancelAnimation,
     Easing,
@@ -30,10 +32,55 @@ import { SoftGlow } from '../SoftGlow';
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 // Screens where no audio control may appear at all
-const HIDDEN_ROUTES = ['/panic'];
+const HIDDEN_ROUTES = ['/panic', '/login'];
+
+const ORB_SIZE = 52;
+const IDLE_RING = ['rgba(255, 255, 255, 0.32)', 'rgba(255, 255, 255, 0.03)'] as const;
+const ORB_FILL = ['#26263A', '#0D0D16'] as const;
+
+// Staggered timings keep the bars out of lockstep, which would read as mechanical.
+const EQUALIZER_BARS = [
+    { rest: 6, peak: 16, duration: 460 },
+    { rest: 10, peak: 20, duration: 620 },
+    { rest: 7, peak: 13, duration: 380 },
+];
+
+type EqualizerBarProps = {
+    color: string;
+    active: boolean;
+    rest: number;
+    peak: number;
+    duration: number;
+};
+
+function EqualizerBar({ color, active, rest, peak, duration }: EqualizerBarProps) {
+    const height = useSharedValue(rest);
+
+    useEffect(() => {
+        if (active) {
+            const easing = Easing.inOut(Easing.quad);
+            height.value = withRepeat(
+                withSequence(
+                    withTiming(peak, { duration, easing }),
+                    withTiming(rest * 0.6, { duration, easing })
+                ),
+                -1,
+                true
+            );
+        } else {
+            cancelAnimation(height);
+            height.value = withTiming(rest, { duration: 250 });
+        }
+    }, [active]);
+
+    const barStyle = useAnimatedStyle(() => ({ height: height.value }));
+
+    return <Animated.View style={[styles.equalizerBar, { backgroundColor: color }, barStyle]} />;
+}
 
 // ============================================================================
-// FLOATING AUDIO BUTTON — a 48px orb instead of a full-width bar.
+// FLOATING AUDIO BUTTON — a glass orb with a gradient hairline ring.
+// Idle it shows headphones; with a track it becomes a live equalizer.
 // Tap opens a bottom sheet with the track list, play/pause and stop.
 // ============================================================================
 
@@ -44,8 +91,7 @@ export const FloatingAudioButton: React.FC = () => {
     const { currentTrack, isPlaying, play, pause, resume, stop } = useAudioContext();
     const [sheetVisible, setSheetVisible] = useState(false);
 
-    // Subtle breathing while playing — the only motion this button makes.
-    // All hooks stay above any conditional return (hook-order rule).
+    // Subtle breathing glow while playing. All hooks stay above any conditional return.
     const pulse = useSharedValue(1);
     useEffect(() => {
         if (isPlaying) {
@@ -62,22 +108,17 @@ export const FloatingAudioButton: React.FC = () => {
 
     const glowStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
-    const isHiddenRoute = HIDDEN_ROUTES.includes(pathname);
-
-    // On the focus step flow the button stays available but recedes —
-    // present if you need it, invisible when you don't look for it.
-    const isQuietRoute = pathname === '/focus';
-
-    if (isHiddenRoute) {
+    if (HIDDEN_ROUTES.includes(pathname)) {
         return null;
     }
 
-    // Two visual states: a quiet neutral shortcut with no track selected,
-    // and a track-tinted, breathing orb once something is playing/paused.
+    // On the focus step flow the button stays available but recedes.
+    const isQuietRoute = pathname === '/focus';
+
     const hasTrack = !!currentTrack;
     const trackColor = currentTrack?.color || '#8B5CF6';
-    const Icon = hasTrack ? AudioLines : Music2;
-    const iconColor = hasTrack ? trackColor : 'rgba(255, 255, 255, 0.55)';
+    const ringColors = hasTrack ? ([trackColor, `${trackColor}26`] as const) : IDLE_RING;
+    const barColor = isPlaying ? trackColor : `${trackColor}99`;
 
     const openSheet = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -110,28 +151,47 @@ export const FloatingAudioButton: React.FC = () => {
             <AnimatedView
                 entering={FadeIn.duration(300)}
                 exiting={FadeOut.duration(200)}
-                style={[
-                    styles.orbContainer,
-                    {
-                        bottom: Math.max(insets.bottom, 16) + 16,
-                        opacity: isQuietRoute ? (hasTrack ? 0.55 : 0.4) : 1,
-                    },
-                ]}
+                style={[styles.orbContainer, { bottom: Math.max(insets.bottom, 16) + 16 }]}
             >
-                {/* Glow only exists once a track is selected — a silent
-                    shortcut stays flat and unobtrusive, never glowing */}
-                {hasTrack && (
-                    <Animated.View style={[StyleSheet.absoluteFill, glowStyle]} pointerEvents="none">
-                        <SoftGlow color={trackColor} intensity={0.4} spread={16} />
-                    </Animated.View>
-                )}
-                <TouchableOpacity
-                    style={[styles.orb, !hasTrack && styles.orbIdle]}
-                    onPress={openSheet}
-                    activeOpacity={0.8}
-                >
-                    <Icon size={20} color={iconColor} strokeWidth={hasTrack ? 2 : 1.8} />
-                </TouchableOpacity>
+                {/* Opacity lives on an inner view so it never fights the layout animation */}
+                <View style={{ opacity: isQuietRoute ? (hasTrack ? 0.6 : 0.45) : 1 }}>
+                    {hasTrack && (
+                        <Animated.View style={[StyleSheet.absoluteFill, glowStyle]} pointerEvents="none">
+                            <SoftGlow color={trackColor} intensity={0.45} spread={18} />
+                        </Animated.View>
+                    )}
+                    <TouchableOpacity
+                        onPress={openSheet}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('audio.title')}
+                        style={styles.orbShadow}
+                    >
+                        <LinearGradient
+                            colors={ringColors}
+                            start={{ x: 0.15, y: 0 }}
+                            end={{ x: 0.85, y: 1 }}
+                            style={styles.orbRing}
+                        >
+                            <LinearGradient
+                                colors={ORB_FILL}
+                                start={{ x: 0.3, y: 0 }}
+                                end={{ x: 0.7, y: 1 }}
+                                style={styles.orbFill}
+                            >
+                                {hasTrack ? (
+                                    <View style={styles.equalizer}>
+                                        {EQUALIZER_BARS.map((bar, index) => (
+                                            <EqualizerBar key={index} color={barColor} active={isPlaying} {...bar} />
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <Headphones size={21} color="rgba(255, 255, 255, 0.88)" strokeWidth={1.75} />
+                                )}
+                            </LinearGradient>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
             </AnimatedView>
 
             {/* Track picker sheet */}
@@ -199,25 +259,38 @@ const styles = StyleSheet.create({
     orbContainer: {
         position: 'absolute',
         right: 16,
-        width: 48,
-        height: 48,
+        width: ORB_SIZE,
+        height: ORB_SIZE,
         zIndex: 100,
     },
-    orb: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+    orbShadow: {
+        borderRadius: ORB_SIZE / 2,
+        shadowColor: '#000000',
+        shadowOpacity: 0.45,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 6 },
+    },
+    orbRing: {
+        width: ORB_SIZE,
+        height: ORB_SIZE,
+        borderRadius: ORB_SIZE / 2,
+        padding: 1,
+    },
+    orbFill: {
+        flex: 1,
+        borderRadius: ORB_SIZE / 2,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(18, 18, 28, 0.88)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)',
     },
-    // No track selected: flatter, dimmer — a shortcut you notice only if
-    // you look for it, never one that competes for attention.
-    orbIdle: {
-        backgroundColor: 'rgba(18, 18, 28, 0.55)',
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+    equalizer: {
+        height: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+    },
+    equalizerBar: {
+        width: 3,
+        borderRadius: 1.5,
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,

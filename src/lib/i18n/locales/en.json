@@ -83,7 +83,7 @@
     "signOut": "Sign Out",
     "privacyNotice": {
       "title": "Privacy First:",
-      "text": "Minito follows a privacy-first design. Your task inputs are never stored in plain text - only hashed values (HMAC_SHA256) are saved for analytics purposes. This means we cannot reconstruct your original tasks, ensuring your privacy is protected."
+      "text": "Your task breakdowns are saved to your account so you can pick them up on any device. Only you can see them, you can delete any of them with a long press, and all of them are removed when you delete your account. The usage analytics kept for the AI service store only a hashed value (HMAC_SHA256) of your input, never the text itself."
     }
   },
   "panic": {
@@ -142,6 +142,25 @@
     "signOut": "Sign Out",
     "coreFeatureTitle": "Core Minito Feature",
     "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps."
+  },
+  "tasks": {
+    "recentTitle": "Recent breakdowns",
+    "empty": "Your breakdowns will appear here, synced across your devices.",
+    "stepsProgress": "{{done}}/{{total}} steps",
+    "completed": "Completed",
+    "syncError": "Couldn't load your history.",
+    "retry": "Retry",
+    "longPressHint": "Long press to delete",
+    "deleteTitle": "Delete this breakdown?",
+    "deleteMessage": "It will be removed from all your devices.",
+    "deleteFailed": "Couldn't delete. Please try again.",
+    "rateLimited": "You've reached the hourly limit. Please try again a little later.",
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    }
   },
   "audio": {
     "title": "Focus Sounds",
