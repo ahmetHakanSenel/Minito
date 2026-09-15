@@ -16,7 +16,7 @@ import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
  * 0. Authenticate the caller (a signed-in user JWT is required)
  * 1. Sanitize input & HMAC-SHA256 hash for privacy
  * 2. Moderation (Fail-Safe) → if flagged, return fallback steps
- * 3. Per-user rate limit (enforced; fails open only if the check itself errors)
+ * 3. Per-user and per-IP rate limits (enforced; fail open only if a check itself errors)
  * 4. Prompt Cache → simple global variable with 60s TTL
  * 5. AI Call → max_tokens: 600 and track token usage
  * 6. Persistence → Retry 3x in-memory
@@ -230,6 +230,17 @@ async function hashInput(sanitizedInput: string, secret: string): Promise<string
 }
 
 /**
+ * Best-effort client IP. Cloudflare sets cf-connecting-ip itself, whereas the first
+ * x-forwarded-for hop is caller-controlled, so it only serves as a fallback.
+ */
+function clientIp(req: Request): string | null {
+  const forwardedFor = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return (
+    req.headers.get('cf-connecting-ip') ?? req.headers.get('x-real-ip') ?? (forwardedFor || null)
+  );
+}
+
+/**
  * Get system prompt with caching (60s TTL)
  */
 async function getSystemPrompt(supabase: SupabaseClient): Promise<string> {
@@ -308,45 +319,68 @@ async function checkModeration(
   }
 }
 
-// Per-hour request ceiling per signed-in user. Keyed by the verified user id, so it
-// cannot be dodged by rotating client-supplied identifiers.
+// Per-hour ceilings. The user quota is keyed by the verified user id, so it cannot be dodged by
+// rotating client-supplied identifiers; the IP quota stops one address from farming free accounts.
 const RATE_LIMIT_PER_USER = 20;
+const RATE_LIMIT_PER_IP = 40;
+
+type RateLimitScope = {
+  column: 'user_id' | 'client_ip_hash';
+  value: string;
+  limit: number;
+};
+
+async function exceedsLimit(
+  supabase: SupabaseClient,
+  scope: RateLimitScope,
+  since: string
+): Promise<boolean> {
+  try {
+    const { count, error } = await supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq(scope.column, scope.value)
+      .gte('created_at', since);
+
+    if (error) {
+      console.error(`Rate limit check on ${scope.column} failed, allowing request:`, error);
+      return false;
+    }
+    if ((count ?? 0) >= scope.limit) {
+      console.warn(
+        `Rate limit exceeded on ${scope.column}: ${count} in last hour (limit ${scope.limit})`
+      );
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`Rate limit check on ${scope.column} errored, allowing request:`, error);
+    return false;
+  }
+}
 
 /**
- * Check rate limit (enforced).
- * Fail-soft only on infrastructure errors: if the check itself cannot run,
+ * Check rate limits (enforced).
+ * Fail-soft only on infrastructure errors: if a check itself cannot run,
  * the request is allowed rather than blocking a legitimate user.
  */
 async function checkRateLimit(
   userId: string,
+  ipHash: string | null,
   supabase: SupabaseClient
 ): Promise<{ limited: boolean }> {
-  try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-
-    const { count, error } = await supabase
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', oneHourAgo);
-
-    if (error) {
-      console.error('Rate limit check failed, allowing request:', error);
-      return { limited: false };
-    }
-
-    if ((count ?? 0) >= RATE_LIMIT_PER_USER) {
-      console.warn(
-        `Rate limit exceeded: ${count} requests in last hour (limit ${RATE_LIMIT_PER_USER}, user=${userId})`
-      );
-      return { limited: true };
-    }
-
-    return { limited: false };
-  } catch (error) {
-    console.error('Rate limit check error, allowing request:', error);
-    return { limited: false };
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const scopes: RateLimitScope[] = [
+    { column: 'user_id', value: userId, limit: RATE_LIMIT_PER_USER },
+  ];
+  if (ipHash) {
+    scopes.push({ column: 'client_ip_hash', value: ipHash, limit: RATE_LIMIT_PER_IP });
   }
+
+  const results = await Promise.all(
+    scopes.map((scope) => exceedsLimit(supabase, scope, oneHourAgo))
+  );
+  return { limited: results.some(Boolean) };
 }
 
 /**
@@ -484,8 +518,8 @@ const MAX_DISPLAY_NAME_LENGTH = 30;
 function sanitizeDisplayName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const cleaned = raw
-    // deno-lint-ignore no-control-regex
-    .replace(/[ -"`\\{}<>]/g, '')
+    .replace(/\p{Cc}/gu, '')
+    .replace(/["`\\{}<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_DISPLAY_NAME_LENGTH);
@@ -738,8 +772,12 @@ serve(async (req: Request) => {
     }
 
     const { input, guest_id, request_id } = body;
+    const ipAddress = clientIp(req);
+    // The domain prefix keeps IP hashes from ever colliding with input hashes.
+    const ipHash = ipAddress ? await hashInput(`ip:${ipAddress}`, hmacSecret) : null;
     const taskRecordBase = {
       user_id: user.id,
+      client_ip_hash: ipHash,
       guest_id: guest_id || null,
       request_id: request_id || null,
     };
@@ -773,7 +811,7 @@ serve(async (req: Request) => {
     // Step 3: Rate Limit check (enforced)
     // Rate-limited attempts are NOT persisted to `tasks`, so a blocked
     // user's retries never extend their own block window.
-    const { limited } = await checkRateLimit(user.id, supabase);
+    const { limited } = await checkRateLimit(user.id, ipHash, supabase);
     if (limited) {
       return jsonResponse(
         {

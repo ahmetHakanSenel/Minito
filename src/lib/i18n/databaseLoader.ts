@@ -1,4 +1,4 @@
-import { supabase } from '../../data/supabase/client';
+import { getSupabase } from '../../data/supabase/client';
 import i18n from './config';
 
 /**
@@ -7,7 +7,7 @@ import i18n from './config';
  */
 export async function loadTranslationsFromDatabase(languageCode: string): Promise<void> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('translations')
       .select('key, value')
       .eq('language_code', languageCode)

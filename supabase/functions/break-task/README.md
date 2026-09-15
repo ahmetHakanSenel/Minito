@@ -5,7 +5,7 @@ Only signed-in users can call it.
 
 ## Setup
 
-1. Apply the migrations in `supabase/migrations` (009 adds `tasks.user_id`, which rate limiting relies on).
+1. Apply the migrations in `supabase/migrations` (009 adds `tasks.user_id` and 010 adds `tasks.client_ip_hash`; rate limiting relies on both).
 
 2. Set secrets (`supabase secrets set NAME=value`):
    - `HMAC_SECRET` (required): key for HMAC-SHA256 input hashing, e.g. `openssl rand -hex 32`. The function refuses to run without it.
@@ -66,7 +66,8 @@ The client renders the panic kit in the user's own locale; the server never ship
 - **Fail-Soft Philosophy**: Provider and persistence failures are handled gracefully, never blocking UX
 - **Privacy**: Input is hashed with HMAC-SHA256, never stored in raw form
 - **Moderation**: Fail-Safe - if flagged, returns `CONTENT_FLAGGED` (requires `OPENAI_API_KEY`)
-- **Rate Limiting**: 20 requests/hour per authenticated user (`429 RATE_DOWN`); fails open only if the check itself errors
+- **Rate Limiting**: 20 requests/hour per authenticated user and 40/hour per client IP (`429 RATE_DOWN`); the IP is stored only as an HMAC. Checks fail open only if the query itself errors
+- **Client IP**: Taken from `cf-connecting-ip`, then `x-real-ip`, then the first `x-forwarded-for` hop (caller-controlled, so best-effort only)
 - **Caching**: System prompt cached for 60 seconds
 - **Retries**: AI calls retry 3 times with exponential backoff
 - **Persistence**: Task records retry 3 times, failures are logged but don't block response

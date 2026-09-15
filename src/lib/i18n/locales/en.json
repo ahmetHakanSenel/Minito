@@ -48,8 +48,10 @@
     "continueWithApple": "Continue with Apple",
     "continueWithGoogle": "Continue with Google",
     "checkEmail": "Check your inbox to confirm your email, then sign in.",
+    "backendUnavailable": "Minito can't reach its server right now, so signing in is unavailable. Please try again later.",
     "errors": {
       "invalid_input": "Enter a valid email and a password of at least 6 characters.",
+      "backend_unavailable": "Minito can't reach its server right now. Please try again later.",
       "invalid_name": "Tell us what to call you.",
       "invalid_credentials": "Incorrect email or password.",
       "email_not_confirmed": "Please confirm your email before signing in.",

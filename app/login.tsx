@@ -35,8 +35,14 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function LoginScreen() {
   const { t } = useTranslation();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, providers } =
-    useAuth();
+  const {
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signInWithApple,
+    providers,
+    isBackendAvailable,
+  } = useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -51,6 +57,8 @@ export default function LoginScreen() {
   const keyboardScroll = useKeepAboveKeyboard(scrollRef, formRef);
 
   const isBusy = pending !== null;
+  // Without a backend nothing can succeed, so actions stay disabled instead of failing one by one.
+  const isDisabled = isBusy || !isBackendAvailable;
   const isSignUp = mode === 'signUp';
 
   // On success the root auth guard swaps this screen out, so no manual navigation is needed.
@@ -140,6 +148,14 @@ export default function LoginScreen() {
           collapsable={false}
           className="rounded-3xl bg-white/5 border border-white/10 p-5"
         >
+          {!isBackendAvailable && (
+            <View className="bg-amber-500/15 border border-amber-500/40 rounded-xl p-4 mb-4">
+              <Text className="text-amber-300 text-center text-sm">
+                {t('login.backendUnavailable')}
+              </Text>
+            </View>
+          )}
+
           {notice && (
             <View className="bg-success/15 border border-success/40 rounded-xl p-4 mb-4">
               <Text className="text-success text-center text-sm">{notice}</Text>
@@ -209,9 +225,9 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={isBusy}
+            disabled={isDisabled}
             accessibilityRole="button"
-            className={`bg-primary rounded-xl h-14 items-center justify-center ${isBusy ? 'opacity-60' : ''}`}
+            className={`bg-primary rounded-xl h-14 items-center justify-center ${isDisabled ? 'opacity-60' : ''}`}
           >
             {pending === 'email' ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
@@ -240,10 +256,10 @@ export default function LoginScreen() {
             {providers.google && (
               <TouchableOpacity
                 onPress={() => run('google', signInWithGoogle)}
-                disabled={isBusy}
+                disabled={isDisabled}
                 accessibilityRole="button"
                 className={`bg-white/10 border border-white/20 rounded-xl h-14 items-center justify-center mb-3 ${
-                  isBusy ? 'opacity-60' : ''
+                  isDisabled ? 'opacity-60' : ''
                 }`}
               >
                 {pending === 'google' ? (
@@ -263,7 +279,7 @@ export default function LoginScreen() {
                 cornerRadius={12}
                 style={{ width: '100%', height: 56 }}
                 onPress={() => {
-                  if (!isBusy) {
+                  if (!isDisabled) {
                     run('apple', signInWithApple);
                   }
                 }}

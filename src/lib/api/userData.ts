@@ -1,5 +1,5 @@
 import { tracedAxios } from '../requestTracing';
-import { supabase } from '../../data/supabase/client';
+import { getSupabase } from '../../data/supabase/client';
 
 const SUPABASE_EDGE_FUNCTION_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_URL;
 
@@ -10,7 +10,7 @@ const SUPABASE_EDGE_FUNCTION_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTIO
 export async function deleteUserAccount(): Promise<void> {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSupabase().auth.getSession();
 
   if (!session) {
     throw new Error('No active session. Please sign in first.');
@@ -50,7 +50,7 @@ export async function deleteUserAccount(): Promise<void> {
 export async function exportUserData(): Promise<any> {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSupabase().auth.getSession();
 
   if (!session) {
     throw new Error('No active session. Please sign in first.');

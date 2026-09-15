@@ -1,10 +1,11 @@
 import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js';
 import { requestGoogleIdToken } from '../../data/auth/googleAuth';
-import { supabase } from '../../data/supabase/client';
+import { BackendUnavailableError, getSupabase } from '../../data/supabase/client';
 import { authRepository } from '../authRepository';
 
-jest.mock('../../data/supabase/client', () => ({
-  supabase: {
+jest.mock('../../data/supabase/client', () => {
+  class BackendUnavailableError extends Error {}
+  const client = {
     auth: {
       signInWithPassword: jest.fn(),
       signUp: jest.fn(),
@@ -13,8 +14,13 @@ jest.mock('../../data/supabase/client', () => ({
       updateUser: jest.fn(),
       onAuthStateChange: jest.fn(),
     },
-  },
-}));
+  };
+  return {
+    BackendUnavailableError,
+    isBackendConfigured: true,
+    getSupabase: jest.fn(() => client),
+  };
+});
 jest.mock('../../data/auth/googleAuth', () => ({
   isGoogleSignInAvailable: jest.fn(),
   requestGoogleIdToken: jest.fn(),
@@ -24,7 +30,8 @@ jest.mock('../../data/auth/appleAuth', () => ({
   requestAppleIdToken: jest.fn(),
 }));
 
-const auth = jest.mocked(supabase.auth);
+const auth = jest.mocked(getSupabase().auth);
+const mockedGetSupabase = jest.mocked(getSupabase);
 const mockedRequestGoogleIdToken = jest.mocked(requestGoogleIdToken);
 
 // Supabase response types are wide; these tests only exercise the fields the repository reads.
@@ -58,6 +65,16 @@ describe('authRepository email flows', () => {
 
     await expect(authRepository.signInWithEmail('a@b.co', 'secret1')).rejects.toMatchObject({
       code: 'network',
+    });
+  });
+
+  it('reports a missing backend configuration as backend_unavailable', async () => {
+    mockedGetSupabase.mockImplementationOnce(() => {
+      throw new BackendUnavailableError();
+    });
+
+    await expect(authRepository.signInWithEmail('a@b.co', 'secret1')).rejects.toMatchObject({
+      code: 'backend_unavailable',
     });
   });
 
