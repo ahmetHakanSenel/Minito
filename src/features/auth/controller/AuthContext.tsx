@@ -10,16 +10,25 @@ type SocialProviders = {
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
+  displayName: string | null;
   isInitializing: boolean;
   providers: SocialProviders;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<SignUpResult>;
+  signUpWithEmail: (email: string, password: string, displayName: string) => Promise<SignUpResult>;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// Social providers fill full_name/name, which serve as a fallback until the user picks a handle.
+function readDisplayName(user: User | null): string | null {
+  const metadata = user?.user_metadata ?? {};
+  const candidate = metadata.display_name ?? metadata.full_name ?? metadata.name;
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -51,10 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  const value = useMemo<AuthContextValue>(() => {
+    const user = session?.user ?? null;
+    return {
       session,
-      user: session?.user ?? null,
+      user,
+      displayName: readDisplayName(user),
       isInitializing,
       providers,
       signInWithEmail: authRepository.signInWithEmail,
@@ -62,9 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle: authRepository.signInWithGoogle,
       signInWithApple: authRepository.signInWithApple,
       signOut: authRepository.signOut,
-    }),
-    [session, isInitializing, providers]
-  );
+      updateDisplayName: authRepository.updateDisplayName,
+    };
+  }, [session, isInitializing, providers]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,4 +1,5 @@
 import { tracedAxios } from '../requestTracing';
+import { supabase } from '../../data/supabase/client';
 import { FallbackReason } from '../../safety';
 import { getOfflineFallbackSteps } from '../offlineFallback';
 
@@ -106,6 +107,12 @@ export async function breakTask(
       // request_id is automatically added by tracedAxios interceptor
     };
 
+    // The user's JWT lets the edge function personalize the reply; the anon key is the fallback.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const bearerToken = session?.access_token ?? supabaseAnonKey;
+
     const response = await tracedAxios.post<BreakTaskResponse>(
       edgeFunctionUrl,
       requestPayload,
@@ -116,13 +123,8 @@ export async function breakTask(
         timeout: 8000,
         headers: {
           'Content-Type': 'application/json',
-          // Supabase Edge Function auth: send anon key if available
-          ...(supabaseAnonKey
-            ? {
-                apikey: supabaseAnonKey,
-                Authorization: `Bearer ${supabaseAnonKey}`,
-              }
-            : {}),
+          ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),
+          ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
         },
       }
     );

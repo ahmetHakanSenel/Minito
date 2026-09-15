@@ -37,6 +37,7 @@
   "login": {
     "title": "Welcome to Minito",
     "subtitle": "Sign in to sync your tasks across devices",
+    "namePlaceholder": "What should we call you?",
     "emailPlaceholder": "Email",
     "passwordPlaceholder": "Password",
     "signIn": "Sign In",
@@ -49,6 +50,7 @@
     "checkEmail": "Check your inbox to confirm your email, then sign in.",
     "errors": {
       "invalid_input": "Enter a valid email and a password of at least 6 characters.",
+      "invalid_name": "Tell us what to call you.",
       "invalid_credentials": "Incorrect email or password.",
       "email_not_confirmed": "Please confirm your email before signing in.",
       "user_already_exists": "An account with this email already exists.",
@@ -142,6 +144,15 @@
     "signOut": "Sign Out",
     "coreFeatureTitle": "Core Minito Feature",
     "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps."
+  },
+  "profile": {
+    "namePrompt": "What should we call you?",
+    "namePlaceholder": "Your name or nickname",
+    "save": "Save",
+    "later": "Not now",
+    "addName": "Add your name",
+    "editHint": "Tap to change your name",
+    "saveFailed": "Couldn't save your name. Please try again."
   },
   "tasks": {
     "recentTitle": "Recent breakdowns",
