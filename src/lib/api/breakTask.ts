@@ -2,21 +2,35 @@ import { tracedAxios } from '../requestTracing';
 import { getSupabase } from '../../data/supabase/client';
 import { FallbackReason } from '../../safety';
 import { getOfflineFallbackSteps } from '../offlineFallback';
+import { normalizeSteps, type BreakdownStep, type StepDifficulty } from '../breakdownSteps';
+
+/** Where a successful breakdown came from; `offline` never reached the server. */
+export type BreakdownSource = 'model' | 'repaired' | 'fallback' | 'offline';
 
 /**
- * Response from break-task edge function
- * Updated for Neuro-Cognitive Companion persona
+ * Response from the break-task edge function (output contract `task-breakdown-v1`).
  */
 export interface BreakTaskResponse {
   success: boolean;
-  empathy_bridge?: string; // Acknowledgement of how hard the task feels
-  first_step_hook?: string; // Stupidly easy action to break paralysis
-  steps?: string[];
-  fallback_reason?: FallbackReason;
-  panic_kit?: {
-    headline: string;
-    steps: Array<{ id: string; title: string; body: string }>;
+  breakdown?: {
+    language: 'tr' | 'en';
+    empathy_bridge: string; // Acknowledgement of how hard the task feels
+    first_step_hook: string; // Stupidly easy action to break paralysis
+    steps: {
+      id: string;
+      title: string;
+      instruction: string;
+      estimated_minutes: number;
+      difficulty: StepDifficulty;
+    }[];
+    stopping_point: string; // Explicit permission to stop after the last step
   };
+  meta?: { prompt_version: string; source: Exclude<BreakdownSource, 'offline'> };
+  // A function deployed before task-breakdown-v1 answers with flat string steps; still readable.
+  empathy_bridge?: string;
+  first_step_hook?: string;
+  steps?: unknown[];
+  fallback_reason?: FallbackReason;
   error?: string;
   token_usage?: number;
   latency_ms?: number;
@@ -33,23 +47,32 @@ export interface BreakTaskRequest {
 
 /**
  * Result type for breakTask function
- * Updated for Neuro-Cognitive Companion persona
  */
 export type BreakTaskResult =
   | {
       success: true;
-      empathyBridge?: string; // Acknowledgement of how hard the task feels
-      firstStepHook?: string; // Stupidly easy action to break paralysis
-      steps: string[];
+      empathyBridge?: string;
+      firstStepHook?: string;
+      stoppingPoint?: string;
+      steps: BreakdownStep[];
+      source: BreakdownSource;
+      promptVersion?: string;
       tokenUsage?: number;
       latencyMs?: number;
-      isOfflineFallback?: boolean;
     }
   | {
       success: false;
       fallbackReason: FallbackReason;
       error?: string;
     };
+
+// Hard ceiling on perceived latency. It covers generation plus one repair round-trip, and the
+// server budgets itself to answer inside it; past this point offline steps beat waiting.
+const REQUEST_TIMEOUT_MS = 20_000;
+
+function offlineResult(input: string): BreakTaskResult {
+  return { success: true, steps: getOfflineFallbackSteps(input), source: 'offline' };
+}
 
 /**
  * Calls the break-task edge function to break down a user task into steps.
@@ -78,20 +101,7 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
 
   if (!edgeFunctionUrl) {
     // No edge function URL configured - use offline fallback
-    try {
-      const offlineSteps = getOfflineFallbackSteps(input.trim());
-      return {
-        success: true,
-        steps: offlineSteps,
-        isOfflineFallback: true,
-      };
-    } catch (fallbackError) {
-      return {
-        success: false,
-        fallbackReason: FallbackReason.DB_DOWN,
-        error: 'Edge function URL not configured',
-      };
-    }
+    return offlineResult(input.trim());
   }
 
   try {
@@ -110,10 +120,7 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
     }
 
     const response = await tracedAxios.post<BreakTaskResponse>(edgeFunctionUrl, requestPayload, {
-      // Hard ceiling on perceived latency: past this point the offline
-      // fallback is a better experience than continuing to wait. The
-      // server's own retry cascade can otherwise stretch to 30s+.
-      timeout: 8000,
+      timeout: REQUEST_TIMEOUT_MS,
       headers: {
         'Content-Type': 'application/json',
         ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),
@@ -122,13 +129,19 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
     });
 
     const data = response.data;
+    const breakdown = data.breakdown;
+    // The response is still untrusted input: only well-formed steps make it into the app.
+    const steps = normalizeSteps(breakdown?.steps ?? data.steps);
 
-    if (data.success && data.steps) {
+    if (data.success && steps.length > 0) {
       return {
         success: true,
-        empathyBridge: data.empathy_bridge,
-        firstStepHook: data.first_step_hook,
-        steps: data.steps,
+        empathyBridge: breakdown?.empathy_bridge ?? data.empathy_bridge,
+        firstStepHook: breakdown?.first_step_hook ?? data.first_step_hook,
+        stoppingPoint: breakdown?.stopping_point,
+        steps,
+        source: data.meta?.source ?? 'model',
+        promptVersion: data.meta?.prompt_version,
         tokenUsage: data.token_usage,
         latencyMs: data.latency_ms,
       };
@@ -174,17 +187,7 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
 
     // If it's a network/server error, provide offline fallback steps
     if (isNetworkError) {
-      try {
-        const offlineSteps = getOfflineFallbackSteps(input.trim());
-        return {
-          success: true,
-          steps: offlineSteps,
-          isOfflineFallback: true,
-        };
-      } catch (fallbackError) {
-        // If offline fallback also fails, return error
-        console.warn('Offline fallback failed:', fallbackError);
-      }
+      return offlineResult(input.trim());
     }
 
     return {

@@ -1,4 +1,5 @@
 import i18n from './i18n/config';
+import { normalizeSteps, type BreakdownStep } from './breakdownSteps';
 
 /**
  * Offline Mode Logic - Fallback Content
@@ -155,6 +156,6 @@ export function getFallbackSteps(category: TaskCategory): string[] {
  * Gets fallback steps for a task input
  * This is used when the API is unavailable (offline mode)
  */
-export function getOfflineFallbackSteps(input: string): string[] {
-  return getFallbackSteps(categorizeTask(input));
+export function getOfflineFallbackSteps(input: string): BreakdownStep[] {
+  return normalizeSteps(getFallbackSteps(categorizeTask(input)));
 }

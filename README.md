@@ -15,7 +15,12 @@ This README focuses on the engineering: architecture, security posture and the t
   - RLS on every user-facing table; internal tables locked to the service role.
   - Auth-required Edge Function with per-user and per-IP rate limits.
   - HMAC-hashed analytics.
-  - Prompt-injection hardening on the one user-controlled field that reaches the system prompt.
+  - Prompt-injection hardening: user text is fenced as data and cannot break out of its fence.
+- **Structured AI output:**
+  - A versioned, layered prompt.
+  - Zod-validated JSON steps.
+  - Exactly one repair round-trip, then a deterministic fallback.
+  - Deno tests in CI.
 - **Encrypted session storage:** AES-256 session encryption with the key held in the iOS Keychain or Android Keystore.
 - **Graceful degradation everywhere:**
   - The app boots even without backend config.
@@ -26,7 +31,7 @@ This README focuses on the engineering: architecture, security posture and the t
   - Strict TypeScript, generated database types, ESLint and Prettier.
   - Jest tests, route-level error boundaries and Sentry.
   - A CI pipeline that type-checks the Deno functions and scans the full git history for secrets.
-- **Complete EN/TR localization:** 243 keys at parity, no hardcoded UI strings, locale-aware dates.
+- **Complete EN/TR localization:** 247 keys at parity, no hardcoded UI strings, locale-aware dates.
 
 ---
 
@@ -48,7 +53,7 @@ flowchart LR
   DATA -- "POST break-task + user JWT" --> EF["Edge Function · break-task<br/>Deno"]
   EF -- "verify JWT" --> AUTH
   EF -- "service role: rate limits,<br/>HMAC-hashed analytics" --> PG
-  EF -- "server-owned system prompt<br/>+ validated input" --> AI["AI provider<br/>OpenAI / Gemini"]
+  EF -- "versioned layered prompt<br/>+ fenced input, JSON mode" --> AI["AI provider<br/>OpenAI / Gemini"]
 ```
 
 ### One breakdown, end to end
@@ -68,11 +73,16 @@ sequenceDiagram
   alt quota exceeded
     EF-->>App: 429 RATE_DOWN
   else within quota
-    EF->>LLM: System prompt + task (+ sanitized display name)
-    LLM-->>EF: JSON steps
-    EF->>EF: Parse, clean and validate the response
+    EF->>LLM: Layered prompt (task-breakdown-v1) + fenced task input
+    LLM-->>EF: JSON (provider JSON mode)
+    EF->>EF: JSON.parse + zod TaskBreakdownSchema
+    opt reply breaks the contract
+      EF->>LLM: One repair request carrying the validation issues
+      LLM-->>EF: Corrected JSON
+      EF->>EF: Re-validate, else use the deterministic fallback plan
+    end
     EF->>DB: Insert analytics row (hash only, no raw text)
-    EF-->>App: empathy bridge, first-step hook, steps
+    EF-->>App: breakdown (typed steps) + meta.prompt_version and source
     App->>DB: Save breakdown to task_breakdowns (RLS: owner only)
   end
 ```
@@ -90,6 +100,32 @@ Navigation is guarded at the root with Expo Router's `Stack.Protected`. The spla
 
 ---
 
+## AI pipeline
+
+`break-task` returns a typed plan, never free text. The pipeline lives in `supabase/functions/break-task/pipeline.ts`. It has no HTTP or storage dependencies and is covered by Deno tests in CI.
+
+| Stage          | What happens                                                                                                                                                                                  |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Layered prompt | Identity, Rules, Tone, Decomposition and Output Contract layers form one system prompt, versioned as `PROMPT_VERSION = 'task-breakdown-v1'`                                                   |
+| Generate       | Provider JSON mode (OpenAI `response_format`, Gemini `responseMimeType`), with per-call timeouts inside a 17 s request budget                                                                 |
+| Validate       | `JSON.parse`, then zod `TaskBreakdownSchema`: 3–7 steps of `{ id, title, instruction, estimated_minutes (1–10), difficulty }`, plus `empathy_bridge`, `first_step_hook` and `stopping_point` |
+| Repair         | Exactly one follow-up request carrying the validation issues, with no transport retries                                                                                                       |
+| Fallback       | A deterministic, schema-valid plan in the task's language, validated at module load, so a bad reply never surfaces as an error                                                                |
+
+What the function reports:
+
+- **Response metadata:** Every response carries `meta: { prompt_version, source }`, where the source is `model`, `repaired` or `fallback`.
+- **Logs:** Every log line is structured JSON tagged with the prompt version. Logs never include the task text or the model's reply.
+
+What the client does with it:
+
+- **One reader:** `src/lib/breakdownSteps.ts` reads steps from responses, database rows, saved sessions and route params.
+- **Legacy upgrade:** It upgrades legacy string steps, so history created before structured output still opens.
+- **Focus screen:** It shows each step's title, instruction and difficulty, uses the estimate to timebox the step, and shows the stopping point on the last step.
+- **History:** Server fallback plans, like offline ones, are not saved.
+
+---
+
 ## Security
 
 ### Row Level Security and a locked-down schema
@@ -98,7 +134,7 @@ Navigation is guarded at the root with Expo Router's `Stack.Protected`. The spla
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `task_breakdowns`   | RLS with owner-only `SELECT/INSERT/UPDATE/DELETE` policies (`auth.uid() = user_id`); `user_id` defaults to `auth.uid()` and cascades on account deletion |
 | `tasks` (analytics) | RLS enabled with **no** policies: unreadable and unwritable by app clients, reachable only by the Edge Function's service role                           |
-| `system_prompts`    | Same lockdown, so the model's instructions can't be read or rewritten from the client                                                                    |
+| `system_prompts`    | Same lockdown. It is no longer read at all: the prompt is versioned in code, so a table edit can't break the output contract                            |
 | `translations`      | Public read; the "any authenticated user can write" policy was dropped once sign-up became open                                                          |
 
 The lockdown is verified from the outside: with the public anon key, `tasks` and `system_prompts` return zero rows (`supabase/migrations/007_lock_down_internal_tables.sql`).
@@ -129,19 +165,23 @@ Supabase sessions routinely exceed `expo-secure-store`'s ~2 KB value limit, so s
 
 ### Prompt-injection hardening
 
-The user's display name is personalized into the prompt, which makes it the obvious injection vector:
+Two user-controlled values reach the model: the task and the display name.
 
-1. **Read server-side:** The name is taken from the verified JWT's `user_metadata`, never from the request body.
-2. **Sanitized:**
+1. **Fenced as data:**
+   - The task is wrapped in `<task_input>` tags and the name in `<user_name>` tags.
+   - The Rules layer tells the model that everything inside them is untrusted data.
+   - The model must ignore role changes, instruction overrides and schema-bypass attempts found there.
+2. **An unbreakable fence:** Those tags are stripped from the values first, so the input can't close its own fence and speak from outside it.
+3. **The name is read server-side and sanitized:**
+   - It comes from the verified JWT's `user_metadata`, never from the request body.
    - Control characters (`\p{Cc}`), quotes, backticks, braces and angle brackets are stripped.
    - Whitespace is collapsed and the name is capped at 30 characters.
-3. **Embedded as data:** It is embedded via `JSON.stringify`, with an explicit instruction to treat it strictly as a name.
 
 In addition:
 
-- **Server-owned instructions:** The system prompt lives server-side and is locked by RLS.
+- **Server-owned instructions:** The prompt is versioned in code and can't be edited at runtime.
 - **Validated input:** The request body is schema-validated and capped at 1,000 characters.
-- **Validated output:** Model output is parsed as strict JSON, cleaned and validated before it reaches the client.
+- **Contract-bound output:** Even a successful injection can only yield a schema-valid plan of short steps. Anything else fails validation and ends in the repair or the fallback.
 
 ### Privacy
 
@@ -152,6 +192,12 @@ In addition:
 ---
 
 ## Engineering decisions and trade-offs
+
+**Why one repair request, and then a deterministic fallback?**
+
+- **Why one repair:** A model that misses the contract usually misses it narrowly, for example with a six-word title or a 12-minute step. One repair request that carries the exact zod issues fixes those cases cheaply.
+- **Why not more:** A second or third repair mostly burns latency and tokens on a model that is already confused. For someone who is struggling to start, a calm, generic plan now beats a perfect plan in 30 seconds.
+- **Why a real plan:** The fallback is a plan, not an error. It is validated against the same schema, so the client never needs a special case for it.
 
 **Why a silent fallback instead of an always-on system status?**
 An observability panel is an engineering tool. For users of a calm, ADHD-focused app, a blinking status pill adds noise and quiet anxiety while telling them nothing they can act on. The client still probes the auth health endpoint and the AI gateway on every dashboard focus:

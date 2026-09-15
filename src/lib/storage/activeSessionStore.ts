@@ -1,4 +1,5 @@
 import { readJson, writeJson, removeJson } from './jsonStore';
+import { normalizeSteps, type BreakdownStep } from '../breakdownSteps';
 
 /**
  * Persists the in-progress focus session so that leaving the app to actually
@@ -12,9 +13,10 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface ActiveSession {
   input: string;
-  steps: string[];
+  steps: BreakdownStep[];
   empathyBridge: string;
   firstStepHook: string;
+  stoppingPoint?: string;
   currentStepIndex: number;
   completedSteps: number[];
   taskId?: string;
@@ -28,11 +30,9 @@ export async function saveActiveSession(session: Omit<ActiveSession, 'updatedAt'
 export async function loadActiveSession(): Promise<ActiveSession | null> {
   const session = await readJson<ActiveSession>(KEY);
   if (!session) return null;
-  if (
-    !Array.isArray(session.steps) ||
-    session.steps.length === 0 ||
-    typeof session.currentStepIndex !== 'number'
-  ) {
+  // Sessions saved before structured steps hold plain strings; normalizing upgrades them in place.
+  const steps = normalizeSteps(session.steps);
+  if (steps.length === 0 || typeof session.currentStepIndex !== 'number') {
     await removeJson(KEY);
     return null;
   }
@@ -40,7 +40,7 @@ export async function loadActiveSession(): Promise<ActiveSession | null> {
     await removeJson(KEY);
     return null;
   }
-  return session;
+  return { ...session, steps };
 }
 
 export async function clearActiveSession(): Promise<void> {

@@ -27,7 +27,13 @@
     "previous": "Geri",
     "complete": "YAPTIM",
     "startWith": "İlk adım:",
-    "ready": "Hazırım"
+    "ready": "Hazırım",
+    "stoppingPoint": "Burada bırakabilirsin",
+    "difficulty": {
+      "easy": "Kolay",
+      "medium": "Orta",
+      "hard": "Zor"
+    }
   },
   "success": {
     "title": "{{count}} adımı Minito'ladın!",
