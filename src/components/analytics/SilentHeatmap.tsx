@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 interface DayActivity {
   date: string; // YYYY-MM-DD format
@@ -60,6 +61,7 @@ const generateGridData = (
 };
 
 export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({ activityData, weeks = 12 }) => {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
 
   const gridData = useMemo(() => generateGridData(activityData, weeks), [activityData, weeks]);
@@ -73,7 +75,7 @@ export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({ activityData, week
 
   return (
     <Animated.View entering={FadeInUp.delay(400).duration(500)} style={styles.container}>
-      <Text style={styles.sectionTitle}>Devamlılık</Text>
+      <Text style={styles.sectionTitle}>{t('stats.consistency')}</Text>
 
       {/* Heatmap Grid */}
       <View style={styles.gridWrapper}>
@@ -107,7 +109,7 @@ export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({ activityData, week
 
       {/* Subtle legend - no numbers, just visual gradient */}
       <View style={styles.legendContainer}>
-        <Text style={styles.legendLabel}>Az</Text>
+        <Text style={styles.legendLabel}>{t('stats.legendLess')}</Text>
         <View style={styles.legendGradient}>
           {[0.1, 0.3, 0.5, 0.7, 0.9].map((opacity, i) => (
             <View
@@ -121,7 +123,7 @@ export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({ activityData, week
             />
           ))}
         </View>
-        <Text style={styles.legendLabel}>Çok</Text>
+        <Text style={styles.legendLabel}>{t('stats.legendMore')}</Text>
       </View>
     </Animated.View>
   );

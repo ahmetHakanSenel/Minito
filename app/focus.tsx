@@ -288,7 +288,7 @@ export default function FocusModeScreen() {
             {/* First Step Hook */}
             {firstStepHook && (
               <View style={styles.hookCard}>
-                <Text style={styles.hookLabel}>{t('focus.startWith') || 'İlk adım:'}</Text>
+                <Text style={styles.hookLabel}>{t('focus.startWith')}</Text>
                 <Text style={styles.hookText}>{firstStepHook}</Text>
               </View>
             )}
@@ -297,7 +297,7 @@ export default function FocusModeScreen() {
             <Animated.View entering={FadeInDown.delay(300).springify()}>
               <View style={styles.readyButton}>
                 <Text style={styles.readyButtonText} onPress={handleNext}>
-                  {t('focus.ready') || 'Hazırım'}
+                  {t('focus.ready')}
                 </Text>
               </View>
             </Animated.View>

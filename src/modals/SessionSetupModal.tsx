@@ -13,6 +13,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
+import { useTranslation } from 'react-i18next';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
@@ -39,18 +40,13 @@ export interface SessionSetupModalProps {
 // CONSTANTS
 // ============================================================================
 
-const DURATION_OPTIONS = [
-  { label: '15m', value: 15 },
-  { label: '25m', value: 25 },
-  { label: '45m', value: 45 },
-  { label: '60m', value: 60 },
-];
+const DURATION_OPTIONS = [{ value: 15 }, { value: 25 }, { value: 45 }, { value: 60 }];
 
-const SOUND_OPTIONS: { id: SoundType; label: string; icon: React.ReactNode }[] = [
-  { id: 'mute', label: 'Sessiz', icon: <VolumeX size={24} color="#FFFFFF" /> },
-  { id: 'brown-noise', label: 'Brown Noise', icon: <Waves size={24} color="#FFFFFF" /> },
-  { id: 'rain', label: 'Yağmur', icon: <CloudRain size={24} color="#FFFFFF" /> },
-  { id: 'lo-fi', label: 'Lo-Fi', icon: <Music size={24} color="#FFFFFF" /> },
+const SOUND_OPTIONS: { id: SoundType; labelKey: string; icon: React.ReactNode }[] = [
+  { id: 'mute', labelKey: 'session.mute', icon: <VolumeX size={24} color="#FFFFFF" /> },
+  { id: 'brown-noise', labelKey: 'session.brownNoise', icon: <Waves size={24} color="#FFFFFF" /> },
+  { id: 'rain', labelKey: 'session.rain', icon: <CloudRain size={24} color="#FFFFFF" /> },
+  { id: 'lo-fi', labelKey: 'session.lofi', icon: <Music size={24} color="#FFFFFF" /> },
 ];
 
 // Button component - simple tap to start (no hold required)
@@ -65,6 +61,7 @@ interface StartButtonProps {
 }
 
 const StartButton: React.FC<StartButtonProps> = ({ onPress, disabled }) => {
+  const { t } = useTranslation();
   const scale = useSharedValue(1);
 
   const handlePressIn = useCallback(() => {
@@ -104,7 +101,7 @@ const StartButton: React.FC<StartButtonProps> = ({ onPress, disabled }) => {
         >
           <View style={styles.startButtonContent}>
             <Target size={22} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.startButtonText}>BAŞLAT</Text>
+            <Text style={styles.startButtonText}>{t('session.start')}</Text>
           </View>
         </LinearGradient>
       </TouchableOpacity>
@@ -122,6 +119,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
   taskTitle,
   onStartSession,
 }) => {
+  const { t } = useTranslation();
   const [selectedDuration, setSelectedDuration] = useState(25);
   const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [customDuration, setCustomDuration] = useState('');
@@ -239,7 +237,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
                   <Target size={20} color="#8B5CF6" />
-                  <Text style={styles.headerLabel}>ODAK OTURUMU</Text>
+                  <Text style={styles.headerLabel}>{t('session.focusSession')}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={handleClose}
@@ -259,7 +257,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Clock size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.sectionTitle}>SÜRE</Text>
+                  <Text style={styles.sectionTitle}>{t('session.duration')}</Text>
                 </View>
 
                 <View style={styles.durationGrid}>
@@ -282,7 +280,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
                             styles.durationTextActive,
                         ]}
                       >
-                        {option.label}
+                        {t('session.durationOption', { count: option.value })}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -308,10 +306,10 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
                         maxLength={3}
                         autoFocus
                       />
-                      <Text style={styles.customInputSuffix}>dakika</Text>
+                      <Text style={styles.customInputSuffix}>{t('session.minutes')}</Text>
                     </View>
                   ) : (
-                    <Text style={styles.customDurationText}>Özel süre...</Text>
+                    <Text style={styles.customDurationText}>{t('session.customDuration')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -320,7 +318,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Music size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.sectionTitle}>AMBİYANS</Text>
+                  <Text style={styles.sectionTitle}>{t('session.ambience')}</Text>
                 </View>
 
                 <View style={styles.soundGrid}>
@@ -347,7 +345,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
                           selectedSound === option.id && styles.soundLabelActive,
                         ]}
                       >
-                        {option.label}
+                        {t(option.labelKey)}
                       </Text>
                     </TouchableOpacity>
                   ))}

@@ -24,6 +24,7 @@ import {
   SoundType,
 } from '../../modals';
 import { recordFocusSession } from '../../lib/stats/sessionStore';
+import { useTranslation } from 'react-i18next';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -158,6 +159,7 @@ const NextStepPreview: React.FC<NextStepPreviewProps> = ({
   projectTitle,
   onStartFocus,
 }) => {
+  const { t } = useTranslation();
   const handleStartFocus = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onStartFocus(task);
@@ -170,7 +172,7 @@ const NextStepPreview: React.FC<NextStepPreviewProps> = ({
       activeOpacity={0.7}
     >
       <View style={styles.nextStepLabelRow}>
-        <Text style={styles.nextStepLabel}>Sonraki Adım</Text>
+        <Text style={styles.nextStepLabel}>{t('planner.nextStep')}</Text>
         {/* Static play icon - no animation, monochrome */}
         <Play size={12} color="#71717a" fill="#71717a" style={{ marginLeft: 6 }} />
       </View>
@@ -199,6 +201,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onToggle,
   totalProjects,
 }) => {
+  const { t } = useTranslation();
   const { toggleTask, getNextStep, completeTaskById } = useProjects();
   const scale = useSharedValue(1);
   const chevronRotation = useSharedValue(0);
@@ -312,7 +315,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   }, [activeTask, project.id, completeTaskById]);
 
   const handleJustSession = useCallback(() => {
-    // Task remains active, user gets XP (would integrate with gamification context)
+    // The task stays open; the session itself was already recorded when it ended.
     setSessionModalVisible(false);
     setActiveTask(null);
   }, []);
@@ -386,14 +389,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
           {/* Due Date */}
           {formattedDueDate && !isExpanded && (
-            <Text style={styles.dueDate}>Bitiş: {formattedDueDate}</Text>
+            <Text style={styles.dueDate}>{t('planner.due', { date: formattedDueDate })}</Text>
           )}
 
           {/* Expanded Tasks */}
           {isExpanded && (
             <AnimatedView entering={FadeInDown.duration(200)} style={styles.tasksContainer}>
               <View style={styles.tasksDivider} />
-              <Text style={styles.tasksTitle}>Alt Görevler</Text>
+              <Text style={styles.tasksTitle}>{t('planner.subtasks')}</Text>
               {project.tasks.map((task, taskIndex) => (
                 <TaskItem
                   key={task.id}
@@ -408,7 +411,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
               {/* Due Date in expanded view */}
               {formattedDueDate && (
-                <Text style={[styles.dueDate, { marginTop: 12 }]}>Bitiş: {formattedDueDate}</Text>
+                <Text style={[styles.dueDate, { marginTop: 12 }]}>
+                  {t('planner.due', { date: formattedDueDate })}
+                </Text>
               )}
             </AnimatedView>
           )}

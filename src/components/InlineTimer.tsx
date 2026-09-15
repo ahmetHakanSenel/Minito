@@ -262,9 +262,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
       <View style={styles.header}>
         <Clock size={16} color={isCompletionLoop ? '#A855F7' : '#8B5CF6'} strokeWidth={2} />
         <Text style={[styles.headerText, isCompletionLoop && styles.headerTextComplete]}>
-          {isCompletionLoop
-            ? t('timer.completed') || 'Tamamlandı!'
-            : t('timer.title') || 'Zamanlayıcı'}
+          {isCompletionLoop ? t('timer.completed') : t('timer.title')}
         </Text>
       </View>
 
@@ -367,9 +365,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
       </View>
 
       {/* Stop hint text during completion */}
-      {isCompletionLoop && (
-        <Text style={styles.stopHint}>{t('timer.tapToStop') || 'Durdurmak için dokun'}</Text>
-      )}
+      {isCompletionLoop && <Text style={styles.stopHint}>{t('timer.tapToStop')}</Text>}
     </AnimatedView>
   );
 };
