@@ -79,6 +79,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          client_ip_hash: string | null
           created_at: string
           fallback_reason: string | null
           guest_id: string | null
@@ -91,6 +92,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          client_ip_hash?: string | null
           created_at?: string
           fallback_reason?: string | null
           guest_id?: string | null
@@ -103,6 +105,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          client_ip_hash?: string | null
           created_at?: string
           fallback_reason?: string | null
           guest_id?: string | null
