@@ -60,7 +60,6 @@ function RootNavigator() {
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
-      NavigationBar.setBackgroundColorAsync('#050510');
       NavigationBar.setButtonStyleAsync('light');
     }
   }, []);
@@ -77,9 +76,8 @@ export default function RootLayout() {
                 <AuthProvider>
                   <RootNavigator />
                 </AuthProvider>
+                <FloatingAudioButton />
               </I18nProvider>
-
-              <FloatingAudioButton />
             </View>
           </ProjectProvider>
         </AuroraProvider>
