@@ -21,6 +21,7 @@ interface TaskInputProps {
   onSubmit: () => void;
   isLoading?: boolean;
   placeholder?: string;
+  onFocus?: () => void;
 }
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -60,6 +61,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   onSubmit,
   isLoading = false,
   placeholder,
+  onFocus,
 }) => {
   const { t } = useTranslation();
   const inputPlaceholder = placeholder || t('home.inputPlaceholder');
@@ -125,6 +127,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   // Haptic feedback on first focus (when user starts typing)
   const handleFocus = () => {
     setIsFocused(true);
+    onFocus?.();
     if (!hasFocused) {
       Haptics.selectionAsync();
       setHasFocused(true);

@@ -29,6 +29,8 @@ export type SignUpResult = {
   needsEmailConfirmation: boolean;
 };
 
+export const DISPLAY_NAME_MAX_LENGTH = 30;
+
 function mapSupabaseCode(code: string | undefined): AuthErrorCode {
   switch (code) {
     case 'invalid_credentials':
@@ -75,8 +77,16 @@ async function signInWithEmail(email: string, password: string): Promise<void> {
   }
 }
 
-async function signUpWithEmail(email: string, password: string): Promise<SignUpResult> {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+async function signUpWithEmail(
+  email: string,
+  password: string,
+  displayName: string
+): Promise<SignUpResult> {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName } },
+  });
   if (error) {
     throw toRepositoryError(error);
   }
@@ -110,6 +120,14 @@ async function signOut(): Promise<void> {
   }
 }
 
+// Supabase emits USER_UPDATED afterwards, so session listeners pick up the new name.
+async function updateDisplayName(displayName: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ data: { display_name: displayName } });
+  if (error) {
+    throw toRepositoryError(error);
+  }
+}
+
 export const authRepository = {
   onSessionChange,
   signInWithEmail,
@@ -117,6 +135,7 @@ export const authRepository = {
   signInWithGoogle: (): Promise<void> => signInWithProvider('google', requestGoogleIdToken),
   signInWithApple: (): Promise<void> => signInWithProvider('apple', requestAppleIdToken),
   signOut,
+  updateDisplayName,
   isGoogleSignInAvailable: (): Promise<boolean> => isGoogleSignInAvailable().catch(() => false),
   isAppleSignInAvailable: (): Promise<boolean> => isAppleSignInAvailable().catch(() => false),
 };

@@ -37,6 +37,7 @@
   "login": {
     "title": "Minito'ya Hoş Geldiniz",
     "subtitle": "Görevlerinizi cihazlar arasında senkronize etmek için giriş yapın",
+    "namePlaceholder": "Sana nasıl hitap edelim?",
     "emailPlaceholder": "E-posta",
     "passwordPlaceholder": "Şifre",
     "signIn": "Giriş Yap",
@@ -49,6 +50,7 @@
     "checkEmail": "E-postanızı onaylamak için gelen kutunuzu kontrol edin, ardından giriş yapın.",
     "errors": {
       "invalid_input": "Geçerli bir e-posta ve en az 6 karakterli bir şifre girin.",
+      "invalid_name": "Sana nasıl hitap edeceğimizi yaz.",
       "invalid_credentials": "E-posta veya şifre hatalı.",
       "email_not_confirmed": "Giriş yapmadan önce lütfen e-postanızı onaylayın.",
       "user_already_exists": "Bu e-posta ile kayıtlı bir hesap zaten var.",
@@ -142,6 +144,15 @@
     "signOut": "Çıkış Yap",
     "coreFeatureTitle": "Temel Minito Özelliği",
     "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl."
+  },
+  "profile": {
+    "namePrompt": "Sana nasıl hitap edelim?",
+    "namePlaceholder": "Adın ya da takma adın",
+    "save": "Kaydet",
+    "later": "Şimdi değil",
+    "addName": "Adını ekle",
+    "editHint": "Adını değiştirmek için dokun",
+    "saveFailed": "Adın kaydedilemedi. Lütfen tekrar dene."
   },
   "tasks": {
     "recentTitle": "Son görevler",

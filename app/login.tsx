@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -15,27 +14,40 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Haptics from 'expo-haptics';
 import { MinitoIcon } from '../src/components';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
-import { AuthRepositoryError, type AuthErrorCode } from '../src/repositories/authRepository';
+import {
+  AuthRepositoryError,
+  DISPLAY_NAME_MAX_LENGTH,
+  type AuthErrorCode,
+} from '../src/repositories/authRepository';
+import { useKeepAboveKeyboard } from '../src/lib/ui/useKeepAboveKeyboard';
 
 type Mode = 'signIn' | 'signUp';
 type PendingAction = 'email' | 'google' | 'apple';
-type LoginErrorCode = Exclude<AuthErrorCode, 'cancelled'> | 'invalid_input';
+type LoginErrorCode = Exclude<AuthErrorCode, 'cancelled'> | 'invalid_input' | 'invalid_name';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 const PLACEHOLDER_COLOR = '#71717A';
+const INPUT_CLASS = 'bg-surface text-textMain rounded-xl px-4 py-4 text-base border border-white/10';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, providers } = useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [errorCode, setErrorCode] = useState<LoginErrorCode | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const formRef = useRef<View>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const keyboardScroll = useKeepAboveKeyboard(scrollRef, formRef);
 
   const isBusy = pending !== null;
+  const isSignUp = mode === 'signUp';
 
   // On success the root auth guard swaps this screen out, so no manual navigation is needed.
   const run = async (action: PendingAction, task: () => Promise<void>) => {
@@ -58,19 +70,25 @@ export default function LoginScreen() {
 
   const handleSubmit = () => {
     const trimmedEmail = email.trim();
+    const trimmedName = displayName.trim();
+    setNotice(null);
+
+    if (isSignUp && !trimmedName) {
+      setErrorCode('invalid_name');
+      return;
+    }
     if (!EMAIL_PATTERN.test(trimmedEmail) || password.length < MIN_PASSWORD_LENGTH) {
-      setNotice(null);
       setErrorCode('invalid_input');
       return;
     }
 
-    if (mode === 'signIn') {
+    if (!isSignUp) {
       run('email', () => signInWithEmail(trimmedEmail, password));
       return;
     }
 
     run('email', async () => {
-      const { needsEmailConfirmation } = await signUpWithEmail(trimmedEmail, password);
+      const { needsEmailConfirmation } = await signUpWithEmail(trimmedEmail, password, trimmedName);
       if (needsEmailConfirmation) {
         setMode('signIn');
         setPassword('');
@@ -89,9 +107,13 @@ export default function LoginScreen() {
   const hasSocialProviders = providers.google || providers.apple;
 
   return (
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView className="flex-1" behavior="padding">
       <StatusBar barStyle="light-content" />
       <ScrollView
+        ref={scrollRef}
+        onScroll={keyboardScroll.onScroll}
+        onLayout={keyboardScroll.onLayout}
+        scrollEventThrottle={16}
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
@@ -107,7 +129,7 @@ export default function LoginScreen() {
         <Text className="text-textMain text-3xl font-bold text-center mb-2">{t('login.title')}</Text>
         <Text className="text-textMuted text-base text-center mb-8">{t('login.subtitle')}</Text>
 
-        <View className="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <View ref={formRef} collapsable={false} className="rounded-3xl bg-white/5 border border-white/10 p-5">
           {notice && (
             <View className="bg-success/15 border border-success/40 rounded-xl p-4 mb-4">
               <Text className="text-success text-center text-sm">{notice}</Text>
@@ -120,8 +142,27 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {isSignUp && (
+            <TextInput
+              className={`${INPUT_CLASS} mb-3`}
+              placeholder={t('login.namePlaceholder')}
+              placeholderTextColor={PLACEHOLDER_COLOR}
+              accessibilityLabel={t('login.namePlaceholder')}
+              value={displayName}
+              onChangeText={setDisplayName}
+              maxLength={DISPLAY_NAME_MAX_LENGTH}
+              autoCapitalize="words"
+              autoComplete="name"
+              textContentType="nickname"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => emailRef.current?.focus()}
+              editable={!isBusy}
+            />
+          )}
           <TextInput
-            className="bg-surface text-textMain rounded-xl px-4 py-4 mb-3 text-base border border-white/10"
+            ref={emailRef}
+            className={`${INPUT_CLASS} mb-3`}
             placeholder={t('login.emailPlaceholder')}
             placeholderTextColor={PLACEHOLDER_COLOR}
             accessibilityLabel={t('login.emailPlaceholder')}
@@ -133,10 +174,13 @@ export default function LoginScreen() {
             keyboardType="email-address"
             textContentType="emailAddress"
             returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => passwordRef.current?.focus()}
             editable={!isBusy}
           />
           <TextInput
-            className="bg-surface text-textMain rounded-xl px-4 py-4 mb-5 text-base border border-white/10"
+            ref={passwordRef}
+            className={`${INPUT_CLASS} mb-5`}
             placeholder={t('login.passwordPlaceholder')}
             placeholderTextColor={PLACEHOLDER_COLOR}
             accessibilityLabel={t('login.passwordPlaceholder')}
@@ -144,8 +188,8 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
-            autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
-            textContentType={mode === 'signIn' ? 'password' : 'newPassword'}
+            autoComplete={isSignUp ? 'new-password' : 'current-password'}
+            textContentType={isSignUp ? 'newPassword' : 'password'}
             returnKeyType="go"
             onSubmitEditing={handleSubmit}
             editable={!isBusy}
@@ -161,14 +205,14 @@ export default function LoginScreen() {
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text className="text-white text-lg font-semibold">
-                {mode === 'signIn' ? t('login.signIn') : t('login.signUp')}
+                {isSignUp ? t('login.signUp') : t('login.signIn')}
               </Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity onPress={toggleMode} disabled={isBusy} className="mt-4 py-1">
             <Text className="text-textMuted text-center text-sm">
-              {mode === 'signIn' ? t('login.switchToSignUp') : t('login.switchToSignIn')}
+              {isSignUp ? t('login.switchToSignIn') : t('login.switchToSignUp')}
             </Text>
           </TouchableOpacity>
         </View>
