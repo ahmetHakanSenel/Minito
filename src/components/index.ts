@@ -16,8 +16,5 @@ export { HeaderUserWidget } from './layout';
 // Audio components
 export { FloatingAudioButton } from './audio';
 
-// Gamification components
-export { StreakFlame, SessionSummaryModal } from './gamification';
-
 // Analytics components
 export { FlowStateVisualizer, FocusEqualizer, SilentHeatmap, EnergyFlowBars } from './analytics';
