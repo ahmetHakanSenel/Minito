@@ -88,6 +88,7 @@ export type Database = {
           request_id: string | null
           steps: Json | null
           token_usage: number | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -99,6 +100,7 @@ export type Database = {
           request_id?: string | null
           steps?: Json | null
           token_usage?: number | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -110,6 +112,7 @@ export type Database = {
           request_id?: string | null
           steps?: Json | null
           token_usage?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
