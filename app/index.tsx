@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StatusBar, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react-native';
+import { LogOut, X } from 'lucide-react-native';
 import { TaskInput, OfflineBanner, MinitoIcon } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
 import { DashboardModal } from '../src/modals';
@@ -20,16 +29,19 @@ import * as Haptics from 'expo-haptics';
 
 export default function HomeScreen() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [isDashboardVisible, setIsDashboardVisible] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [resumableSession, setResumableSession] = useState<ActiveSession | null>(null);
   const router = useRouter();
   const params = useLocalSearchParams<{ openDashboard?: string }>();
   const insets = useSafeAreaInsets();
   const lastHapticTime = useRef<number>(0);
+
+  const displayName = user?.email ?? t('dashboard.guest');
 
   // Check for an interrupted focus session whenever home regains focus
   useFocusEffect(
@@ -43,6 +55,19 @@ export default function HomeScreen() {
       };
     }, [])
   );
+
+  const handleSignOut = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsSigningOut(true);
+    try {
+      // The root auth guard redirects to /login once the session is cleared.
+      await signOut();
+    } catch {
+      setIsSigningOut(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(t('common.error'), t('errors.signOutFailed'));
+    }
+  };
 
   const handleResumeSession = () => {
     if (!resumableSession) return;
@@ -69,15 +94,13 @@ export default function HomeScreen() {
   useEffect(() => {
     if (params.openDashboard === 'true') {
       setIsDashboardVisible(true);
-      // Clear the param to prevent reopening on re-render
       router.setParams({ openDashboard: undefined });
     }
   }, [params.openDashboard]);
 
-  // GOD MODE: Selection haptic on scroll/swipe (debounced to avoid spam)
+  // Selection haptic on scroll, debounced to avoid spam
   const handleScroll = () => {
     const now = Date.now();
-    // Only trigger haptic every 300ms to avoid overwhelming
     if (now - lastHapticTime.current > 300) {
       Haptics.selectionAsync();
       lastHapticTime.current = now;
@@ -91,17 +114,14 @@ export default function HomeScreen() {
     setIsOffline(false);
 
     try {
-      // All inputs go to AI - timer will be shown in Focus screen if step contains time
       const guestId = await getOrCreateGuestId();
       const result = await breakTask(input.trim(), guestId);
 
       if (result.success && result.steps) {
-        // Show offline banner if using fallback content
         if (result.isOfflineFallback) {
           setIsOffline(true);
         }
 
-        // Navigate to focus mode with steps and neuro-companion data
         router.push({
           pathname: '/focus',
           params: {
@@ -112,22 +132,16 @@ export default function HomeScreen() {
           },
         });
       } else if (!result.success) {
-        // Handle fallback cases - TypeScript now knows result is the failure type
         if (result.fallbackReason === FallbackReason.CONTENT_FLAGGED) {
           // Panic screen renders its own localized content — no params needed
           router.push('/panic');
         } else {
-          // For DB_DOWN or AI_DOWN, try to show offline fallback as last resort
+          console.warn('Failed to break task:', result.fallbackReason);
           if (
             result.fallbackReason === FallbackReason.DB_DOWN ||
             result.fallbackReason === FallbackReason.AI_DOWN
           ) {
-            // This shouldn't happen if offline fallback worked, but just in case
-            console.warn('Failed to break task:', result.fallbackReason);
             setIsOffline(true);
-          } else {
-            // Show error for other cases
-            console.warn('Failed to break task:', result.fallbackReason);
           }
         }
       }
@@ -157,73 +171,101 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: 'transparent', zIndex: 10 }}>
+    <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
       <OfflineBanner isVisible={isOffline} />
 
-      {/* Header User Widget - Top Right */}
-      <View style={[styles.headerWidget, { top: insets.top + 8 }]}>
-        <HeaderUserWidget onPress={() => setIsDashboardVisible(true)} />
-      </View>
-
-      {/* Dashboard Modal */}
       <DashboardModal
         visible={isDashboardVisible}
         onClose={() => setIsDashboardVisible(false)}
-        userName={
-          (user?.user_metadata?.full_name as string) ||
-          (user?.user_metadata?.name as string) ||
-          user?.email?.split('@')[0] ||
-          t('dashboard.guest')
-        }
+        userName={displayName}
         isPremium={false}
         onNavigate={handleDashboardNavigate}
       />
 
-      <View style={{ flex: 1, backgroundColor: 'transparent', zIndex: 10 }}>
-        <ScrollView
-          style={{ flex: 1, backgroundColor: 'transparent' }}
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: 'center',
-            paddingVertical: 40,
-          }}
-          keyboardShouldPersistTaps="handled"
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-        >
-          <View className="flex-1 justify-center px-4">
-            <View className="items-center mb-4">
-              <MinitoIcon size={80} color="#8B5CF6" />
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: insets.top + 16,
+          paddingBottom: insets.bottom + 32,
+          paddingHorizontal: 20,
+        }}
+        keyboardShouldPersistTaps="handled"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        <View className="flex-row items-center justify-between mb-8">
+          <View className="flex-1 mr-4">
+            <Text className="text-textMuted text-sm">{t('dashboard.welcome')}</Text>
+            <Text className="text-textMain text-xl font-semibold mt-0.5" numberOfLines={1}>
+              {displayName}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-3">
+            <TouchableOpacity
+              onPress={handleSignOut}
+              disabled={isSigningOut}
+              accessibilityRole="button"
+              accessibilityLabel={t('dashboard.signOut')}
+              className={`flex-row items-center gap-2 h-11 px-4 rounded-full bg-white/10 border border-white/20 ${
+                isSigningOut ? 'opacity-60' : ''
+              }`}
+            >
+              {isSigningOut ? (
+                <ActivityIndicator size="small" color="#E5E5E5" />
+              ) : (
+                <LogOut size={16} color="#E5E5E5" strokeWidth={2} />
+              )}
+              <Text className="text-textMain text-sm font-medium">{t('dashboard.signOut')}</Text>
+            </TouchableOpacity>
+            <HeaderUserWidget onPress={() => setIsDashboardVisible(true)} />
+          </View>
+        </View>
+
+        <View className="flex-1 justify-center">
+          <View className="items-center mb-6">
+            <MinitoIcon size={64} color="#8B5CF6" />
+          </View>
+
+          <View className="rounded-3xl bg-white/5 border border-white/10 py-6">
+            <View className="px-4 mb-5">
+              <Text className="text-textMain text-lg font-semibold">
+                {t('dashboard.coreFeatureTitle')}
+              </Text>
+              <Text className="text-textMuted text-sm mt-1">
+                {t('dashboard.coreFeatureSubtitle')}
+              </Text>
             </View>
 
-            {/* Resume interrupted session */}
             {resumableSession && (
-              <TouchableOpacity
-                style={styles.resumeCard}
-                onPress={handleResumeSession}
-                activeOpacity={0.85}
-              >
-                <View style={styles.resumeTextContainer}>
-                  <Text style={styles.resumeTitle}>{t('home.resumeTitle')}</Text>
-                  <Text style={styles.resumeSubtitle} numberOfLines={1}>
-                    {resumableSession.input || t('home.resumeFallbackLabel')}
-                  </Text>
-                  <Text style={styles.resumeProgress}>
-                    {t('focus.step', {
-                      current: resumableSession.currentStepIndex + 1,
-                      total: resumableSession.steps.length,
-                    })}
-                  </Text>
-                </View>
+              <View className="px-4">
                 <TouchableOpacity
-                  onPress={handleDismissSession}
-                  style={styles.resumeDismiss}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.resumeCard}
+                  onPress={handleResumeSession}
+                  activeOpacity={0.85}
                 >
-                  <X size={16} color="#A1A1AA" />
+                  <View style={styles.resumeTextContainer}>
+                    <Text style={styles.resumeTitle}>{t('home.resumeTitle')}</Text>
+                    <Text style={styles.resumeSubtitle} numberOfLines={1}>
+                      {resumableSession.input || t('home.resumeFallbackLabel')}
+                    </Text>
+                    <Text style={styles.resumeProgress}>
+                      {t('focus.step', {
+                        current: resumableSession.currentStepIndex + 1,
+                        total: resumableSession.steps.length,
+                      })}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleDismissSession}
+                    style={styles.resumeDismiss}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <X size={16} color="#A1A1AA" />
+                  </TouchableOpacity>
                 </TouchableOpacity>
-              </TouchableOpacity>
+              </View>
             )}
 
             <TaskInput
@@ -233,17 +275,16 @@ export default function HomeScreen() {
               isLoading={isLoading}
             />
           </View>
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerWidget: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 100,
+  screen: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   resumeCard: {
     flexDirection: 'row',

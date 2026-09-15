@@ -89,124 +89,129 @@ export default function LoginScreen() {
   const hasSocialProviders = providers.google || providers.apple;
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-background"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="light-content" />
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: 'center',
-          paddingHorizontal: 24,
+          paddingHorizontal: 20,
           paddingVertical: 48,
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="items-center mb-10">
-          <MinitoIcon size={88} />
+        <View className="items-center mb-8">
+          <MinitoIcon size={80} color="#8B5CF6" />
         </View>
 
-        <Text className="text-textMain text-3xl font-bold text-center mb-3">{t('login.title')}</Text>
+        <Text className="text-textMain text-3xl font-bold text-center mb-2">{t('login.title')}</Text>
         <Text className="text-textMuted text-base text-center mb-8">{t('login.subtitle')}</Text>
 
-        {notice && (
-          <View className="bg-success/15 border border-success/40 rounded-xl p-4 mb-4">
-            <Text className="text-success text-center text-sm">{notice}</Text>
-          </View>
-        )}
-
-        {errorCode && (
-          <View className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-4">
-            <Text className="text-red-400 text-center text-sm">{t(`login.errors.${errorCode}`)}</Text>
-          </View>
-        )}
-
-        <TextInput
-          className="bg-surface text-textMain rounded-xl px-4 py-4 mb-3 text-base"
-          placeholder={t('login.emailPlaceholder')}
-          placeholderTextColor={PLACEHOLDER_COLOR}
-          accessibilityLabel={t('login.emailPlaceholder')}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="email"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          returnKeyType="next"
-          editable={!isBusy}
-        />
-        <TextInput
-          className="bg-surface text-textMain rounded-xl px-4 py-4 mb-5 text-base"
-          placeholder={t('login.passwordPlaceholder')}
-          placeholderTextColor={PLACEHOLDER_COLOR}
-          accessibilityLabel={t('login.passwordPlaceholder')}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
-          textContentType={mode === 'signIn' ? 'password' : 'newPassword'}
-          returnKeyType="go"
-          onSubmitEditing={handleSubmit}
-          editable={!isBusy}
-        />
-
-        <TouchableOpacity
-          onPress={handleSubmit}
-          disabled={isBusy}
-          className={`bg-primary rounded-xl py-4 items-center ${isBusy ? 'opacity-60' : ''}`}
-        >
-          {pending === 'email' ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text className="text-white text-lg font-semibold">
-              {mode === 'signIn' ? t('login.signIn') : t('login.signUp')}
-            </Text>
+        <View className="rounded-3xl bg-white/5 border border-white/10 p-5">
+          {notice && (
+            <View className="bg-success/15 border border-success/40 rounded-xl p-4 mb-4">
+              <Text className="text-success text-center text-sm">{notice}</Text>
+            </View>
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity onPress={toggleMode} disabled={isBusy} className="mt-5 mb-2">
-          <Text className="text-textMuted text-center text-sm">
-            {mode === 'signIn' ? t('login.switchToSignUp') : t('login.switchToSignIn')}
-          </Text>
-        </TouchableOpacity>
+          {errorCode && (
+            <View className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-4">
+              <Text className="text-red-400 text-center text-sm">{t(`login.errors.${errorCode}`)}</Text>
+            </View>
+          )}
 
-        {hasSocialProviders && (
-          <View className="flex-row items-center my-6">
-            <View className="flex-1 h-px bg-gray-700" />
-            <Text className="text-textMuted text-sm mx-4">{t('login.or')}</Text>
-            <View className="flex-1 h-px bg-gray-700" />
-          </View>
-        )}
+          <TextInput
+            className="bg-surface text-textMain rounded-xl px-4 py-4 mb-3 text-base border border-white/10"
+            placeholder={t('login.emailPlaceholder')}
+            placeholderTextColor={PLACEHOLDER_COLOR}
+            accessibilityLabel={t('login.emailPlaceholder')}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            returnKeyType="next"
+            editable={!isBusy}
+          />
+          <TextInput
+            className="bg-surface text-textMain rounded-xl px-4 py-4 mb-5 text-base border border-white/10"
+            placeholder={t('login.passwordPlaceholder')}
+            placeholderTextColor={PLACEHOLDER_COLOR}
+            accessibilityLabel={t('login.passwordPlaceholder')}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
+            textContentType={mode === 'signIn' ? 'password' : 'newPassword'}
+            returnKeyType="go"
+            onSubmitEditing={handleSubmit}
+            editable={!isBusy}
+          />
 
-        {providers.google && (
           <TouchableOpacity
-            onPress={() => run('google', signInWithGoogle)}
+            onPress={handleSubmit}
             disabled={isBusy}
-            className={`bg-gray-800 border border-gray-700 rounded-xl py-4 items-center mb-3 ${isBusy ? 'opacity-60' : ''}`}
+            accessibilityRole="button"
+            className={`bg-primary rounded-xl h-14 items-center justify-center ${isBusy ? 'opacity-60' : ''}`}
           >
-            {pending === 'google' ? (
-              <ActivityIndicator size="small" color="#E5E5E5" />
+            {pending === 'email' ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text className="text-textMain text-lg font-semibold">{t('login.continueWithGoogle')}</Text>
+              <Text className="text-white text-lg font-semibold">
+                {mode === 'signIn' ? t('login.signIn') : t('login.signUp')}
+              </Text>
             )}
           </TouchableOpacity>
-        )}
 
-        {providers.apple && (
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-            cornerRadius={12}
-            style={{ width: '100%', height: 52 }}
-            onPress={() => {
-              if (!isBusy) {
-                run('apple', signInWithApple);
-              }
-            }}
-          />
+          <TouchableOpacity onPress={toggleMode} disabled={isBusy} className="mt-4 py-1">
+            <Text className="text-textMuted text-center text-sm">
+              {mode === 'signIn' ? t('login.switchToSignUp') : t('login.switchToSignIn')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {hasSocialProviders && (
+          <>
+            <View className="flex-row items-center my-6">
+              <View className="flex-1 h-px bg-white/10" />
+              <Text className="text-textMuted text-sm mx-4">{t('login.or')}</Text>
+              <View className="flex-1 h-px bg-white/10" />
+            </View>
+
+            {providers.google && (
+              <TouchableOpacity
+                onPress={() => run('google', signInWithGoogle)}
+                disabled={isBusy}
+                accessibilityRole="button"
+                className={`bg-white/10 border border-white/20 rounded-xl h-14 items-center justify-center mb-3 ${
+                  isBusy ? 'opacity-60' : ''
+                }`}
+              >
+                {pending === 'google' ? (
+                  <ActivityIndicator size="small" color="#E5E5E5" />
+                ) : (
+                  <Text className="text-textMain text-lg font-semibold">{t('login.continueWithGoogle')}</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {providers.apple && (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                cornerRadius={12}
+                style={{ width: '100%', height: 56 }}
+                onPress={() => {
+                  if (!isBusy) {
+                    run('apple', signInWithApple);
+                  }
+                }}
+              />
+            )}
+          </>
         )}
       </ScrollView>
     </KeyboardAvoidingView>

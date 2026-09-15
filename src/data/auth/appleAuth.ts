@@ -1,8 +1,9 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Platform } from 'react-native';
 
+// Apple sign-in needs no in-app key, so an explicit opt-in flag stands in for "configured".
 export async function isAppleSignInAvailable(): Promise<boolean> {
-  if (Platform.OS !== 'ios') {
+  if (Platform.OS !== 'ios' || process.env.EXPO_PUBLIC_APPLE_SIGN_IN_ENABLED !== 'true') {
     return false;
   }
   return AppleAuthentication.isAvailableAsync();

@@ -137,7 +137,11 @@
     "resume": "Devam Et"
   },
   "dashboard": {
-    "guest": "Misafir"
+    "guest": "Misafir",
+    "welcome": "Tekrar hoş geldin",
+    "signOut": "Çıkış Yap",
+    "coreFeatureTitle": "Temel Minito Özelliği",
+    "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl."
   },
   "audio": {
     "title": "Odak Sesleri",
