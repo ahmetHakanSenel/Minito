@@ -72,7 +72,7 @@ export async function breakTask(
   input: string,
   guestId?: string
 ): Promise<BreakTaskResult> {
-  // Supabase Edge Functions genelde anon key ile çağrılır
+  // The Supabase gateway still expects the anon key as `apikey`; identity comes from the JWT.
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
   const edgeFunctionUrl =
@@ -107,11 +107,13 @@ export async function breakTask(
       // request_id is automatically added by tracedAxios interceptor
     };
 
-    // The user's JWT lets the edge function personalize the reply; the anon key is the fallback.
+    // The edge function only serves signed-in users; the JWT identifies them for rate limiting.
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    const bearerToken = session?.access_token ?? supabaseAnonKey;
+    if (!session) {
+      return { success: false, fallbackReason: FallbackReason.VALIDATION, error: 'Not signed in' };
+    }
 
     const response = await tracedAxios.post<BreakTaskResponse>(
       edgeFunctionUrl,
@@ -124,7 +126,7 @@ export async function breakTask(
         headers: {
           'Content-Type': 'application/json',
           ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),
-          ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+          Authorization: `Bearer ${session.access_token}`,
         },
       }
     );
@@ -169,7 +171,7 @@ export async function breakTask(
         isNetworkError = true;
       } else if (status === 429) {
         fallbackReason = FallbackReason.RATE_DOWN;
-      } else if (status === 400) {
+      } else if (status === 400 || status === 401) {
         fallbackReason = FallbackReason.VALIDATION;
       }
     } else if (error.request) {
