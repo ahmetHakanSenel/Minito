@@ -1,38 +1,52 @@
 import * as Sentry from '@sentry/react-native';
+import Constants from 'expo-constants';
 
 let initialized = false;
 
 /**
- * Initialize Sentry (no-op if DSN missing or already initialized).
- * Uses public DSN env var per project tracker (privacy-safe).
+ * Initialize Sentry once. Without EXPO_PUBLIC_SENTRY_DSN monitoring stays off and
+ * every helper below is a no-op.
  */
-export async function initSentry(): Promise<void> {
+export function initSentry(): void {
   if (initialized) return;
 
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) {
-    console.warn('Sentry DSN not set (EXPO_PUBLIC_SENTRY_DSN). Skipping Sentry init.');
+    if (__DEV__) {
+      console.info('Sentry disabled: EXPO_PUBLIC_SENTRY_DSN is not set.');
+    }
     return;
   }
 
-  try {
-    Sentry.init({
-      dsn,
-      debug: false,
-      sampleRate: 0.1, // error events: 10% sampling
-      tracesSampleRate: 0.05, // quota-saving: 5% perf sampling
-      ignoreErrors: [
-        'Network request failed',
-        'Network Error',
-        'User cancelled',
-        'TaskCancelledError',
-        'AbortError',
-        'The operation was cancelled',
-      ],
-    });
+  const appConfig = Constants.expoConfig;
+  Sentry.init({
+    dsn,
+    environment: __DEV__ ? 'development' : 'production',
+    release: `${appConfig?.slug ?? 'minito'}@${appConfig?.version ?? '0.0.0'}`,
+    // Traffic is low, so keep every error event; sample performance traces to stay in quota.
+    sampleRate: 1.0,
+    tracesSampleRate: 0.2,
+    sendDefaultPii: false,
+    ignoreErrors: [
+      'Network request failed',
+      'Network Error',
+      'User cancelled',
+      'TaskCancelledError',
+      'AbortError',
+      'The operation was cancelled',
+    ],
+  });
 
-    initialized = true;
-  } catch (error) {
-    console.warn('Sentry init failed, continuing without Sentry:', error);
-  }
+  initialized = true;
+}
+
+// Only the opaque user id is attached; email and display name never leave the device.
+export function setMonitoringUser(userId: string | null): void {
+  if (!initialized) return;
+  Sentry.setUser(userId ? { id: userId } : null);
+}
+
+export function captureException(error: unknown): void {
+  if (!initialized) return;
+  Sentry.captureException(error);
 }

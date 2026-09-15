@@ -9,6 +9,8 @@ import { getRandomSuccessMessage } from '../src/lib/SuccessMessages';
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function SuccessScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();

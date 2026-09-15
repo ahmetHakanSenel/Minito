@@ -14,9 +14,7 @@ import { ProjectProvider } from '../src/context/ProjectContext';
 import { initSentry } from '../src/lib/monitoring/sentry';
 import '../global.css';
 
-initSentry().catch((error) => {
-  console.warn('Sentry initialization error:', error);
-});
+initSentry();
 
 // Keep the splash up until the persisted session is restored, so the guard never flashes the wrong screen.
 SplashScreen.preventAutoHideAsync();
@@ -56,6 +54,8 @@ function RootNavigator() {
     </Stack>
   );
 }
+
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
 
 export default function RootLayout() {
   useEffect(() => {

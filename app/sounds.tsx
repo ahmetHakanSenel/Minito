@@ -46,6 +46,8 @@ const SoundCard: React.FC<SoundCardProps> = ({ track, isActive, isPlaying, onPre
   );
 };
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function SoundsScreen() {
   const router = useRouter();
   const { currentTrack, isPlaying, play, pause, resume } = useAudioContext();

@@ -26,6 +26,8 @@ import {
 // ANALYTICS SCREEN — computed from real recorded sessions only
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function AnalyticsScreen() {
   const router = useRouter();
   const { t } = useTranslation();

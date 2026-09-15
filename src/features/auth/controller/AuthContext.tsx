@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { authRepository, type SignUpResult } from '../../../repositories/authRepository';
+import { setMonitoringUser } from '../../../lib/monitoring/sentry';
 
 type SocialProviders = {
   google: boolean;
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authRepository.onSessionChange((nextSession) => {
         setSession(nextSession);
         setIsInitializing(false);
+        setMonitoringUser(nextSession?.user.id ?? null);
       }),
     []
   );

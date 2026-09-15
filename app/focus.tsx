@@ -16,6 +16,8 @@ import * as Haptics from 'expo-haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function FocusModeScreen() {
   const { t } = useTranslation();
   const router = useRouter();

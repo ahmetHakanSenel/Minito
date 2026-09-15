@@ -10,6 +10,8 @@ import { FallbackReason } from '../src/safety';
  * The server only signals the CONTENT_FLAGGED reason — it never ships
  * copy, so an English user can never receive Turkish crisis text.
  */
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function PanicScreen() {
   const { t } = useTranslation();
 

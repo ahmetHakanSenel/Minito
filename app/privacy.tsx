@@ -20,6 +20,8 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function PrivacyScreen() {
   const { t } = useTranslation();
   const router = useRouter();

@@ -145,6 +145,11 @@
     "coreFeatureTitle": "Temel Minito Özelliği",
     "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl."
   },
+  "errorBoundary": {
+    "title": "Bir şeyler ters gitti",
+    "message": "Bu ekranda beklenmedik bir hata oluştu. Hata raporlandı; tekrar denemek genellikle işe yarar.",
+    "retry": "Tekrar dene"
+  },
   "profile": {
     "namePrompt": "Sana nasıl hitap edelim?",
     "namePlaceholder": "Adın ya da takma adın",
