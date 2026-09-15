@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInUp, Easing } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -20,8 +21,33 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useProjects, formatDueDate } from '../src/context/ProjectContext';
 import { ProjectCard } from '../src/components/planner/ProjectCard';
 import { DashboardModal } from '../src/modals';
+import { EmptyState } from '../src/components/feedback/EmptyState';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
+
+const demoStyles = StyleSheet.create({
+  badge: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+  },
+  badgeText: {
+    color: '#FBBF24',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  note: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+});
 
 // ============================================================================
 // ADD PROJECT MODAL COMPONENT
@@ -54,6 +80,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   onAdd,
   onGenerateSubtasks,
 }) => {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [selectedColor, setSelectedColor] = useState(PROJECT_COLORS[0]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -168,7 +195,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
             </View>
           </View>
 
-          {/* AI Subtask Generation */}
+          {/* Sample subtask suggestions, labeled as a demo until AI planning ships */}
           <TouchableOpacity
             style={[modalStyles.aiButton, !title.trim() && { opacity: 0.5 }]}
             onPress={handleGenerateSubtasks}
@@ -176,9 +203,13 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
           >
             <Sparkles size={18} color="#FBBF24" />
             <Text style={modalStyles.aiButtonText}>
-              {isGenerating ? 'Düşünüyorum...' : 'AI ile Görev Öner'}
+              {isGenerating ? t('planner.demoSuggesting') : t('planner.demoSuggest')}
             </Text>
+            <View style={demoStyles.badge}>
+              <Text style={demoStyles.badgeText}>{t('planner.demoBadge')}</Text>
+            </View>
           </TouchableOpacity>
+          <Text style={demoStyles.note}>{t('planner.demoNote')}</Text>
 
           {/* Suggested Tasks Preview */}
           {suggestedTasks.length > 0 && (
@@ -445,6 +476,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function PlannerScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { projects, addProject, addTask, generateSubtasks } = useProjects();
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -473,8 +505,8 @@ export default function PlannerScreen() {
 
   const handleAddProject = useCallback(
     async (title: string, color: string, manualTasks: string[]) => {
-      // Use manual tasks if provided, otherwise generate with AI
-      const tasks = manualTasks.length > 0 ? manualTasks : await generateSubtasks(title);
+      // Only tasks the user typed or picked from the samples; nothing is silently invented.
+      const tasks = manualTasks;
 
       addProject({
         title,
@@ -487,7 +519,7 @@ export default function PlannerScreen() {
         })),
       });
     },
-    [addProject, generateSubtasks]
+    [addProject]
   );
 
   const handleOpenAddModal = () => {
@@ -525,13 +557,12 @@ export default function PlannerScreen() {
 
         {/* Empty State */}
         {sortedProjects.length === 0 && (
-          <AnimatedView entering={FadeIn.duration(300)} style={styles.emptyState}>
-            <View style={styles.emptyStateIcon}>
-              <ListChecks size={28} color="#8B5CF6" strokeWidth={1.5} />
-            </View>
-            <Text style={styles.emptyStateTitle}>Henüz proje yok</Text>
-            <Text style={styles.emptyStateText}>İlk projenizi ekleyerek başlayın</Text>
-          </AnimatedView>
+          <EmptyState
+            icon={ListChecks}
+            title={t('planner.emptyTitle')}
+            description={t('planner.emptyText')}
+            action={{ label: t('planner.emptyAction'), onPress: () => setShowAddModal(true) }}
+          />
         )}
 
         {/* Timeline View */}

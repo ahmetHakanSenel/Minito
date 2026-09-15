@@ -152,6 +152,57 @@
     "message": "This screen hit an unexpected error. It has been reported, and trying again usually helps.",
     "retry": "Try again"
   },
+  "health": {
+    "operational": "All systems operational",
+    "degraded": "Degraded performance",
+    "disruption": "Service disruption",
+    "checking": "Checking systems…",
+    "offline": "Offline mode",
+    "title": "System status",
+    "subtitle": "Live checks against Minito's cloud services",
+    "api": "Cloud API",
+    "apiDetail": "Supabase auth & database",
+    "ai": "AI gateway",
+    "aiDetail": "break-task edge function",
+    "sync": "Task sync",
+    "syncDetail": "Your breakdown history",
+    "session": "Session security",
+    "sessionDetail": "AES-256 encrypted, key in the device keystore",
+    "lastChecked": "Last checked {{time}}",
+    "refresh": "Refresh",
+    "state": {
+      "operational": "Operational",
+      "degraded": "Slow",
+      "down": "Down",
+      "checking": "Checking",
+      "unconfigured": "Not configured"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "preferences": "Preferences",
+    "notifications": "Notifications",
+    "soundEffects": "Sound effects",
+    "language": "Language",
+    "support": "Support",
+    "privacy": "Privacy & data",
+    "help": "Help & FAQ",
+    "account": "Account",
+    "signOut": "Sign out",
+    "signOutConfirmTitle": "Sign out?",
+    "signOutConfirmMessage": "You can sign back in anytime; your breakdowns stay synced.",
+    "comingSoon": "Coming soon",
+    "version": "Minito v{{version}}"
+  },
+  "planner": {
+    "emptyTitle": "No projects yet",
+    "emptyText": "Group bigger goals into projects and Minito keeps the next step in view.",
+    "emptyAction": "Add a project",
+    "demoSuggest": "Suggest sample tasks",
+    "demoSuggesting": "Preparing samples…",
+    "demoBadge": "DEMO",
+    "demoNote": "Sample steps for now; AI-powered planning is coming soon."
+  },
   "profile": {
     "namePrompt": "What should we call you?",
     "namePlaceholder": "Your name or nickname",
@@ -163,6 +214,13 @@
   },
   "tasks": {
     "recentTitle": "Recent breakdowns",
+    "emptyTitle": "No breakdowns yet",
+    "progress": {
+      "title": "Minito is on it",
+      "analyzing": "Analyzing cognitive load…",
+      "generating": "Generating micro-steps…",
+      "finalizing": "Finalizing focus mode…"
+    },
     "empty": "Your breakdowns will appear here, synced across your devices.",
     "stepsProgress": "{{done}}/{{total}} steps",
     "completed": "Completed",
@@ -187,7 +245,8 @@
   "stats": {
     "title": "Insights",
     "emptyTitle": "No insights yet",
-    "emptyText": "Complete a focus session from the Planner and your rhythm, consistency and flow data will appear here — all of it real, none of it made up."
+    "emptyText": "Complete a focus session from the Planner and your rhythm, consistency and flow data will appear here — all of it real, none of it made up.",
+    "emptyAction": "Open the Planner"
   },
   "flowState": {
     "flow": {

@@ -133,34 +133,19 @@ const calculateProgress = (tasks: Task[]): number => {
 };
 
 // ============================================================================
-// AI SUBTASK GENERATION STUB
-// This will be connected to the AI backend later
+// SAMPLE SUBTASK SUGGESTIONS
+// Keyword-matched sample steps; the planner labels them as a demo until AI planning ships.
 // ============================================================================
 
 /**
- * Stub function for AI-powered subtask generation.
- * This will be connected to the AI backend to auto-populate task lists.
- *
- * @param projectTitle - The title of the project to generate subtasks for
- * @returns Promise<string[]> - Array of suggested subtask titles
+ * Returns canned subtask suggestions matched on keywords in the project title.
+ * The planner presents them explicitly as demo suggestions, never as AI output.
  */
-const generateSubtasksStub = async (projectTitle: string): Promise<string[]> => {
-  // TODO: Connect to AI backend
-  // Example API call structure:
-  // const response = await fetch('/api/ai/generate-subtasks', {
-  //     method: 'POST',
-  //     headers: { 'Content-Type': 'application/json' },
-  //     body: JSON.stringify({ projectTitle }),
-  // });
-  // return response.json();
-
-  // For now, return mock suggestions based on common project types
-  console.log(`[AI Stub] Generating subtasks for: ${projectTitle}`);
-
-  // Simulate API delay
+const generateSampleSubtasks = async (projectTitle: string): Promise<string[]> => {
+  // A short pause lets the suggestion list animate in instead of popping.
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  // Mock intelligent suggestions
+  // Sample suggestions keyed by keywords in the title
   const mockSuggestions: Record<string, string[]> = {
     tez: [
       'Konu araştırması yap',
@@ -340,7 +325,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     deleteTask,
     completeTaskById,
     getNextStep,
-    generateSubtasks: generateSubtasksStub,
+    generateSubtasks: generateSampleSubtasks,
   };
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

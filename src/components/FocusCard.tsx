@@ -13,7 +13,7 @@ import Animated, {
   SlideOutRight,
   LinearTransition,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../lib/ui/haptics';
 
 interface FocusCardProps {
   step: string;
@@ -84,19 +84,19 @@ export const FocusCard: React.FC<FocusCardProps> = ({
     };
   });
 
-  // GOD MODE: Rigid haptic for step check
+  // A firm press on checking a step off; the focus screen layers the success pattern on top.
   const handleComplete = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+    haptics.press();
     onComplete?.();
   };
 
   const handleNext = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onNext?.();
   };
 
   const handlePrevious = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onPrevious?.();
   };
 
