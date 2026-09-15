@@ -22,7 +22,6 @@ interface PremiumStepAnimationProps {
   isFinalStep?: boolean;
 }
 
-
 const AnimatedSvg = Animated.createAnimatedComponent(Svg);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -49,13 +48,13 @@ export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
       cancelAnimation(glowOpacity);
       cancelAnimation(glowScale);
       cancelAnimation(checkmarkProgress);
-      
+
       // Clear any existing timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
-      
+
       // Reset all values to initial state
       scale.value = 0;
       opacity.value = 0;
@@ -64,16 +63,15 @@ export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
       glowScale.value = 1;
       checkmarkProgress.value = 0;
 
-
       // Main container animation - Spring Physics
       scale.value = withSpring(1, {
         damping: 12,
         mass: 0.8,
         stiffness: 150,
       });
-      
+
       opacity.value = withTiming(1, { duration: 200 });
-      
+
       rotation.value = withSpring(1, {
         damping: 15,
         stiffness: 100,
@@ -106,16 +104,17 @@ export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
           stiffness: 120,
         })
       );
-      
-
 
       // Hide after animation
-      timeoutRef.current = setTimeout(() => {
-        scale.value = withSpring(0, { damping: 12, stiffness: 150 });
-        opacity.value = withTiming(0, { duration: 300 });
-        onComplete?.();
-        timeoutRef.current = null;
-      }, isFinalStep ? 3000 : 2500);
+      timeoutRef.current = setTimeout(
+        () => {
+          scale.value = withSpring(0, { damping: 12, stiffness: 150 });
+          opacity.value = withTiming(0, { duration: 300 });
+          onComplete?.();
+          timeoutRef.current = null;
+        },
+        isFinalStep ? 3000 : 2500
+      );
     } else {
       // When visible becomes false, immediately cancel all animations and reset
       cancelAnimation(scale);
@@ -124,13 +123,13 @@ export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
       cancelAnimation(glowOpacity);
       cancelAnimation(glowScale);
       cancelAnimation(checkmarkProgress);
-      
+
       // Clear timeout if exists
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
-      
+
       // Reset all values to initial state
       scale.value = 0;
       opacity.value = 0;
@@ -212,32 +211,15 @@ export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
           />
 
           {/* Main circle */}
-          <Circle
-            cx="70"
-            cy="70"
-            r="60"
-            fill="url(#gradient)"
-            opacity="0.9"
-          />
+          <Circle cx="70" cy="70" r="60" fill="url(#gradient)" opacity="0.9" />
 
           {/* Inner highlight */}
-          <Circle
-            cx="70"
-            cy="70"
-            r="50"
-            fill="none"
-            stroke="white"
-            strokeWidth="1"
-            opacity="0.3"
-          />
+          <Circle cx="70" cy="70" r="50" fill="none" stroke="white" strokeWidth="1" opacity="0.3" />
         </Svg>
       </Animated.View>
-      
+
       {/* Checkmark with opacity and scale animation - perfectly centered */}
-      <Animated.View
-        style={[styles.checkmarkOverlay, checkmarkOverlayStyle]}
-        pointerEvents="none"
-      >
+      <Animated.View style={[styles.checkmarkOverlay, checkmarkOverlayStyle]} pointerEvents="none">
         <Svg width={60} height={60} viewBox="0 0 60 60">
           <Path
             d="M10 30 L25 45 L50 10"

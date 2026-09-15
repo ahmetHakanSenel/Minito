@@ -20,9 +20,4 @@ export { FloatingAudioButton } from './audio';
 export { StreakFlame, SessionSummaryModal } from './gamification';
 
 // Analytics components
-export {
-  FlowStateVisualizer,
-  FocusEqualizer,
-  SilentHeatmap,
-  EnergyFlowBars,
-} from './analytics';
+export { FlowStateVisualizer, FocusEqualizer, SilentHeatmap, EnergyFlowBars } from './analytics';

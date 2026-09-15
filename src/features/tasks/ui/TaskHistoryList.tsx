@@ -55,7 +55,10 @@ function TaskBreakdownRow({ item, timeLabel, onOpen, onDelete }: TaskBreakdownRo
           ) : (
             <>
               <View className="h-1 w-10 rounded-full bg-white/10 overflow-hidden">
-                <View className="h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
+                <View
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${progress * 100}%` }}
+                />
               </View>
               <Text className="text-textMuted text-xs ml-2">
                 {t('tasks.stepsProgress', { done, total })}
@@ -70,7 +73,13 @@ function TaskBreakdownRow({ item, timeLabel, onOpen, onDelete }: TaskBreakdownRo
   );
 }
 
-export function TaskHistoryList({ items, status, onOpen, onDelete, onRetry }: TaskHistoryListProps) {
+export function TaskHistoryList({
+  items,
+  status,
+  onOpen,
+  onDelete,
+  onRetry,
+}: TaskHistoryListProps) {
   const { t, i18n } = useTranslation();
 
   // Without the backing table there is no history to show; the breakdown flow still works.
@@ -81,7 +90,8 @@ export function TaskHistoryList({ items, status, onOpen, onDelete, onRetry }: Ta
   const formatTime = (iso: string) => {
     const elapsed = Date.now() - new Date(iso).getTime();
     if (elapsed < MINUTE_MS) return t('tasks.time.justNow');
-    if (elapsed < HOUR_MS) return t('tasks.time.minutesAgo', { count: Math.floor(elapsed / MINUTE_MS) });
+    if (elapsed < HOUR_MS)
+      return t('tasks.time.minutesAgo', { count: Math.floor(elapsed / MINUTE_MS) });
     if (elapsed < DAY_MS) return t('tasks.time.hoursAgo', { count: Math.floor(elapsed / HOUR_MS) });
     if (elapsed < WEEK_MS) return t('tasks.time.daysAgo', { count: Math.floor(elapsed / DAY_MS) });
     return new Date(iso).toLocaleDateString(i18n.language);

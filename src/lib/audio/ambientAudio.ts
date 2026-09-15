@@ -4,7 +4,7 @@ import { Audio } from 'expo-av';
 /**
  * GOD MODE: Neuro-Sonic Ambience Hook
  * Manages brown noise/deep space drone audio with fade in/out
- * 
+ *
  * Usage:
  * const { startAmbience, stopAmbience, isPlaying } = useAmbientAudio();
  */
@@ -48,7 +48,7 @@ export const useAmbientAudio = () => {
       fadeIntervalRef.current = setInterval(() => {
         step++;
         currentVolume += volumeStep;
-        
+
         if (step >= steps) {
           audioSound.setVolumeAsync(targetVolume);
           if (fadeIntervalRef.current) {
@@ -78,7 +78,7 @@ export const useAmbientAudio = () => {
       fadeIntervalRef.current = setInterval(async () => {
         step++;
         const newVolume = Math.max(0, currentVolume - volumeStep * step);
-        
+
         if (step >= steps) {
           await audioSound.setVolumeAsync(0);
           await audioSound.pauseAsync();
@@ -96,14 +96,14 @@ export const useAmbientAudio = () => {
 
   /**
    * Start ambient audio with fade in
-   * 
+   *
    * SETUP INSTRUCTIONS:
    * 1. Create assets/audio/ directory in project root
    * 2. Add a brown-noise.mp3 or deep-space-drone.mp3 file
    * 3. Uncomment the audioSource line below and update the path
-   * 
+   *
    * Example: const audioSource = require('../../../assets/audio/brown-noise.mp3');
-   * 
+   *
    * The app will work perfectly fine without the audio file - it gracefully skips if missing.
    */
   const startAmbience = async () => {
@@ -114,7 +114,7 @@ export const useAmbientAudio = () => {
     try {
       // TODO: Uncomment and update path after adding audio file to assets/audio/
       // const audioSource = require('../../../assets/audio/brown-noise.mp3');
-      
+
       // For now, gracefully skip if audio file not added yet
       // Uncomment the block below once you've added the audio file:
       /*
@@ -133,11 +133,13 @@ export const useAmbientAudio = () => {
       // Fade in over 2 seconds
       await fadeIn(audioSound, 0.3);
       */
-      
+
       // Silent return if audio file not configured
       // Check console for setup instructions
       if (__DEV__) {
-        console.log('💡 Ambient audio: Add brown-noise.mp3 to assets/audio/ and uncomment code in ambientAudio.ts to enable');
+        console.log(
+          '💡 Ambient audio: Add brown-noise.mp3 to assets/audio/ and uncomment code in ambientAudio.ts to enable'
+        );
       }
     } catch (error) {
       console.warn('Failed to load ambient audio:', error);
@@ -180,4 +182,3 @@ export const useAmbientAudio = () => {
     isPlaying,
   };
 };
-

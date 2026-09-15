@@ -28,11 +28,13 @@ type LoginErrorCode = Exclude<AuthErrorCode, 'cancelled'> | 'invalid_input' | 'i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 const PLACEHOLDER_COLOR = '#71717A';
-const INPUT_CLASS = 'bg-surface text-textMain rounded-xl px-4 py-4 text-base border border-white/10';
+const INPUT_CLASS =
+  'bg-surface text-textMain rounded-xl px-4 py-4 text-base border border-white/10';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, providers } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, providers } =
+    useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -126,10 +128,16 @@ export default function LoginScreen() {
           <MinitoIcon size={80} color="#8B5CF6" />
         </View>
 
-        <Text className="text-textMain text-3xl font-bold text-center mb-2">{t('login.title')}</Text>
+        <Text className="text-textMain text-3xl font-bold text-center mb-2">
+          {t('login.title')}
+        </Text>
         <Text className="text-textMuted text-base text-center mb-8">{t('login.subtitle')}</Text>
 
-        <View ref={formRef} collapsable={false} className="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <View
+          ref={formRef}
+          collapsable={false}
+          className="rounded-3xl bg-white/5 border border-white/10 p-5"
+        >
           {notice && (
             <View className="bg-success/15 border border-success/40 rounded-xl p-4 mb-4">
               <Text className="text-success text-center text-sm">{notice}</Text>
@@ -138,7 +146,9 @@ export default function LoginScreen() {
 
           {errorCode && (
             <View className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-4">
-              <Text className="text-red-400 text-center text-sm">{t(`login.errors.${errorCode}`)}</Text>
+              <Text className="text-red-400 text-center text-sm">
+                {t(`login.errors.${errorCode}`)}
+              </Text>
             </View>
           )}
 
@@ -237,7 +247,9 @@ export default function LoginScreen() {
                 {pending === 'google' ? (
                   <ActivityIndicator size="small" color="#E5E5E5" />
                 ) : (
-                  <Text className="text-textMain text-lg font-semibold">{t('login.continueWithGoogle')}</Text>
+                  <Text className="text-textMain text-lg font-semibold">
+                    {t('login.continueWithGoogle')}
+                  </Text>
                 )}
               </TouchableOpacity>
             )}

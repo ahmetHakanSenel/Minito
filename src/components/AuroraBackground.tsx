@@ -99,7 +99,7 @@ export const AuroraBackground: React.FC = () => {
             left: -width * 0.45,
             top: -height * 0.15,
             width: blobSize.width,
-            height: blobSize.height
+            height: blobSize.height,
           },
           primaryStyle,
         ]}
@@ -136,7 +136,7 @@ export const AuroraBackground: React.FC = () => {
             right: -width * 0.45,
             bottom: -height * 0.15,
             width: blobSize.width,
-            height: blobSize.height
+            height: blobSize.height,
           },
           anchorStyle,
         ]}
@@ -177,4 +177,3 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
 });
-

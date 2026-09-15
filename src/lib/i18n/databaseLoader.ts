@@ -29,7 +29,7 @@ export async function loadTranslationsFromDatabase(languageCode: string): Promis
       // Convert dot notation keys to nested object
       const keys = row.key.split('.');
       let current: any = dbTranslations;
-      
+
       for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i];
         if (!current[key]) {
@@ -37,7 +37,7 @@ export async function loadTranslationsFromDatabase(languageCode: string): Promis
         }
         current = current[key];
       }
-      
+
       current[keys[keys.length - 1]] = row.value;
     }
 
@@ -56,24 +56,9 @@ export async function loadTranslationsFromDatabase(languageCode: string): Promis
 export async function initDatabaseTranslations(): Promise<void> {
   const currentLanguage = i18n.language || 'en';
   await loadTranslationsFromDatabase(currentLanguage);
-  
+
   // Listen for language changes and reload translations
   i18n.on('languageChanged', async (language) => {
     await loadTranslationsFromDatabase(language);
   });
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

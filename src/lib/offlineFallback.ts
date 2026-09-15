@@ -1,6 +1,6 @@
 /**
  * Offline Mode Logic - Fallback Content
- * 
+ *
  * Provides static fallback steps for critical task categories when the API is unavailable.
  * This ensures users can still get help even when offline or when services are down.
  */
@@ -25,7 +25,7 @@ export interface FallbackSteps {
  */
 export function categorizeTask(input: string): TaskCategory {
   const lowerInput = input.toLowerCase();
-  
+
   // Cleaning keywords
   if (
     lowerInput.includes('clean') ||
@@ -38,7 +38,7 @@ export function categorizeTask(input: string): TaskCategory {
   ) {
     return TaskCategory.CLEANING;
   }
-  
+
   // Study keywords
   if (
     lowerInput.includes('study') ||
@@ -51,7 +51,7 @@ export function categorizeTask(input: string): TaskCategory {
   ) {
     return TaskCategory.STUDY;
   }
-  
+
   // Work keywords
   if (
     lowerInput.includes('work') ||
@@ -63,7 +63,7 @@ export function categorizeTask(input: string): TaskCategory {
   ) {
     return TaskCategory.WORK;
   }
-  
+
   // Health keywords
   if (
     lowerInput.includes('exercise') ||
@@ -75,7 +75,7 @@ export function categorizeTask(input: string): TaskCategory {
   ) {
     return TaskCategory.HEALTH;
   }
-  
+
   // Social keywords
   if (
     lowerInput.includes('friend') ||
@@ -86,7 +86,7 @@ export function categorizeTask(input: string): TaskCategory {
   ) {
     return TaskCategory.SOCIAL;
   }
-  
+
   // Financial keywords
   if (
     lowerInput.includes('money') ||
@@ -98,7 +98,7 @@ export function categorizeTask(input: string): TaskCategory {
   ) {
     return TaskCategory.FINANCIAL;
   }
-  
+
   return TaskCategory.GENERAL;
 }
 
@@ -116,7 +116,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Take out trash and recycling',
       'Take a moment to appreciate your clean space',
     ],
-    
+
     [TaskCategory.STUDY]: [
       'Find a quiet, distraction-free space',
       'Gather all necessary materials (books, notes, laptop, etc.)',
@@ -126,7 +126,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Use active recall: test yourself on what you learned',
       'Review and summarize key points at the end',
     ],
-    
+
     [TaskCategory.WORK]: [
       'Clarify the goal and expected outcome',
       'Break the project into smaller tasks',
@@ -136,7 +136,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Start with the most challenging task when energy is highest',
       'Review progress and adjust plan as needed',
     ],
-    
+
     [TaskCategory.HEALTH]: [
       'Choose an activity that feels achievable today',
       'Set a specific time and place',
@@ -146,7 +146,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Cool down and stretch afterward',
       'Hydrate and rest as needed',
     ],
-    
+
     [TaskCategory.SOCIAL]: [
       'Identify what kind of social interaction you need',
       'Reach out to one person you trust',
@@ -156,7 +156,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Respect your own boundaries and energy levels',
       'Follow up afterward to maintain connection',
     ],
-    
+
     [TaskCategory.FINANCIAL]: [
       'Gather all relevant financial documents',
       'Review your current financial situation',
@@ -166,7 +166,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Track expenses for a week to see patterns',
       'Make one small change to improve your financial health',
     ],
-    
+
     [TaskCategory.GENERAL]: [
       'Break the task into smaller, specific steps',
       'Identify what resources or tools you need',
@@ -177,7 +177,7 @@ export function getFallbackSteps(category: TaskCategory): string[] {
       'Celebrate small wins along the way',
     ],
   };
-  
+
   return fallbackContent[category] || fallbackContent[TaskCategory.GENERAL];
 }
 
@@ -189,18 +189,3 @@ export function getOfflineFallbackSteps(input: string): string[] {
   const category = categorizeTask(input);
   return getFallbackSteps(category);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

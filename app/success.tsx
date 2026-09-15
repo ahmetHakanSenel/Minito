@@ -73,7 +73,9 @@ export default function SuccessScreen() {
               </AnimatedText>
             )}
 
-            <AnimatedView entering={FadeIn.delay(900).springify().damping(12).mass(0.8).stiffness(150)}>
+            <AnimatedView
+              entering={FadeIn.delay(900).springify().damping(12).mass(0.8).stiffness(150)}
+            >
               <TouchableOpacity
                 onPress={handleGoHome}
                 className="bg-primary rounded-2xl py-4 px-8 mb-8"
@@ -89,4 +91,3 @@ export default function SuccessScreen() {
     </View>
   );
 }
-

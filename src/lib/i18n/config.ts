@@ -10,7 +10,7 @@ const LANGUAGE_STORAGE_KEY = 'minito_language';
 
 // Supported languages
 export const SUPPORTED_LANGUAGES = ['en', 'tr'] as const;
-export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
+export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 // Default language (fallback)
 const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
@@ -57,22 +57,20 @@ export async function saveLanguagePreference(language: SupportedLanguage): Promi
 export async function initI18n(): Promise<void> {
   const initialLanguage = await getInitialLanguage();
 
-  await i18n
-    .use(initReactI18next)
-    .init({
-      resources: {
-        en: { translation: en },
-        tr: { translation: tr },
-      },
-      lng: initialLanguage,
-      fallbackLng: DEFAULT_LANGUAGE,
-      interpolation: {
-        escapeValue: false, // React already escapes values
-      },
-      react: {
-        useSuspense: false, // Disable suspense for React Native
-      },
-    });
+  await i18n.use(initReactI18next).init({
+    resources: {
+      en: { translation: en },
+      tr: { translation: tr },
+    },
+    lng: initialLanguage,
+    fallbackLng: DEFAULT_LANGUAGE,
+    interpolation: {
+      escapeValue: false, // React already escapes values
+    },
+    react: {
+      useSuspense: false, // Disable suspense for React Native
+    },
+  });
 
   // Load database translations (fail-soft: if it fails, continue with JSON)
   try {
@@ -85,4 +83,3 @@ export async function initI18n(): Promise<void> {
 }
 
 export default i18n;
-

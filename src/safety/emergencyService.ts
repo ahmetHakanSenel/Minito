@@ -22,9 +22,10 @@ export type PanicKit = {
  * Static, non‑judgmental emergency steps for when content is flagged.
  * This is intentionally offline‑safe and does NOT depend on network calls.
  */
-export function getContentFlaggedPanicKit(
-  options?: { traceId?: string; rawMessage?: string }
-): PanicKit {
+export function getContentFlaggedPanicKit(options?: {
+  traceId?: string;
+  rawMessage?: string;
+}): PanicKit {
   const steps: PanicStep[] = [
     {
       id: 'pause',
@@ -67,19 +68,3 @@ export function getContentFlaggedPanicKit(
     meta,
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -34,7 +34,14 @@ export function I18nProvider({ children }: I18nProviderProps) {
   if (!isReady) {
     return (
       <I18nextProvider i18n={i18n}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#121212',
+          }}
+        >
           <ActivityIndicator size="small" color="#8B5CF6" />
         </View>
       </I18nextProvider>
@@ -60,4 +67,3 @@ export function useChangeLanguage() {
 
   return { changeLanguage };
 }
-

@@ -36,4 +36,3 @@ export async function initSentry(): Promise<void> {
     console.warn('Sentry init failed, continuing without Sentry:', error);
   }
 }
-

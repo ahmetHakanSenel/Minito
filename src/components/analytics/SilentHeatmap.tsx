@@ -28,47 +28,41 @@ const generateGridData = (
   weeks: number
 ): { date: string; opacity: number }[][] => {
   const today = new Date();
-  const maxMinutes = Math.max(...activityData.map(d => d.focusMinutes), 1);
-  
+  const maxMinutes = Math.max(...activityData.map((d) => d.focusMinutes), 1);
+
   // Create a lookup map for quick access
   const activityMap = new Map<string, number>();
-  activityData.forEach(d => activityMap.set(d.date, d.focusMinutes));
+  activityData.forEach((d) => activityMap.set(d.date, d.focusMinutes));
 
   const grid: { date: string; opacity: number }[][] = [];
-  
+
   // Generate weeks (columns)
   for (let w = weeks - 1; w >= 0; w--) {
     const weekData: { date: string; opacity: number }[] = [];
-    
+
     // Generate 7 days (rows) for each week
     for (let d = 0; d < 7; d++) {
       const date = new Date(today);
       date.setDate(today.getDate() - (w * 7 + (6 - d)));
       const dateStr = date.toISOString().split('T')[0];
-      
+
       const minutes = activityMap.get(dateStr) || 0;
       weekData.push({
         date: dateStr,
         opacity: getOpacity(minutes, maxMinutes),
       });
     }
-    
+
     grid.push(weekData);
   }
-  
+
   return grid;
 };
 
-export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({
-  activityData,
-  weeks = 12,
-}) => {
+export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({ activityData, weeks = 12 }) => {
   const { width } = useWindowDimensions();
-  
-  const gridData = useMemo(
-    () => generateGridData(activityData, weeks),
-    [activityData, weeks]
-  );
+
+  const gridData = useMemo(() => generateGridData(activityData, weeks), [activityData, weeks]);
 
   // Calculate cell size based on available width
   const padding = 40;
@@ -78,12 +72,9 @@ export const SilentHeatmap: React.FC<SilentHeatmapProps> = ({
   const actualCellSize = Math.min(cellSize, 16); // Cap at 16px
 
   return (
-    <Animated.View 
-      entering={FadeInUp.delay(400).duration(500)}
-      style={styles.container}
-    >
+    <Animated.View entering={FadeInUp.delay(400).duration(500)} style={styles.container}>
       <Text style={styles.sectionTitle}>Devamlılık</Text>
-      
+
       {/* Heatmap Grid */}
       <View style={styles.gridWrapper}>
         <View style={[styles.grid, { gap }]}>
@@ -194,4 +185,3 @@ const styles = StyleSheet.create({
 });
 
 export default SilentHeatmap;
-

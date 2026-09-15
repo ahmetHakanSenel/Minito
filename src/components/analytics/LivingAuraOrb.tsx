@@ -71,10 +71,7 @@ interface LivingAuraOrbProps {
   size?: number;
 }
 
-export const LivingAuraOrb: React.FC<LivingAuraOrbProps> = ({
-  state = 'flow',
-  size = 280,
-}) => {
+export const LivingAuraOrb: React.FC<LivingAuraOrbProps> = ({ state = 'flow', size = 280 }) => {
   const reducedMotion = useReducedMotion();
   const center = size / 2;
   const baseRadius = size * 0.19;
@@ -159,25 +156,14 @@ export const LivingAuraOrb: React.FC<LivingAuraOrbProps> = ({
   // A blurred circle can't guarantee that (its tail clips at the bounds and
   // lifts the whole canvas' black level — glaringly visible on OLED); a
   // radial gradient ending at 'transparent' decays to true black by design.
-  const glowColors = useDerivedValue(() => [
-    colorA.value,
-    colorA.value,
-    'transparent',
-  ]);
+  const glowColors = useDerivedValue(() => [colorA.value, colorA.value, 'transparent']);
 
   // The metaball recipe: blur melts the circles together, then the
   // alpha threshold re-sharpens the union into one organic silhouette
   const gooLayer = (
     <Paint>
       <Blur blur={size * 0.075} />
-      <ColorMatrix
-        matrix={[
-          1, 0, 0, 0, 0,
-          0, 1, 0, 0, 0,
-          0, 0, 1, 0, 0,
-          0, 0, 0, 24, -11,
-        ]}
-      />
+      <ColorMatrix matrix={[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 24, -11]} />
     </Paint>
   );
 

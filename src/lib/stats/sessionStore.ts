@@ -123,13 +123,12 @@ export function computeFlowMetrics(
 
   const totalMinutes = recent.reduce((sum, s) => sum + s.durationSec / 60, 0);
   const avgMinutes = totalMinutes / recent.length;
-  const completionRate =
-    recent.filter((s) => s.completed).length / recent.length;
+  const completionRate = recent.filter((s) => s.completed).length / recent.length;
 
   // Quality: average session length (25 min = full marks) + completion rate
   const focusQuality = Math.min(
     100,
-    Math.round((Math.min(avgMinutes / 25, 1) * 70 + completionRate * 30))
+    Math.round(Math.min(avgMinutes / 25, 1) * 70 + completionRate * 30)
   );
 
   // Distraction: pickups normalized per 25 focused minutes

@@ -1,5 +1,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient, type SupabaseClient, type User } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  createClient,
+  type SupabaseClient,
+  type User,
+} from 'https://esm.sh/@supabase/supabase-js@2';
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
 
 /**
@@ -313,7 +317,10 @@ const RATE_LIMIT_PER_USER = 20;
  * Fail-soft only on infrastructure errors: if the check itself cannot run,
  * the request is allowed rather than blocking a legitimate user.
  */
-async function checkRateLimit(userId: string, supabase: SupabaseClient): Promise<{ limited: boolean }> {
+async function checkRateLimit(
+  userId: string,
+  supabase: SupabaseClient
+): Promise<{ limited: boolean }> {
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
@@ -701,7 +708,9 @@ serve(async (req: Request) => {
 
     // If configured provider has no API key, fail-soft: don't call external AI, let client fall back
     if ((useOpenAI && !openaiKey) || (useGemini && !geminiKey)) {
-      console.warn(`AI provider "${aiProvider}" is selected but API key is missing. Skipping AI call.`);
+      console.warn(
+        `AI provider "${aiProvider}" is selected but API key is missing. Skipping AI call.`
+      );
       return jsonResponse(
         { success: false, fallback_reason: 'AI_DOWN', error: 'AI provider not configured' },
         503
@@ -786,7 +795,13 @@ serve(async (req: Request) => {
     if (useOpenAI) {
       aiResult = await callOpenAI(systemPrompt, sanitizedInput, openaiKey, displayName);
     } else if (useGemini) {
-      aiResult = await callGemini(systemPrompt, sanitizedInput, geminiKey, geminiModel, displayName);
+      aiResult = await callGemini(
+        systemPrompt,
+        sanitizedInput,
+        geminiKey,
+        geminiModel,
+        displayName
+      );
     } else {
       console.warn(`Unknown AI_PROVIDER "${aiProvider}", treating as AI_DOWN`);
     }

@@ -21,9 +21,7 @@ export interface ActiveSession {
   updatedAt: number;
 }
 
-export async function saveActiveSession(
-  session: Omit<ActiveSession, 'updatedAt'>
-): Promise<void> {
+export async function saveActiveSession(session: Omit<ActiveSession, 'updatedAt'>): Promise<void> {
   await writeJson(KEY, { ...session, updatedAt: Date.now() });
 }
 

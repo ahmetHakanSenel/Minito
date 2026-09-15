@@ -74,9 +74,8 @@ export const FocusCard: React.FC<FocusCardProps> = ({
   const cardBorderStyle = useAnimatedStyle(() => {
     const opacity = borderPulseOpacity.value;
     return {
-      borderColor: opacity > 0
-        ? `rgba(168, 85, 247, ${0.3 + opacity * 0.7})`
-        : 'rgba(55, 65, 81, 1)', // gray-800
+      borderColor:
+        opacity > 0 ? `rgba(168, 85, 247, ${0.3 + opacity * 0.7})` : 'rgba(55, 65, 81, 1)', // gray-800
       borderWidth: opacity > 0 ? 2 : 1,
       shadowColor: '#A855F7',
       shadowOpacity: opacity * 0.5,
@@ -154,17 +153,13 @@ export const FocusCard: React.FC<FocusCardProps> = ({
               className="bg-success/20 px-3 py-1 rounded-full"
               entering={FadeInDown.springify().damping(12).mass(0.8).stiffness(150)}
             >
-              <Text className="text-success text-xs font-semibold">
-                {t('focus.completed')}
-              </Text>
+              <Text className="text-success text-xs font-semibold">{t('focus.completed')}</Text>
             </AnimatedView>
           )}
         </View>
 
         {/* Step Content */}
-        <Text className="text-textMain text-2xl font-semibold leading-8 mb-8">
-          {step}
-        </Text>
+        <Text className="text-textMain text-2xl font-semibold leading-8 mb-8">{step}</Text>
 
         {/* Timer Slot with Divider - Only rendered when timerSlot is provided */}
         {timerSlot && (
@@ -198,9 +193,7 @@ export const FocusCard: React.FC<FocusCardProps> = ({
               className={`flex-1 rounded-xl py-4 ${disabled ? 'bg-gray-800/60' : 'bg-gray-800'}`}
               style={prevButtonStyle}
             >
-              <Text className="text-textMain text-center font-medium">
-                {t('focus.previous')}
-              </Text>
+              <Text className="text-textMain text-center font-medium">{t('focus.previous')}</Text>
             </AnimatedTouchableOpacity>
           )}
 
@@ -217,9 +210,7 @@ export const FocusCard: React.FC<FocusCardProps> = ({
               className={`flex-1 rounded-xl py-4 flex-row items-center justify-center gap-2 ${disabled ? 'bg-primary/60' : 'bg-primary'}`}
               style={nextButtonStyle}
             >
-              <Text className="text-white text-center font-semibold">
-                {t('focus.next')}
-              </Text>
+              <Text className="text-white text-center font-semibold">{t('focus.next')}</Text>
               <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
             </AnimatedTouchableOpacity>
           )}
@@ -237,9 +228,7 @@ export const FocusCard: React.FC<FocusCardProps> = ({
               className={`flex-1 rounded-xl py-4 flex-row items-center justify-center gap-2 ${disabled ? 'bg-success/60' : 'bg-success'}`}
               style={completeButtonStyle}
             >
-              <Text className="text-white text-center font-semibold">
-                {t('focus.complete')}
-              </Text>
+              <Text className="text-white text-center font-semibold">{t('focus.complete')}</Text>
               <CheckCircle2 size={18} color="#FFFFFF" strokeWidth={2.5} />
             </AnimatedTouchableOpacity>
           )}

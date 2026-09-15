@@ -16,13 +16,10 @@ serve(async (req) => {
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Create Supabase client with service role key for admin operations
@@ -30,13 +27,10 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
-        JSON.stringify({ error: 'Missing Supabase configuration' }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
@@ -54,32 +48,28 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const userId = user.id;
 
     const { data: breakdowns, error: breakdownsError } = await supabaseAdmin
       .from('task_breakdowns')
-      .select('title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at')
+      .select(
+        'title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at'
+      )
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (breakdownsError) {
       console.error('Error fetching task breakdowns:', breakdownsError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to export user data' }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return new Response(JSON.stringify({ error: 'Failed to export user data' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const exportData = {
@@ -97,40 +87,19 @@ serve(async (req) => {
     };
 
     // Return export data
-    return new Response(
-      JSON.stringify(exportData, null, 2),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-          'Content-Disposition': `attachment; filename="minito-export-${userId}-${Date.now()}.json"`,
-        },
-      }
-    );
+    return new Response(JSON.stringify(exportData, null, 2), {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'Content-Disposition': `attachment; filename="minito-export-${userId}-${Date.now()}.json"`,
+      },
+    });
   } catch (error) {
     console.error('Unexpected error in export-user-data:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
