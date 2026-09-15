@@ -153,30 +153,9 @@
     "retry": "Tekrar dene"
   },
   "health": {
-    "operational": "Tüm sistemler çalışıyor",
-    "degraded": "Performans düşük",
-    "disruption": "Hizmet kesintisi",
-    "checking": "Sistemler kontrol ediliyor…",
-    "offline": "Çevrimdışı mod",
-    "title": "Sistem durumu",
-    "subtitle": "Minito bulut servislerine canlı kontroller",
-    "api": "Bulut API",
-    "apiDetail": "Supabase kimlik doğrulama ve veritabanı",
-    "ai": "AI geçidi",
-    "aiDetail": "break-task edge fonksiyonu",
-    "sync": "Görev senkronizasyonu",
-    "syncDetail": "Görev geçmişin",
-    "session": "Oturum güvenliği",
-    "sessionDetail": "AES-256 ile şifreli, anahtar cihaz anahtar deposunda",
-    "lastChecked": "Son kontrol {{time}}",
-    "refresh": "Yenile",
-    "state": {
-      "operational": "Çalışıyor",
-      "degraded": "Yavaş",
-      "down": "Erişilemiyor",
-      "checking": "Kontrol ediliyor",
-      "unconfigured": "Yapılandırılmadı"
-    }
+    "backendDown": "Minito sunucusuna şu an ulaşılamıyor. Bağlantını kontrol et; bu sırada görevler çevrimdışı adımlarla bölünür.",
+    "aiDown": "AI servisi şu an yanıt vermiyor; görevler bu sırada çevrimdışı adımlarla bölünür.",
+    "retry": "Tekrar dene"
   },
   "settings": {
     "title": "Ayarlar",

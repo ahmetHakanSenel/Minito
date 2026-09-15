@@ -153,30 +153,9 @@
     "retry": "Try again"
   },
   "health": {
-    "operational": "All systems operational",
-    "degraded": "Degraded performance",
-    "disruption": "Service disruption",
-    "checking": "Checking systems…",
-    "offline": "Offline mode",
-    "title": "System status",
-    "subtitle": "Live checks against Minito's cloud services",
-    "api": "Cloud API",
-    "apiDetail": "Supabase auth & database",
-    "ai": "AI gateway",
-    "aiDetail": "break-task edge function",
-    "sync": "Task sync",
-    "syncDetail": "Your breakdown history",
-    "session": "Session security",
-    "sessionDetail": "AES-256 encrypted, key in the device keystore",
-    "lastChecked": "Last checked {{time}}",
-    "refresh": "Refresh",
-    "state": {
-      "operational": "Operational",
-      "degraded": "Slow",
-      "down": "Down",
-      "checking": "Checking",
-      "unconfigured": "Not configured"
-    }
+    "backendDown": "Minito's server can't be reached right now. Check your connection; meanwhile tasks are split with offline steps.",
+    "aiDown": "The AI service isn't responding right now, so tasks are split with offline steps for the moment.",
+    "retry": "Try again"
   },
   "settings": {
     "title": "Settings",

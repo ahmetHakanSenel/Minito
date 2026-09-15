@@ -23,7 +23,7 @@ import { DashboardModal } from '../src/modals';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { DisplayNameEditor } from '../src/features/auth/ui/DisplayNameEditor';
 import { useSystemHealth } from '../src/features/health/controller/useSystemHealth';
-import { SystemStatusPill } from '../src/features/health/ui/SystemStatus';
+import { ServiceNotice } from '../src/features/health/ui/ServiceNotice';
 import { useTaskBreakdowns } from '../src/features/tasks/controller/useTaskBreakdowns';
 import { BreakdownProgress } from '../src/features/tasks/ui/BreakdownProgress';
 import { TaskHistoryList } from '../src/features/tasks/ui/TaskHistoryList';
@@ -292,7 +292,7 @@ export default function HomeScreen() {
           onLayout={keyboardScroll.onLayout}
           scrollEventThrottle={16}
         >
-          <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center justify-between mb-6">
             <View className="flex-1 mr-4">
               <Text className="text-textMuted text-sm">{t('dashboard.welcome')}</Text>
               {displayName ? (
@@ -334,14 +334,11 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <View className="mb-6">
-            <SystemStatusPill
-              snapshot={healthSnapshot}
-              isChecking={isCheckingHealth}
-              syncStatus={historyStatus}
-              onRefresh={refreshHealth}
-            />
-          </View>
+          <ServiceNotice
+            snapshot={healthSnapshot}
+            isChecking={isCheckingHealth}
+            onRetry={refreshHealth}
+          />
 
           {showNameEditor && (
             <View ref={nameEditorRef} collapsable={false} className="mb-6">
