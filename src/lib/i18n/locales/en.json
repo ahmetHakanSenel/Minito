@@ -37,9 +37,28 @@
   "login": {
     "title": "Welcome to Minito",
     "subtitle": "Sign in to sync your tasks across devices",
+    "emailPlaceholder": "Email",
+    "passwordPlaceholder": "Password",
+    "signIn": "Sign In",
+    "signUp": "Create Account",
+    "switchToSignUp": "Don't have an account? Sign up",
+    "switchToSignIn": "Already have an account? Sign in",
+    "or": "or",
     "continueWithApple": "Continue with Apple",
     "continueWithGoogle": "Continue with Google",
-    "continueAsGuest": "Continue as Guest"
+    "checkEmail": "Check your inbox to confirm your email, then sign in.",
+    "errors": {
+      "invalid_input": "Enter a valid email and a password of at least 6 characters.",
+      "invalid_credentials": "Incorrect email or password.",
+      "email_not_confirmed": "Please confirm your email before signing in.",
+      "user_already_exists": "An account with this email already exists.",
+      "weak_password": "Password is too weak. Use at least 6 characters.",
+      "invalid_email": "Please enter a valid email address.",
+      "rate_limited": "Too many attempts. Please wait a moment and try again.",
+      "network": "Network error. Check your connection and try again.",
+      "provider_unavailable": "This sign-in method isn't available on this device.",
+      "unknown": "Something went wrong. Please try again."
+    }
   },
   "privacy": {
     "title": "Privacy & Data",

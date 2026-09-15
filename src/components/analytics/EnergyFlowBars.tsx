@@ -45,7 +45,7 @@ interface EnergyFlowBarsProps {
 const getProjectIcon = (type: ProjectType, color: string) => {
   const iconProps = { size: 18, color, strokeWidth: 1.8 };
   
-  const icons: Record<ProjectType, JSX.Element> = {
+  const icons: Record<ProjectType, React.JSX.Element> = {
     work: <Briefcase {...iconProps} />,
     study: <GraduationCap {...iconProps} />,
     health: <Heart {...iconProps} />,

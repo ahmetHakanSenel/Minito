@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../src/lib/auth';
+import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { deleteUserAccount, exportUserData } from '../src/lib/api/userData';
 import { LanguageSelector } from '../src/components';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Animated, {
   useSharedValue,
@@ -19,7 +19,7 @@ const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpaci
 export default function PrivacyScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, signOut } = useAuth();
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -35,18 +35,13 @@ export default function PrivacyScreen() {
 
       const data = await exportUserData();
       
-      // Save to file
-      const fileName = `minito-export-${Date.now()}.json`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      
-      await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(data, null, 2), {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const exportFile = new File(Paths.cache, `minito-export-${Date.now()}.json`);
+      exportFile.create();
+      exportFile.write(JSON.stringify(data, null, 2));
 
-      // Share the file
       const isAvailable = await Sharing.isAvailableAsync();
       if (isAvailable) {
-        await Sharing.shareAsync(fileUri);
+        await Sharing.shareAsync(exportFile.uri);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(t('common.success'), t('privacy.exportData.success', { defaultValue: 'Your data has been exported and is ready to share' }));
       } else {
@@ -206,7 +201,7 @@ export default function PrivacyScreen() {
               title={t('privacy.exportData.button')}
               variant="secondary"
               loading={exporting}
-              disabled={!user || authLoading}
+              disabled={!user}
             />
           </View>
 
@@ -222,7 +217,7 @@ export default function PrivacyScreen() {
               title={t('privacy.deleteAccount.button')}
               variant="danger"
               loading={deleting}
-              disabled={!user || authLoading}
+              disabled={!user}
             />
           </View>
         </View>
@@ -234,7 +229,6 @@ export default function PrivacyScreen() {
               onPress={handleSignOut}
               title={t('privacy.signOut')}
               variant="secondary"
-              disabled={authLoading}
             />
           </View>
         )}
