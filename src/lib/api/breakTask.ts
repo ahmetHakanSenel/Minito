@@ -53,11 +53,11 @@ export type BreakTaskResult =
 
 /**
  * Calls the break-task edge function to break down a user task into steps.
- * 
+ *
  * @param input - The user's task input
  * @param guestId - Optional guest ID for tracking
  * @returns Promise<BreakTaskResult>
- * 
+ *
  * @example
  * ```ts
  * const result = await breakTask("Learn React Native", guestId);
@@ -68,19 +68,13 @@ export type BreakTaskResult =
  * }
  * ```
  */
-export async function breakTask(
-  input: string,
-  guestId?: string
-): Promise<BreakTaskResult> {
+export async function breakTask(input: string, guestId?: string): Promise<BreakTaskResult> {
   // The Supabase gateway still expects the anon key as `apikey`; identity comes from the JWT.
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
   const edgeFunctionUrl =
     process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_URL ||
-    process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(
-      /\/$|$/,
-      '/functions/v1/break-task'
-    );
+    process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$|$/, '/functions/v1/break-task');
 
   if (!edgeFunctionUrl) {
     // No edge function URL configured - use offline fallback
@@ -115,21 +109,17 @@ export async function breakTask(
       return { success: false, fallbackReason: FallbackReason.VALIDATION, error: 'Not signed in' };
     }
 
-    const response = await tracedAxios.post<BreakTaskResponse>(
-      edgeFunctionUrl,
-      requestPayload,
-      {
-        // Hard ceiling on perceived latency: past this point the offline
-        // fallback is a better experience than continuing to wait. The
-        // server's own retry cascade can otherwise stretch to 30s+.
-        timeout: 8000,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      }
-    );
+    const response = await tracedAxios.post<BreakTaskResponse>(edgeFunctionUrl, requestPayload, {
+      // Hard ceiling on perceived latency: past this point the offline
+      // fallback is a better experience than continuing to wait. The
+      // server's own retry cascade can otherwise stretch to 30s+.
+      timeout: 8000,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
 
     const data = response.data;
 
@@ -146,8 +136,7 @@ export async function breakTask(
 
     // Handle fallback cases. CONTENT_FLAGGED needs no payload — the panic
     // screen renders its own localized content from the reason code alone.
-    const fallbackReason =
-      (data.fallback_reason as FallbackReason) || FallbackReason.VALIDATION;
+    const fallbackReason = (data.fallback_reason as FallbackReason) || FallbackReason.VALIDATION;
 
     return {
       success: false,
@@ -205,4 +194,3 @@ export async function breakTask(
     };
   }
 }
-

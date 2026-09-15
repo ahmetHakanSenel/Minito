@@ -17,19 +17,19 @@ interface FocusEqualizerProps {
 // Group hours into 3-hour buckets for cleaner visualization
 const aggregateData = (data: HourlyFocusData[]) => {
   const buckets: { label: string; value: number; isMax?: boolean }[] = [];
-  
+
   // Create 8 buckets (3 hours each)
   for (let i = 0; i < 24; i += 3) {
-    const bucketData = data.filter(d => d.hour >= i && d.hour < i + 3);
+    const bucketData = data.filter((d) => d.hour >= i && d.hour < i + 3);
     const totalMinutes = bucketData.reduce((sum, d) => sum + d.focusMinutes, 0);
-    
+
     // Only show specific labels
     let label = '';
     if (i === 6) label = '06:00';
     else if (i === 12) label = '12:00';
     else if (i === 18) label = '18:00';
     else if (i === 0) label = '00:00';
-    
+
     buckets.push({
       label,
       value: totalMinutes,
@@ -37,8 +37,8 @@ const aggregateData = (data: HourlyFocusData[]) => {
   }
 
   // Find and mark the max bucket
-  const maxValue = Math.max(...buckets.map(b => b.value));
-  buckets.forEach(b => {
+  const maxValue = Math.max(...buckets.map((b) => b.value));
+  buckets.forEach((b) => {
     if (b.value === maxValue && maxValue > 0) {
       b.isMax = true;
     }
@@ -56,15 +56,15 @@ const formatPeakTime = (bucketIndex: number): string => {
 
 export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) => {
   const { width } = useWindowDimensions();
-  
+
   const chartData = useMemo(() => aggregateData(hourlyData), [hourlyData]);
   const peakBucketIndex = useMemo(() => {
-    const maxVal = Math.max(...chartData.map(b => b.value));
-    return chartData.findIndex(b => b.value === maxVal);
+    const maxVal = Math.max(...chartData.map((b) => b.value));
+    return chartData.findIndex((b) => b.value === maxVal);
   }, [chartData]);
 
   const peakTime = formatPeakTime(peakBucketIndex);
-  const hasData = chartData.some(d => d.value > 0);
+  const hasData = chartData.some((d) => d.value > 0);
 
   // Calculate bar width based on screen
   const chartWidth = width - 80;
@@ -94,12 +94,9 @@ export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) =>
   }));
 
   return (
-    <Animated.View 
-      entering={FadeInUp.delay(200).duration(500)}
-      style={styles.container}
-    >
+    <Animated.View entering={FadeInUp.delay(200).duration(500)} style={styles.container}>
       <Text style={styles.sectionTitle}>Odak Ritmi</Text>
-      
+
       <View style={styles.chartContainer}>
         {hasData ? (
           <BarChart
@@ -135,10 +132,7 @@ export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) =>
 
       {/* Insight text */}
       {hasData && (
-        <Animated.View 
-          entering={FadeInUp.delay(600).duration(400)}
-          style={styles.insightContainer}
-        >
+        <Animated.View entering={FadeInUp.delay(600).duration(400)} style={styles.insightContainer}>
           <View style={styles.insightDot} />
           <Text style={styles.insightText}>
             Zirve saatin: <Text style={styles.insightHighlight}>{peakTime}</Text>
@@ -209,4 +203,3 @@ const styles = StyleSheet.create({
 });
 
 export default FocusEqualizer;
-

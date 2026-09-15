@@ -1,17 +1,1 @@
 /// <reference types="nativewind/types" />
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

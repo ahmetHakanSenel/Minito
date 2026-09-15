@@ -7,7 +7,7 @@ import { getOrCreateGuestId } from './guestIdentity';
  * All requests will automatically include:
  * - x-request-id: A unique UUID for each request
  * - x-guest-id: The guest identity UUID (if available)
- * 
+ *
  * @returns AxiosInstance - Configured axios instance with interceptors
  */
 export function createTracedAxiosInstance(): AxiosInstance {
@@ -18,15 +18,15 @@ export function createTracedAxiosInstance(): AxiosInstance {
     async (config: InternalAxiosRequestConfig) => {
       // Generate unique request ID for this request
       const requestId = await Crypto.randomUUID();
-      
+
       // Ensure headers object exists
       if (!config.headers) {
         config.headers = {} as any;
       }
-      
+
       // Add request ID header
       config.headers['x-request-id'] = requestId;
-      
+
       // Add guest ID header (fail-soft: if it fails, continue without it)
       try {
         const guestId = await getOrCreateGuestId();
@@ -35,7 +35,7 @@ export function createTracedAxiosInstance(): AxiosInstance {
         // Fail-soft: Log but don't block the request
         console.warn('Failed to get guest ID for request tracing:', error);
       }
-      
+
       return config;
     },
     (error) => {
@@ -62,5 +62,3 @@ export function createTracedAxiosInstance(): AxiosInstance {
  * Use this instead of the default axios import.
  */
 export const tracedAxios = createTracedAxiosInstance();
-
-

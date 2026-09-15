@@ -6,22 +6,22 @@ const GUEST_ID_KEY = 'minito_guest_id';
 /**
  * Gets or creates a guest identity UUID stored securely.
  * This UUID is used to identify anonymous users for analytics and request tracing.
- * 
+ *
  * @returns Promise<string> - The guest UUID
  */
 export async function getOrCreateGuestId(): Promise<string> {
   try {
     // Try to get existing guest ID
     const existingId = await SecureStore.getItemAsync(GUEST_ID_KEY);
-    
+
     if (existingId) {
       return existingId;
     }
-    
+
     // Create new guest ID using expo-crypto
     const newId = await Crypto.randomUUID();
     await SecureStore.setItemAsync(GUEST_ID_KEY, newId);
-    
+
     return newId;
   } catch (error) {
     // Fail-soft: If SecureStore fails, generate a temporary ID
@@ -38,7 +38,7 @@ export async function getOrCreateGuestId(): Promise<string> {
 
 /**
  * Clears the guest identity (for GDPR compliance or logout).
- * 
+ *
  * @returns Promise<void>
  */
 export async function clearGuestId(): Promise<void> {
@@ -48,5 +48,3 @@ export async function clearGuestId(): Promise<void> {
     console.warn('Failed to clear guest ID:', error);
   }
 }
-
-

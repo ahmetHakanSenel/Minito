@@ -21,19 +21,12 @@ export const PanicKit: React.FC<PanicKitProps> = ({ panicKit }) => {
   return (
     <ScrollView className="flex-1 bg-background px-4 py-6">
       <View className="mb-6">
-        <Text className="text-textMain text-2xl font-bold mb-2">
-          {headline}
-        </Text>
-        <Text className="text-textMuted text-base">
-          {description}
-        </Text>
+        <Text className="text-textMain text-2xl font-bold mb-2">{headline}</Text>
+        <Text className="text-textMuted text-base">{description}</Text>
       </View>
 
       {panicKit.steps.map((step, index) => (
-        <View
-          key={step.id}
-          className="bg-surface rounded-2xl p-5 mb-4 border border-gray-800"
-        >
+        <View key={step.id} className="bg-surface rounded-2xl p-5 mb-4 border border-gray-800">
           <View className="flex-row items-start mb-3">
             <View className="bg-primary rounded-full w-8 h-8 items-center justify-center mr-3">
               <Text className="text-white font-bold text-sm">{index + 1}</Text>
@@ -55,18 +48,8 @@ export const PanicKit: React.FC<PanicKitProps> = ({ panicKit }) => {
       ))}
 
       <View className="mt-4 p-4 bg-surface rounded-xl border border-gray-800">
-        <Text className="text-textMuted text-sm text-center">
-          {footer}
-        </Text>
+        <Text className="text-textMuted text-sm text-center">{footer}</Text>
       </View>
     </ScrollView>
   );
 };
-
-
-
-
-
-
-
-

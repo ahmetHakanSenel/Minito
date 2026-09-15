@@ -49,7 +49,7 @@ export const ConfettiAnimation: React.FC<ConfettiAnimationProps> = ({
     if (visible) {
       // Trigger haptics at the exact moment of explosion
       onAnimationStart?.();
-      
+
       // Trigger both cannons simultaneously for the grand finale
       // Small delay to ensure refs are ready
       const timer = setTimeout(() => {

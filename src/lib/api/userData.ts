@@ -8,8 +8,10 @@ const SUPABASE_EDGE_FUNCTION_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTIO
  * @throws Error if deletion fails
  */
 export async function deleteUserAccount(): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   if (!session) {
     throw new Error('No active session. Please sign in first.');
   }
@@ -46,8 +48,10 @@ export async function deleteUserAccount(): Promise<void> {
  * @returns User data as JSON object
  */
 export async function exportUserData(): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   if (!session) {
     throw new Error('No active session. Please sign in first.');
   }
@@ -80,18 +84,3 @@ export async function exportUserData(): Promise<any> {
     throw error;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

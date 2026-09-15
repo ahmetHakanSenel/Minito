@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { TextInput, View, Text, TouchableOpacity, StyleSheet, LayoutChangeEvent } from 'react-native';
+import {
+  TextInput,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  LayoutChangeEvent,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, BrainCircuit } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -31,7 +38,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 const getRoundedRectPath = (width: number, height: number, radius: number): string => {
   // Ensure radius doesn't exceed half of smallest dimension
   const r = Math.min(radius, width / 2, height / 2);
-  
+
   return `
     M ${r} 0
     L ${width - r} 0
@@ -69,10 +76,10 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [borderSize, setBorderSize] = useState<{ width: number; height: number } | null>(null);
   const buttonPressed = useSharedValue(0);
-  
+
   // Input glow animation
   const glowOpacity = useSharedValue(0.3); // Default subtle glow
-  
+
   // Processing state - neon snake dash along border
   const dashOffset = useSharedValue(0);
 
@@ -99,10 +106,10 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   // Calculate perimeter and path when border size changes
   const { perimeter, pathD } = useMemo(() => {
     if (!borderSize) return { perimeter: 0, pathD: '' };
-    
+
     const peri = getRoundedRectPerimeter(borderSize.width, borderSize.height, BORDER_RADIUS);
     const path = getRoundedRectPath(borderSize.width, borderSize.height, BORDER_RADIUS);
-    
+
     return { perimeter: peri, pathD: path };
   }, [borderSize]);
 
@@ -175,10 +182,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   return (
     <View className="w-full px-4">
       {/* Input with BrainCircuit icon and dynamic glow */}
-      <View
-        style={styles.inputWrapper}
-        onLayout={handleInputWrapperLayout}
-      >
+      <View style={styles.inputWrapper} onLayout={handleInputWrapperLayout}>
         {/* Ambient focus glow — fades to nothing, leaves no edge on OLED */}
         <Animated.View style={[StyleSheet.absoluteFill, glowLayerStyle]} pointerEvents="none">
           <SoftGlow color="#8B5CF6" intensity={0.5} spread={26} />
@@ -186,20 +190,17 @@ export const TaskInput: React.FC<TaskInputProps> = ({
 
         {/* Processing State: Neon Snake Border (only when loading) */}
         {isLoading && borderSize && perimeter > 0 && (
-          <Animated.View style={[styles.snakeBorderContainer, snakeBorderStyle]} pointerEvents="none">
+          <Animated.View
+            style={[styles.snakeBorderContainer, snakeBorderStyle]}
+            pointerEvents="none"
+          >
             <Svg
               width={borderSize.width + 6}
               height={borderSize.height + 6}
               viewBox={`-3 -3 ${borderSize.width + 6} ${borderSize.height + 6}`}
             >
               <Defs>
-                <SvgLinearGradient
-                  id="neonSnakeGradient"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="0%"
-                >
+                <SvgLinearGradient id="neonSnakeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                   <Stop offset="0%" stopColor="#E0D4FF" stopOpacity="1" />
                   <Stop offset="40%" stopColor="#A855F7" stopOpacity="1" />
                   <Stop offset="70%" stopColor="#34D399" stopOpacity="1" />
@@ -232,32 +233,32 @@ export const TaskInput: React.FC<TaskInputProps> = ({
             </Svg>
           </Animated.View>
         )}
-        
+
         <View style={styles.inputInner}>
-        <TextInput
+          <TextInput
             className="bg-surface text-textMain rounded-2xl px-4 py-4 pl-12 text-base"
-          value={value}
-          onChangeText={onChangeText}
-          onFocus={handleFocus}
+            value={value}
+            onChangeText={onChangeText}
+            onFocus={handleFocus}
             onBlur={handleBlur}
-          placeholder={inputPlaceholder}
-          placeholderTextColor="#A1A1AA"
-          multiline
-          maxLength={500}
-          editable={!isLoading}
-          style={{
-            color: '#E5E5E5',
-            minHeight: 120,
-            textAlignVertical: 'top',
+            placeholder={inputPlaceholder}
+            placeholderTextColor="#A1A1AA"
+            multiline
+            maxLength={500}
+            editable={!isLoading}
+            style={{
+              color: '#E5E5E5',
+              minHeight: 120,
+              textAlignVertical: 'top',
               borderWidth: 1,
               borderColor: isLoading ? 'transparent' : '#2A2A2A',
-          }}
-        />
-        {/* BrainCircuit icon inside input */}
-        <View className="absolute left-4 top-4">
-          <BrainCircuit size={20} color="#A1A1AA" strokeWidth={2.5} />
+            }}
+          />
+          {/* BrainCircuit icon inside input */}
+          <View className="absolute left-4 top-4">
+            <BrainCircuit size={20} color="#A1A1AA" strokeWidth={2.5} />
+          </View>
         </View>
-      </View>
       </View>
 
       {/* Minitize It button with Sparkles icon - GOD MODE: Heavy Haptic */}
@@ -271,15 +272,11 @@ export const TaskInput: React.FC<TaskInputProps> = ({
         onPress={handleSubmit}
         disabled={!value.trim() || isLoading}
         className={`mt-4 rounded-2xl py-4 px-6 flex-row items-center justify-center gap-2 ${
-          value.trim() && !isLoading
-            ? 'bg-primary'
-            : 'bg-gray-700 opacity-50'
+          value.trim() && !isLoading ? 'bg-primary' : 'bg-gray-700 opacity-50'
         }`}
         style={buttonStyle}
       >
-        {!isLoading && (
-          <Sparkles size={20} color="#FFFFFF" strokeWidth={2.5} />
-        )}
+        {!isLoading && <Sparkles size={20} color="#FFFFFF" strokeWidth={2.5} />}
         <Text className="text-white text-center font-semibold text-lg">
           {isLoading ? t('home.breaking') : t('home.breakButton')}
         </Text>
@@ -307,4 +304,3 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 });
-

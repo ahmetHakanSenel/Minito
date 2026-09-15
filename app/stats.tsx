@@ -1,12 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -87,10 +80,7 @@ export default function AnalyticsScreen() {
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
-      <Animated.View
-        entering={FadeIn.duration(400)}
-        style={styles.header}
-      >
+      <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={1.8} />
         </TouchableOpacity>

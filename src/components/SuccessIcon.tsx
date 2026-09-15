@@ -117,12 +117,7 @@ export const SuccessIcon: React.FC<SuccessIconProps> = ({
   }));
 
   const glowStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      glowOpacity.value,
-      [0, 1],
-      [0.3, 0.8],
-      Extrapolate.CLAMP
-    );
+    const opacity = interpolate(glowOpacity.value, [0, 1], [0.3, 0.8], Extrapolate.CLAMP);
     return {
       opacity,
       transform: [{ scale: glowScale.value }],
@@ -149,11 +144,7 @@ export const SuccessIcon: React.FC<SuccessIconProps> = ({
       {/* Main icon container */}
       <Animated.View style={containerStyle}>
         <Animated.View style={iconStyle}>
-          <IconComponent
-            size={size}
-            color={color}
-            strokeWidth={2.5}
-          />
+          <IconComponent size={size} color={color} strokeWidth={2.5} />
         </Animated.View>
       </Animated.View>
     </View>

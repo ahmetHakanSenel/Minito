@@ -33,10 +33,7 @@ export const SoftGlow: React.FC<SoftGlowProps> = ({
   const gradientId = `soft-glow-${useId().replace(/:/g, '')}`;
 
   return (
-    <View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { margin: -spread }, style]}
-    >
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { margin: -spread }, style]}>
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={gradientId} cx="50%" cy="50%" r="50%">

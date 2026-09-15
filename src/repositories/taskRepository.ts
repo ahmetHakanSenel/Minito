@@ -15,7 +15,10 @@ export type TaskBreakdown = {
   createdAt: string;
 };
 
-export type BreakdownContent = Pick<TaskBreakdown, 'title' | 'empathyBridge' | 'firstStepHook' | 'steps'>;
+export type BreakdownContent = Pick<
+  TaskBreakdown,
+  'title' | 'empathyBridge' | 'firstStepHook' | 'steps'
+>;
 
 export type BreakdownOutcome =
   | { status: 'ready'; content: BreakdownContent; saved: TaskBreakdown | null; isOffline: boolean }
@@ -53,7 +56,10 @@ const COLUMNS =
 const MISSING_TABLE_CODES = new Set(['PGRST205', '42P01']);
 
 function toRepositoryError(error: PostgrestError): TaskRepositoryError {
-  return new TaskRepositoryError(MISSING_TABLE_CODES.has(error.code) ? 'unavailable' : 'unknown', error);
+  return new TaskRepositoryError(
+    MISSING_TABLE_CODES.has(error.code) ? 'unavailable' : 'unknown',
+    error
+  );
 }
 
 function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {

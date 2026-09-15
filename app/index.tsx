@@ -109,7 +109,10 @@ export default function HomeScreen() {
     setIsNamePromptDismissed(true);
   };
 
-  const openFocus = (content: BreakdownContent, { taskId, resumeStepIndex }: FocusLaunchOptions = {}) => {
+  const openFocus = (
+    content: BreakdownContent,
+    { taskId, resumeStepIndex }: FocusLaunchOptions = {}
+  ) => {
     router.push({
       pathname: '/focus',
       params: {
@@ -208,7 +211,9 @@ export default function HomeScreen() {
       return;
     }
     const resumeStepIndex =
-      item.completedStepCount > 0 ? Math.min(item.completedStepCount, item.steps.length - 1) : undefined;
+      item.completedStepCount > 0
+        ? Math.min(item.completedStepCount, item.steps.length - 1)
+        : undefined;
     openFocus(item, { taskId: item.id, resumeStepIndex });
   };
 

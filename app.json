@@ -28,11 +28,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-localization",
-      "expo-secure-store",
-      "expo-router"
-    ],
+    "plugins": ["expo-localization", "expo-secure-store", "expo-router"],
     "extra": {
       "eas": {
         "projectId": "8b24b394-3e75-471c-937c-7622eced1e56"

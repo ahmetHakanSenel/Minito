@@ -3,18 +3,11 @@ import { View, Text, StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import Animated, {
-  FadeInDown,
-  SlideOutRight,
-  LinearTransition,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown, SlideOutRight, LinearTransition } from 'react-native-reanimated';
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
 import { parseTimeFromStep } from '../src/lib/timeParser';
 import { useAuroraContext } from '../src/lib/aurora';
-import {
-  saveActiveSession,
-  clearActiveSession,
-} from '../src/lib/storage/activeSessionStore';
+import { saveActiveSession, clearActiveSession } from '../src/lib/storage/activeSessionStore';
 import { recordFocusSession } from '../src/lib/stats/sessionStore';
 import { useTaskProgressSync } from '../src/features/tasks/controller/useTaskProgressSync';
 import * as Haptics from 'expo-haptics';
@@ -22,7 +15,6 @@ import * as Haptics from 'expo-haptics';
 // import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
-
 
 export default function FocusModeScreen() {
   const { t } = useTranslation();
@@ -41,7 +33,10 @@ export default function FocusModeScreen() {
     ? Math.max(0, parseInt(params.resumeStepIndex, 10) || 0)
     : -1;
   const [currentStepIndex, setCurrentStepIndex] = useState(initialStepIndex); // -1 = empathy/hook screen
-  const { syncProgress, markCompleted } = useTaskProgressSync(params.taskId, Math.max(0, initialStepIndex));
+  const { syncProgress, markCompleted } = useTaskProgressSync(
+    params.taskId,
+    Math.max(0, initialStepIndex)
+  );
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [showStepAnimation, setShowStepAnimation] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -234,9 +229,7 @@ export default function FocusModeScreen() {
         <StatusBar barStyle="light-content" />
         <View style={styles.emptyContainer}>
           <View className="bg-surface rounded-2xl p-6">
-            <Text className="text-textMain text-lg text-center">
-              {t('home.noSteps')}
-            </Text>
+            <Text className="text-textMain text-lg text-center">{t('home.noSteps')}</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -299,14 +292,9 @@ export default function FocusModeScreen() {
             )}
 
             {/* Ready Button */}
-            <Animated.View
-              entering={FadeInDown.delay(300).springify()}
-            >
+            <Animated.View entering={FadeInDown.delay(300).springify()}>
               <View style={styles.readyButton}>
-                <Text
-                  style={styles.readyButtonText}
-                  onPress={handleNext}
-                >
+                <Text style={styles.readyButtonText} onPress={handleNext}>
                   {t('focus.ready') || 'Hazırım'}
                 </Text>
               </View>
@@ -329,9 +317,7 @@ export default function FocusModeScreen() {
               totalSteps={totalSteps}
               onNext={handleNext}
               onPrevious={currentStepIndex > 0 ? handlePrevious : undefined}
-              onComplete={
-                currentStepIndex === totalSteps - 1 ? handleComplete : undefined
-              }
+              onComplete={currentStepIndex === totalSteps - 1 ? handleComplete : undefined}
               isCompleted={isCompleted}
               isFinalStep={isFinalStep}
               disabled={isAnimating}
@@ -439,4 +425,3 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 });
-

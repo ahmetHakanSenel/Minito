@@ -44,7 +44,7 @@ interface EnergyFlowBarsProps {
 // Icon mapping for project types
 const getProjectIcon = (type: ProjectType, color: string) => {
   const iconProps = { size: 18, color, strokeWidth: 1.8 };
-  
+
   const icons: Record<ProjectType, React.JSX.Element> = {
     work: <Briefcase {...iconProps} />,
     study: <GraduationCap {...iconProps} />,
@@ -57,7 +57,7 @@ const getProjectIcon = (type: ProjectType, color: string) => {
     personal: <Home {...iconProps} />,
     other: <Sparkles {...iconProps} />,
   };
-  
+
   return icons[type] || icons.other;
 };
 
@@ -73,21 +73,16 @@ const projectColors: string[] = [
   '#F9A8D4', // Pink
 ];
 
-export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({
-  projects,
-  maxProjects = 5,
-}) => {
+export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({ projects, maxProjects = 5 }) => {
   const { width } = useWindowDimensions();
-  
+
   // Sort by focus time and take top N
   const sortedProjects = useMemo(() => {
-    return [...projects]
-      .sort((a, b) => b.focusMinutes - a.focusMinutes)
-      .slice(0, maxProjects);
+    return [...projects].sort((a, b) => b.focusMinutes - a.focusMinutes).slice(0, maxProjects);
   }, [projects, maxProjects]);
 
   const maxMinutes = useMemo(
-    () => Math.max(...sortedProjects.map(p => p.focusMinutes), 1),
+    () => Math.max(...sortedProjects.map((p) => p.focusMinutes), 1),
     [sortedProjects]
   );
 
@@ -100,10 +95,7 @@ export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({
 
   if (sortedProjects.length === 0) {
     return (
-      <Animated.View 
-        entering={FadeInUp.delay(600).duration(500)}
-        style={styles.container}
-      >
+      <Animated.View entering={FadeInUp.delay(600).duration(500)} style={styles.container}>
         <Text style={styles.sectionTitle}>Enerji Akışı</Text>
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>Henüz proje verisi yok</Text>
@@ -113,18 +105,15 @@ export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({
   }
 
   return (
-    <Animated.View 
-      entering={FadeInUp.delay(600).duration(500)}
-      style={styles.container}
-    >
+    <Animated.View entering={FadeInUp.delay(600).duration(500)} style={styles.container}>
       <Text style={styles.sectionTitle}>Enerji Akışı</Text>
-      
+
       <View style={styles.barsContainer}>
         {sortedProjects.map((project, index) => {
           const barWidthPercent = getBarWidth(project.focusMinutes);
           const actualBarWidth = (barWidthPercent / 100) * barMaxWidth;
           const color = projectColors[index % projectColors.length];
-          
+
           return (
             <Animated.View
               key={project.id}
@@ -135,7 +124,7 @@ export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({
               <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
                 {getProjectIcon(project.type, color)}
               </View>
-              
+
               {/* Bar with gradient fade */}
               <View style={styles.barWrapper}>
                 <View style={[styles.barBackground, { width: barMaxWidth }]}>
@@ -151,7 +140,7 @@ export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({
                     ]}
                   />
                 </View>
-                
+
                 {/* Project name - subtle, underneath */}
                 <Text style={styles.projectName} numberOfLines={1}>
                   {project.name}
@@ -224,4 +213,3 @@ const styles = StyleSheet.create({
 });
 
 export default EnergyFlowBars;
-
