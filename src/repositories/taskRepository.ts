@@ -1,5 +1,6 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../data/supabase/client';
+import type { Tables } from '../data/supabase/database.types';
 import { breakTask } from '../lib/api/breakTask';
 import { getOrCreateGuestId } from '../lib/guestIdentity';
 import { FallbackReason } from '../safety';
@@ -37,16 +38,17 @@ export class TaskRepositoryError extends Error {
   }
 }
 
-type TaskBreakdownRow = {
-  id: string;
-  title: string;
-  empathy_bridge: string | null;
-  first_step_hook: string | null;
-  steps: unknown;
-  completed_step_count: number;
-  completed_at: string | null;
-  created_at: string;
-};
+type TaskBreakdownRow = Pick<
+  Tables<'task_breakdowns'>,
+  | 'id'
+  | 'title'
+  | 'empathy_bridge'
+  | 'first_step_hook'
+  | 'steps'
+  | 'completed_step_count'
+  | 'completed_at'
+  | 'created_at'
+>;
 
 const TABLE = 'task_breakdowns';
 const COLUMNS =
@@ -86,7 +88,7 @@ async function listRecent(limit: number): Promise<TaskBreakdown[]> {
   if (error) {
     throw toRepositoryError(error);
   }
-  return ((data ?? []) as TaskBreakdownRow[]).map(toTaskBreakdown);
+  return (data ?? []).map(toTaskBreakdown);
 }
 
 async function save(content: BreakdownContent): Promise<TaskBreakdown> {
@@ -103,7 +105,7 @@ async function save(content: BreakdownContent): Promise<TaskBreakdown> {
   if (error) {
     throw toRepositoryError(error);
   }
-  return toTaskBreakdown(data as TaskBreakdownRow);
+  return toTaskBreakdown(data);
 }
 
 async function breakDown(input: string): Promise<BreakdownOutcome> {
