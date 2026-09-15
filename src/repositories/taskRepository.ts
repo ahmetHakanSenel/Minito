@@ -2,6 +2,7 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { getSupabase } from '../data/supabase/client';
 import type { Tables } from '../data/supabase/database.types';
 import { breakTask } from '../lib/api/breakTask';
+import { normalizeSteps, type BreakdownStep } from '../lib/breakdownSteps';
 import { getOrCreateGuestId } from '../lib/guestIdentity';
 import { FallbackReason } from '../safety';
 
@@ -10,7 +11,7 @@ export type TaskBreakdown = {
   title: string;
   empathyBridge: string | null;
   firstStepHook: string | null;
-  steps: string[];
+  steps: BreakdownStep[];
   completedStepCount: number;
   completedAt: string | null;
   createdAt: string;
@@ -19,7 +20,10 @@ export type TaskBreakdown = {
 export type BreakdownContent = Pick<
   TaskBreakdown,
   'title' | 'empathyBridge' | 'firstStepHook' | 'steps'
->;
+> & {
+  /** Only fresh breakdowns carry one; history rows do not store it. */
+  stoppingPoint?: string | null;
+};
 
 export type BreakdownOutcome =
   | { status: 'ready'; content: BreakdownContent; saved: TaskBreakdown | null; isOffline: boolean }
@@ -73,15 +77,25 @@ function table() {
   }
 }
 
+// Rows use the edge function's snake_case step shape, so one reader handles rows and responses.
+function toStepRows(steps: BreakdownStep[]) {
+  return steps.map((step) => ({
+    id: step.id,
+    title: step.title,
+    instruction: step.instruction,
+    estimated_minutes: step.estimatedMinutes,
+    difficulty: step.difficulty,
+  }));
+}
+
 function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {
   return {
     id: row.id,
     title: row.title,
     empathyBridge: row.empathy_bridge,
     firstStepHook: row.first_step_hook,
-    steps: Array.isArray(row.steps)
-      ? row.steps.filter((step): step is string => typeof step === 'string')
-      : [],
+    // Rows saved before structured output hold plain strings; they are upgraded on read.
+    steps: normalizeSteps(row.steps),
     completedStepCount: row.completed_step_count,
     completedAt: row.completed_at,
     createdAt: row.created_at,
@@ -105,7 +119,7 @@ async function save(content: BreakdownContent): Promise<TaskBreakdown> {
       title: content.title,
       empathy_bridge: content.empathyBridge,
       first_step_hook: content.firstStepHook,
-      steps: content.steps,
+      steps: toStepRows(content.steps),
     })
     .select(COLUMNS)
     .single();
@@ -129,12 +143,14 @@ async function breakDown(input: string): Promise<BreakdownOutcome> {
     title,
     empathyBridge: result.empathyBridge ?? null,
     firstStepHook: result.firstStepHook ?? null,
+    stoppingPoint: result.stoppingPoint ?? null,
     steps: result.steps,
   };
-  const isOffline = result.isOfflineFallback === true;
+  const isOffline = result.source === 'offline';
 
-  // Offline fallback steps are generic, so they are not worth keeping in history.
-  if (isOffline) {
+  // Offline steps and the server's deterministic fallback are generic, so they are not worth
+  // keeping in history.
+  if (isOffline || result.source === 'fallback') {
     return { status: 'ready', content, saved: null, isOffline };
   }
 

@@ -27,7 +27,13 @@
     "previous": "Previous",
     "complete": "DONE",
     "startWith": "Start with:",
-    "ready": "I'm Ready"
+    "ready": "I'm Ready",
+    "stoppingPoint": "Permission to stop",
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    }
   },
   "success": {
     "title": "You Minitized {{count}} steps!",

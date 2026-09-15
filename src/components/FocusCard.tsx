@@ -14,9 +14,12 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import { haptics } from '../lib/ui/haptics';
+import type { BreakdownStep } from '../lib/breakdownSteps';
 
 interface FocusCardProps {
-  step: string;
+  step: BreakdownStep;
+  /** Shown on the final step: explicit permission to stop there. */
+  stoppingPoint?: string;
   stepNumber: number;
   totalSteps: number;
   onComplete?: () => void;
@@ -34,6 +37,7 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 
 export const FocusCard: React.FC<FocusCardProps> = ({
   step,
+  stoppingPoint,
   stepNumber,
   totalSteps,
   onComplete,
@@ -147,6 +151,7 @@ export const FocusCard: React.FC<FocusCardProps> = ({
         <View className="flex-row items-center justify-between mb-6">
           <Text className="text-textMuted text-sm">
             {t('focus.step', { current: stepNumber, total: totalSteps })}
+            {step.difficulty ? `  ·  ${t(`focus.difficulty.${step.difficulty}`)}` : ''}
           </Text>
           {isCompleted && (
             <AnimatedView
@@ -159,7 +164,20 @@ export const FocusCard: React.FC<FocusCardProps> = ({
         </View>
 
         {/* Step Content */}
-        <Text className="text-textMain text-2xl font-semibold leading-8 mb-8">{step}</Text>
+        <View className="mb-8">
+          <Text className="text-textMain text-2xl font-semibold leading-8">{step.title}</Text>
+          {step.instruction ? (
+            <Text className="text-textMuted text-base leading-6 mt-3">{step.instruction}</Text>
+          ) : null}
+          {stoppingPoint ? (
+            <View className="mt-5 rounded-2xl bg-success/10 border border-success/20 px-4 py-3">
+              <Text className="text-success text-[11px] font-semibold uppercase tracking-widest mb-1">
+                {t('focus.stoppingPoint')}
+              </Text>
+              <Text className="text-textMain text-sm leading-5">{stoppingPoint}</Text>
+            </View>
+          ) : null}
+        </View>
 
         {/* Timer Slot with Divider - Only rendered when timerSlot is provided */}
         {timerSlot && (

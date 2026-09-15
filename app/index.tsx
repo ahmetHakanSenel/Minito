@@ -132,6 +132,7 @@ export default function HomeScreen() {
         input: content.title,
         empathyBridge: content.empathyBridge ?? '',
         firstStepHook: content.firstStepHook ?? '',
+        ...(content.stoppingPoint ? { stoppingPoint: content.stoppingPoint } : {}),
         ...(taskId ? { taskId } : {}),
         ...(resumeStepIndex !== undefined ? { resumeStepIndex: String(resumeStepIndex) } : {}),
       },
@@ -147,6 +148,7 @@ export default function HomeScreen() {
         steps: resumableSession.steps,
         empathyBridge: resumableSession.empathyBridge,
         firstStepHook: resumableSession.firstStepHook,
+        stoppingPoint: resumableSession.stoppingPoint,
       },
       { taskId: resumableSession.taskId, resumeStepIndex: resumableSession.currentStepIndex }
     );

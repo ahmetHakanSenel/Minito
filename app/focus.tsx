@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, SlideOutRight, LinearTransition } from 'react-native-reanimated';
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
 import { parseTimeFromStep } from '../src/lib/timeParser';
+import { normalizeSteps, type BreakdownStep } from '../src/lib/breakdownSteps';
 import { useAuroraContext } from '../src/lib/aurora';
 import { saveActiveSession, clearActiveSession } from '../src/lib/storage/activeSessionStore';
 import { recordFocusSession } from '../src/lib/stats/sessionStore';
@@ -15,6 +16,14 @@ import { haptics } from '../src/lib/ui/haptics';
 // import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
+
+// An explicit duration in the step's text wins; otherwise the model's estimate timeboxes the step.
+function stepDuration(step: BreakdownStep) {
+  return (
+    parseTimeFromStep(`${step.title} ${step.instruction}`) ??
+    (step.estimatedMinutes ? { minutes: step.estimatedMinutes, seconds: 0 } : null)
+  );
+}
 
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
 
@@ -27,6 +36,7 @@ export default function FocusModeScreen() {
     input: string;
     empathyBridge?: string;
     firstStepHook?: string;
+    stoppingPoint?: string;
     resumeStepIndex?: string;
     taskId?: string;
   }>();
@@ -59,11 +69,10 @@ export default function FocusModeScreen() {
   // const { startAmbience, stopAmbience } = useAmbientAudio();
 
   // A malformed param must degrade to the empty state, never crash the screen
-  const steps: string[] = (() => {
+  const steps: BreakdownStep[] = (() => {
     if (!params.steps) return [];
     try {
-      const parsed = JSON.parse(params.steps);
-      return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : [];
+      return normalizeSteps(JSON.parse(params.steps));
     } catch (error) {
       console.warn('focus: failed to parse steps param', error);
       return [];
@@ -71,6 +80,7 @@ export default function FocusModeScreen() {
   })();
   const empathyBridge = params.empathyBridge || '';
   const firstStepHook = params.firstStepHook || '';
+  const stoppingPoint = params.stoppingPoint || '';
   const hasEmpathyScreen = empathyBridge || firstStepHook;
   const totalSteps = steps.length;
 
@@ -83,6 +93,7 @@ export default function FocusModeScreen() {
       steps,
       empathyBridge,
       firstStepHook,
+      stoppingPoint,
       currentStepIndex: Math.max(0, currentStepIndex),
       completedSteps: [...completedSteps],
       taskId: params.taskId,
@@ -241,7 +252,9 @@ export default function FocusModeScreen() {
   // Empathy/Hook intro screen (currentStepIndex === -1)
   const isEmpathyScreen = currentStepIndex === -1 && hasEmpathyScreen;
 
-  const currentStep = currentStepIndex >= 0 ? steps[currentStepIndex] : '';
+  // Clamped so the intro index (-1) and a stale resume index both land on a real step.
+  const currentStep = steps[Math.min(Math.max(currentStepIndex, 0), totalSteps - 1)];
+  const currentDuration = stepDuration(currentStep);
   const isCompleted = currentStepIndex >= 0 && completedSteps.has(currentStepIndex);
 
   const isFinalStep = currentStepIndex === totalSteps - 1;
@@ -315,6 +328,7 @@ export default function FocusModeScreen() {
           <View style={styles.stepWrapper}>
             <FocusCard
               step={currentStep}
+              stoppingPoint={isFinalStep ? stoppingPoint : undefined}
               stepNumber={currentStepIndex + 1}
               totalSteps={totalSteps}
               onNext={handleNext}
@@ -324,19 +338,15 @@ export default function FocusModeScreen() {
               isFinalStep={isFinalStep}
               disabled={isAnimating}
               timerCompletionLoop={timerCompletionLoop}
-              timerSlot={(() => {
-                const parsedTime = parseTimeFromStep(currentStep);
-                if (parsedTime) {
-                  return (
-                    <InlineTimer
-                      initialMinutes={parsedTime.minutes}
-                      initialSeconds={parsedTime.seconds}
-                      onCompletionStateChange={setTimerCompletionLoop}
-                    />
-                  );
-                }
-                return undefined;
-              })()}
+              timerSlot={
+                currentDuration ? (
+                  <InlineTimer
+                    initialMinutes={currentDuration.minutes}
+                    initialSeconds={currentDuration.seconds}
+                    onCompletionStateChange={setTimerCompletionLoop}
+                  />
+                ) : undefined
+              }
             />
           </View>
         </AnimatedView>

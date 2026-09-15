@@ -1,18 +1,24 @@
 # break-task Edge Function
 
-This Supabase Edge Function breaks down user tasks into actionable steps using OpenAI or Gemini.
+This Supabase Edge Function turns one overwhelming task into a validated, structured micro-step plan using OpenAI or Gemini.
 Only signed-in users can call it.
+
+## Files
+
+- `index.ts`: HTTP handler covering auth, moderation, rate limits, providers, the time budget and persistence.
+- `pipeline.ts`: the AI pipeline: layered prompt, output contract, validation, repair and fallback. It has no HTTP or storage dependencies.
+- `pipeline.test.ts`: Deno tests for the pipeline. Run them with `deno test --no-lock supabase/functions/`; CI runs them too.
 
 ## Setup
 
-1. Apply the migrations in `supabase/migrations` (009 adds `tasks.user_id` and 010 adds `tasks.client_ip_hash`; rate limiting relies on both).
+1. Apply the migrations in `supabase/migrations`. Migration 009 adds `tasks.user_id` and 010 adds `tasks.client_ip_hash`; rate limiting relies on both.
 
 2. Set secrets (`supabase secrets set NAME=value`):
    - `HMAC_SECRET` (required): key for HMAC-SHA256 input hashing, e.g. `openssl rand -hex 32`. The function refuses to run without it.
-   - `AI_PROVIDER`: `openai` (default) or `gemini`
-   - `OPENAI_API_KEY`: required for the OpenAI provider and for moderation
-   - `GEMINI_API_KEY` / `GEMINI_MODEL`: required for the Gemini provider
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: set automatically by Supabase
+   - `AI_PROVIDER`: `openai` (default) or `gemini`.
+   - `OPENAI_API_KEY`: required for the OpenAI provider and for moderation.
+   - `GEMINI_API_KEY` / `GEMINI_MODEL`: required for the Gemini provider.
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: set automatically by Supabase.
 
 3. Deploy the function:
    ```bash
@@ -26,11 +32,13 @@ Only signed-in users can call it.
 **Method:** POST
 
 **Headers:**
+
 - `Content-Type: application/json`
 - `apikey: <anon-key>`
-- `Authorization: Bearer <user-access-token>` (required; anon-key or expired tokens get `401`)
+- `Authorization: Bearer <user-access-token>`: required. Anon-key or expired tokens get `401`.
 
 **Request Body:**
+
 ```json
 {
   "input": "Learn React Native",
@@ -39,35 +47,80 @@ Only signed-in users can call it.
 }
 ```
 
-**Success Response:**
+**Success Response** (output contract `task-breakdown-v1`):
+
 ```json
 {
   "success": true,
-  "empathy_bridge": "…",
-  "first_step_hook": "…",
-  "steps": ["Step 1", "Step 2", "Step 3"],
-  "token_usage": 150,
-  "latency_ms": 1234
+  "breakdown": {
+    "language": "en",
+    "empathy_bridge": "…",
+    "first_step_hook": "…",
+    "steps": [
+      {
+        "id": "step-1",
+        "title": "Open the course page",
+        "instruction": "Open the first lesson and read only its title.",
+        "estimated_minutes": 2,
+        "difficulty": "easy"
+      }
+    ],
+    "stopping_point": "…"
+  },
+  "meta": { "prompt_version": "task-breakdown-v1", "source": "model" },
+  "token_usage": 612,
+  "latency_ms": 3120
 }
 ```
 
+The value of `meta.source` is one of:
+
+- `model`: the first reply was valid.
+- `repaired`: the reply was valid after one repair request.
+- `fallback`: the deterministic plan was used.
+
 **Error Response (Content Flagged):**
+
 ```json
 {
   "success": false,
   "fallback_reason": "CONTENT_FLAGGED"
 }
 ```
+
 The client renders the panic kit in the user's own locale; the server never ships crisis copy.
+
+## AI Pipeline
+
+1. **Layered prompt:** Five layers are joined into one system prompt: Identity, Rules, Tone, Decomposition and Output Contract. The prompt is versioned by `PROMPT_VERSION`; bump it whenever the prompt or the contract changes.
+2. **Fenced input:**
+   - The task is wrapped in `<task_input>` and the display name in `<user_name>`.
+   - Those tags are stripped from the values themselves, so the input cannot close its own fence.
+   - The Rules layer tells the model to treat fenced text as data. It must ignore role changes, instruction overrides and schema-bypass attempts found there.
+3. **Generate:** The request uses provider JSON mode: OpenAI `response_format: json_object`, or Gemini `responseMimeType: application/json`.
+4. **Validate:** The reply goes through `JSON.parse`, then the zod `TaskBreakdownSchema`. The contract requires:
+   - 3 to 7 steps with unique ids.
+   - `estimated_minutes` between 1 and 10.
+   - Length caps on every string.
+5. **Repair:** If validation fails, exactly one follow-up request is sent, carrying the validation issues. It has no transport retries.
+6. **Fallback:** If the repair also fails, a deterministic, schema-valid plan is returned in the task's language. These plans are validated at module load.
+
+If the provider cannot be reached at all, the function answers `503 AI_DOWN` instead, and the client falls back to its own offline steps.
 
 ## Implementation Details
 
-- **Authentication**: The bearer token must belong to a signed-in user; the user's display name personalizes the reply
-- **Fail-Soft Philosophy**: Provider and persistence failures are handled gracefully, never blocking UX
-- **Privacy**: Input is hashed with HMAC-SHA256, never stored in raw form
-- **Moderation**: Fail-Safe - if flagged, returns `CONTENT_FLAGGED` (requires `OPENAI_API_KEY`)
-- **Rate Limiting**: 20 requests/hour per authenticated user and 40/hour per client IP (`429 RATE_DOWN`); the IP is stored only as an HMAC. Checks fail open only if the query itself errors
-- **Client IP**: Taken from `cf-connecting-ip`, then `x-real-ip`, then the first `x-forwarded-for` hop (caller-controlled, so best-effort only)
-- **Caching**: System prompt cached for 60 seconds
-- **Retries**: AI calls retry 3 times with exponential backoff
-- **Persistence**: Task records retry 3 times, failures are logged but don't block response
+- **Authentication:** The bearer token must belong to a signed-in user. The user's display name personalizes the reply.
+- **Time budget:**
+  - The whole request, including one repair, runs inside a 17s budget that fits under the client's 20s timeout.
+  - Each provider call is capped at 9s.
+  - The first generation gets one transport retry, on network errors and 5xx responses only; a 429 is not retried.
+- **Logging:** Log lines are structured JSON tagged with `prompt_version`, `source` and any validation issues. They never include the task text or the model's reply.
+- **Privacy:** Input is hashed with HMAC-SHA256 and never stored in raw form.
+- **Moderation:** Fail-safe. If content is flagged, the function returns `CONTENT_FLAGGED` (requires `OPENAI_API_KEY`).
+- **Rate Limiting:**
+  - 20 requests/hour per authenticated user and 40/hour per client IP (`429 RATE_DOWN`).
+  - The IP is stored only as an HMAC.
+  - Checks fail open only if the query itself errors.
+- **Client IP:** Taken from `cf-connecting-ip`, then `x-real-ip`, then the first `x-forwarded-for` hop. That hop is caller-controlled, so this is best-effort only.
+- **Legacy table:** `system_prompts` is no longer read. A runtime-editable prompt could silently break the output contract.
+- **Persistence:** Task records retry 3 times. Failures are logged but don't block the response.

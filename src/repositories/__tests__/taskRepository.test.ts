@@ -1,5 +1,6 @@
 import { getSupabase } from '../../data/supabase/client';
 import { breakTask } from '../../lib/api/breakTask';
+import type { BreakdownStep } from '../../lib/breakdownSteps';
 import { FallbackReason } from '../../safety';
 import { taskRepository } from '../taskRepository';
 
@@ -35,12 +36,31 @@ function mockQuery(result: QueryResult) {
   return builder;
 }
 
+const cupStep: BreakdownStep = {
+  id: 'step-1',
+  title: 'Carry three cups to the sink',
+  instruction: 'No washing yet.',
+  estimatedMinutes: 2,
+  difficulty: 'easy',
+};
+
 const row = {
   id: 'task-1',
   title: 'Clean the kitchen',
   empathy_bridge: 'Kitchens feel endless, I know.',
   first_step_hook: 'Stand up.',
-  steps: ['Grab one cup', 42, 'Rinse it'],
+  // A legacy string step, a malformed entry and a structured step side by side.
+  steps: [
+    'Grab one cup',
+    42,
+    {
+      id: 'step-2',
+      title: 'Rinse it',
+      instruction: 'Warm water, ten seconds.',
+      estimated_minutes: 1,
+      difficulty: 'easy',
+    },
+  ],
   completed_step_count: 1,
   completed_at: null,
   created_at: '2026-09-15T10:00:00Z',
@@ -51,7 +71,7 @@ beforeEach(() => {
 });
 
 describe('taskRepository.listRecent', () => {
-  it('maps rows to domain objects and drops malformed steps', async () => {
+  it('maps rows to domain objects, upgrading legacy steps and dropping malformed ones', async () => {
     mockQuery({ data: [row], error: null });
 
     await expect(taskRepository.listRecent(8)).resolves.toEqual([
@@ -60,7 +80,22 @@ describe('taskRepository.listRecent', () => {
         title: 'Clean the kitchen',
         empathyBridge: 'Kitchens feel endless, I know.',
         firstStepHook: 'Stand up.',
-        steps: ['Grab one cup', 'Rinse it'],
+        steps: [
+          {
+            id: 'step-1',
+            title: 'Grab one cup',
+            instruction: '',
+            estimatedMinutes: null,
+            difficulty: null,
+          },
+          {
+            id: 'step-2',
+            title: 'Rinse it',
+            instruction: 'Warm water, ten seconds.',
+            estimatedMinutes: 1,
+            difficulty: 'easy',
+          },
+        ],
         completedStepCount: 1,
         completedAt: null,
         createdAt: '2026-09-15T10:00:00Z',
@@ -112,11 +147,7 @@ describe('taskRepository.breakDown', () => {
   });
 
   it('never saves generic offline fallback steps', async () => {
-    mockedBreakTask.mockResolvedValue({
-      success: true,
-      steps: ['Take one small step'],
-      isOfflineFallback: true,
-    });
+    mockedBreakTask.mockResolvedValue({ success: true, steps: [cupStep], source: 'offline' });
 
     const outcome = await taskRepository.breakDown('Clean the kitchen');
 
@@ -124,12 +155,23 @@ describe('taskRepository.breakDown', () => {
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
-  it('saves successful breakdowns under the trimmed title', async () => {
+  it("never saves the server's deterministic fallback plan either", async () => {
+    mockedBreakTask.mockResolvedValue({ success: true, steps: [cupStep], source: 'fallback' });
+
+    const outcome = await taskRepository.breakDown('Clean the kitchen');
+
+    expect(outcome).toMatchObject({ status: 'ready', saved: null, isOffline: false });
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('saves structured breakdowns under the trimmed title', async () => {
     mockedBreakTask.mockResolvedValue({
       success: true,
-      steps: ['Grab one cup', 'Rinse it'],
+      steps: [cupStep],
       empathyBridge: 'Kitchens feel endless, I know.',
       firstStepHook: 'Stand up.',
+      stoppingPoint: 'You can stop here.',
+      source: 'model',
     });
     const query = mockQuery({ data: row, error: null });
 
@@ -138,17 +180,28 @@ describe('taskRepository.breakDown', () => {
     expect(outcome).toMatchObject({
       status: 'ready',
       isOffline: false,
-      content: { title: 'Clean the kitchen' },
+      content: { title: 'Clean the kitchen', stoppingPoint: 'You can stop here.' },
       saved: { id: 'task-1' },
     });
     expect(query.insert).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Clean the kitchen', steps: ['Grab one cup', 'Rinse it'] })
+      expect.objectContaining({
+        title: 'Clean the kitchen',
+        steps: [
+          {
+            id: 'step-1',
+            title: 'Carry three cups to the sink',
+            instruction: 'No washing yet.',
+            estimated_minutes: 2,
+            difficulty: 'easy',
+          },
+        ],
+      })
     );
   });
 
   it('still returns the breakdown when saving fails', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
-    mockedBreakTask.mockResolvedValue({ success: true, steps: ['Grab one cup'] });
+    mockedBreakTask.mockResolvedValue({ success: true, steps: [cupStep], source: 'model' });
     mockQuery({ data: null, error: { code: '42501', message: 'permission denied' } });
 
     await expect(taskRepository.breakDown('Clean the kitchen')).resolves.toMatchObject({
