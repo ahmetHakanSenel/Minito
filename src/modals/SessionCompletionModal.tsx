@@ -168,7 +168,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                                 <FocusIcon size={22} color="#C4B5FD" strokeWidth={2} />
                             </View>
                             <Text style={styles.subtitle} numberOfLines={2}>
-                                "{taskTitle}" için {formatDuration(sessionDuration)} odaklandın
+                                “{taskTitle}” için {formatDuration(sessionDuration)} odaklandın
                             </Text>
                         </AnimatedView>
 
@@ -247,7 +247,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
                         {/* Helper Text */}
                         <Text style={styles.helperText}>
-                            "Sadece Oturum" seçersen görev aktif kalır ve XP kazanırsın
+                            “Sadece Oturum” seçersen görev aktif kalır ve XP kazanırsın
                         </Text>
                     </View>
                 </SafeAreaView>
