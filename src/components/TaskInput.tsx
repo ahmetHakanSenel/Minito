@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, BrainCircuit } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../lib/ui/haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -136,7 +136,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
     setIsFocused(true);
     onFocus?.();
     if (!hasFocused) {
-      Haptics.selectionAsync();
+      haptics.selection();
       setHasFocused(true);
     }
   };
@@ -145,9 +145,9 @@ export const TaskInput: React.FC<TaskInputProps> = ({
     setIsFocused(false);
   };
 
-  // God Mode: Heavy haptic on main button press
+  // The heaviest tap in the app marks the moment an AI breakdown is committed.
   const handleSubmit = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    haptics.commit();
     onSubmit();
   };
 

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, ChevronRight } from 'lucide-react-native';
+import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react-native';
+import { EmptyState } from '../../../components/feedback/EmptyState';
 import type { TaskBreakdown } from '../../../repositories/taskRepository';
 import type { HistoryStatus } from '../controller/useTaskBreakdowns';
 
@@ -128,7 +129,14 @@ export function TaskHistoryList({
         </View>
       );
     }
-    return <Text className="text-textMuted text-sm leading-5 py-3">{t('tasks.empty')}</Text>;
+    return (
+      <EmptyState
+        compact
+        icon={Sparkles}
+        title={t('tasks.emptyTitle')}
+        description={t('tasks.empty')}
+      />
+    );
   };
 
   return (

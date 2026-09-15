@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, BarChart3 } from 'lucide-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ import {
   EnergyFlowBars,
 } from '../src/components';
 import { useProjects } from '../src/context/ProjectContext';
+import { EmptyState } from '../src/components/feedback/EmptyState';
 import {
   getFocusSessions,
   aggregateHourly,
@@ -128,10 +129,12 @@ export default function AnalyticsScreen() {
           </>
         ) : (
           /* Honest empty state — no fabricated charts */
-          <Animated.View entering={FadeIn.delay(300).duration(500)} style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>{t('stats.emptyTitle')}</Text>
-            <Text style={styles.emptyStateText}>{t('stats.emptyText')}</Text>
-          </Animated.View>
+          <EmptyState
+            icon={BarChart3}
+            title={t('stats.emptyTitle')}
+            description={t('stats.emptyText')}
+            action={{ label: t('stats.emptyAction'), onPress: () => router.push('/planner') }}
+          />
         )}
 
         {/* Bottom padding */}
@@ -175,23 +178,5 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     marginVertical: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.85)',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyStateText: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.45)',
-    textAlign: 'center',
-    lineHeight: 19,
   },
 });

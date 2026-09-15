@@ -152,6 +152,57 @@
     "message": "Bu ekranda beklenmedik bir hata oluştu. Hata raporlandı; tekrar denemek genellikle işe yarar.",
     "retry": "Tekrar dene"
   },
+  "health": {
+    "operational": "Tüm sistemler çalışıyor",
+    "degraded": "Performans düşük",
+    "disruption": "Hizmet kesintisi",
+    "checking": "Sistemler kontrol ediliyor…",
+    "offline": "Çevrimdışı mod",
+    "title": "Sistem durumu",
+    "subtitle": "Minito bulut servislerine canlı kontroller",
+    "api": "Bulut API",
+    "apiDetail": "Supabase kimlik doğrulama ve veritabanı",
+    "ai": "AI geçidi",
+    "aiDetail": "break-task edge fonksiyonu",
+    "sync": "Görev senkronizasyonu",
+    "syncDetail": "Görev geçmişin",
+    "session": "Oturum güvenliği",
+    "sessionDetail": "AES-256 ile şifreli, anahtar cihaz anahtar deposunda",
+    "lastChecked": "Son kontrol {{time}}",
+    "refresh": "Yenile",
+    "state": {
+      "operational": "Çalışıyor",
+      "degraded": "Yavaş",
+      "down": "Erişilemiyor",
+      "checking": "Kontrol ediliyor",
+      "unconfigured": "Yapılandırılmadı"
+    }
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "preferences": "Tercihler",
+    "notifications": "Bildirimler",
+    "soundEffects": "Ses efektleri",
+    "language": "Dil",
+    "support": "Destek",
+    "privacy": "Gizlilik ve veri",
+    "help": "Yardım ve SSS",
+    "account": "Hesap",
+    "signOut": "Çıkış yap",
+    "signOutConfirmTitle": "Çıkış yapılsın mı?",
+    "signOutConfirmMessage": "İstediğin zaman tekrar giriş yapabilirsin; görevlerin senkronize kalır.",
+    "comingSoon": "Yakında",
+    "version": "Minito v{{version}}"
+  },
+  "planner": {
+    "emptyTitle": "Henüz proje yok",
+    "emptyText": "Büyük hedeflerini projelere ayır; Minito sıradaki adımı hep önünde tutsun.",
+    "emptyAction": "Proje ekle",
+    "demoSuggest": "Örnek görev öner",
+    "demoSuggesting": "Örnekler hazırlanıyor…",
+    "demoBadge": "DEMO",
+    "demoNote": "Şimdilik örnek adımlar; AI destekli planlama yakında."
+  },
   "profile": {
     "namePrompt": "Sana nasıl hitap edelim?",
     "namePlaceholder": "Adın ya da takma adın",
@@ -163,6 +214,13 @@
   },
   "tasks": {
     "recentTitle": "Son görevler",
+    "emptyTitle": "Henüz görev yok",
+    "progress": {
+      "title": "Minito üzerinde çalışıyor",
+      "analyzing": "Bilişsel yük analiz ediliyor…",
+      "generating": "Mikro adımlar oluşturuluyor…",
+      "finalizing": "Odak modu hazırlanıyor…"
+    },
     "empty": "Parçaladığın görevler burada görünecek ve cihazların arasında senkronize olacak.",
     "stepsProgress": "{{done}}/{{total}} adım",
     "completed": "Tamamlandı",
@@ -187,7 +245,8 @@
   "stats": {
     "title": "İçgörüler",
     "emptyTitle": "Henüz içgörü yok",
-    "emptyText": "Planlayıcıdan bir odak oturumu tamamladığında ritmin, devamlılığın ve akış verilerin burada görünecek — hepsi gerçek, hiçbiri uydurma değil."
+    "emptyText": "Planlayıcıdan bir odak oturumu tamamladığında ritmin, devamlılığın ve akış verilerin burada görünecek — hepsi gerçek, hiçbiri uydurma değil.",
+    "emptyAction": "Planlayıcıyı aç"
   },
   "flowState": {
     "flow": {

@@ -17,15 +17,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { LogOut, X } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
 import { TaskInput, OfflineBanner, MinitoIcon } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
 import { DashboardModal } from '../src/modals';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { DisplayNameEditor } from '../src/features/auth/ui/DisplayNameEditor';
+import { useSystemHealth } from '../src/features/health/controller/useSystemHealth';
+import { SystemStatusPill } from '../src/features/health/ui/SystemStatus';
 import { useTaskBreakdowns } from '../src/features/tasks/controller/useTaskBreakdowns';
+import { BreakdownProgress } from '../src/features/tasks/ui/BreakdownProgress';
 import { TaskHistoryList } from '../src/features/tasks/ui/TaskHistoryList';
 import type { BreakdownContent, TaskBreakdown } from '../src/repositories/taskRepository';
+import { haptics } from '../src/lib/ui/haptics';
 import { useKeepAboveKeyboard } from '../src/lib/ui/useKeepAboveKeyboard';
 import { FallbackReason } from '../src/safety';
 import {
@@ -45,6 +48,11 @@ export default function HomeScreen() {
   const { t } = useTranslation();
   const { user, displayName, signOut, updateDisplayName } = useAuth();
   const { items, historyStatus, isBreakingDown, refresh, breakDown, remove } = useTaskBreakdowns();
+  const {
+    snapshot: healthSnapshot,
+    isChecking: isCheckingHealth,
+    refresh: refreshHealth,
+  } = useSystemHealth();
   const [input, setInput] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [isDashboardVisible, setIsDashboardVisible] = useState(false);
@@ -66,7 +74,8 @@ export default function HomeScreen() {
   const showNameEditor = isEditingName || (!displayName && !isNamePromptDismissed);
   const menuName = displayName ?? user?.email ?? t('dashboard.guest');
 
-  // Returning from focus mode changes both the resumable session and task progress.
+  // Returning from focus mode changes the resumable session, task progress and possibly
+  // connectivity, so everything the dashboard shows is re-checked on focus.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -74,27 +83,28 @@ export default function HomeScreen() {
         if (!cancelled) setResumableSession(session);
       });
       refresh();
+      refreshHealth();
       return () => {
         cancelled = true;
       };
-    }, [refresh])
+    }, [refresh, refreshHealth])
   );
 
   const handleSignOut = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     setIsSigningOut(true);
     try {
       // The root auth guard redirects to /login once the session is cleared.
       await signOut();
     } catch {
       setIsSigningOut(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      haptics.error();
       Alert.alert(t('common.error'), t('errors.signOutFailed'));
     }
   };
 
   const openNameEditor = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     setIsEditingName(true);
   };
 
@@ -130,7 +140,7 @@ export default function HomeScreen() {
 
   const handleResumeSession = () => {
     if (!resumableSession) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     openFocus(
       {
         title: resumableSession.input,
@@ -143,7 +153,7 @@ export default function HomeScreen() {
   };
 
   const handleDismissSession = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     clearActiveSession();
     setResumableSession(null);
   };
@@ -161,7 +171,7 @@ export default function HomeScreen() {
     keyboardScroll.onScroll(event);
     const now = Date.now();
     if (now - lastHapticTime.current > 300) {
-      Haptics.selectionAsync();
+      haptics.selection();
       lastHapticTime.current = now;
     }
   };
@@ -172,7 +182,7 @@ export default function HomeScreen() {
       setIsOffline(true);
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    haptics.error();
     Alert.alert(
       t('common.error'),
       reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown')
@@ -196,6 +206,7 @@ export default function HomeScreen() {
         handleBreakdownFailure(outcome.reason);
         return;
       }
+      haptics.success();
       setIsOffline(outcome.isOffline);
       setInput('');
       openFocus(outcome.content, { taskId: outcome.saved?.id });
@@ -206,7 +217,7 @@ export default function HomeScreen() {
   };
 
   const handleOpenBreakdown = (item: TaskBreakdown) => {
-    Haptics.selectionAsync();
+    haptics.selection();
     // Completed tasks replay from the start without touching their saved progress.
     if (item.completedAt !== null) {
       openFocus(item);
@@ -220,7 +231,7 @@ export default function HomeScreen() {
   };
 
   const handleDeleteBreakdown = (item: TaskBreakdown) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.warning();
     Alert.alert(t('tasks.deleteTitle'), t('tasks.deleteMessage'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -228,7 +239,7 @@ export default function HomeScreen() {
         style: 'destructive',
         onPress: () => {
           remove(item.id).catch(() => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            haptics.error();
             Alert.alert(t('common.error'), t('tasks.deleteFailed'));
           });
         },
@@ -281,7 +292,7 @@ export default function HomeScreen() {
           onLayout={keyboardScroll.onLayout}
           scrollEventThrottle={16}
         >
-          <View className="flex-row items-center justify-between mb-8">
+          <View className="flex-row items-center justify-between mb-4">
             <View className="flex-1 mr-4">
               <Text className="text-textMuted text-sm">{t('dashboard.welcome')}</Text>
               {displayName ? (
@@ -321,6 +332,15 @@ export default function HomeScreen() {
               </TouchableOpacity>
               <HeaderUserWidget onPress={() => setIsDashboardVisible(true)} />
             </View>
+          </View>
+
+          <View className="mb-6">
+            <SystemStatusPill
+              snapshot={healthSnapshot}
+              isChecking={isCheckingHealth}
+              syncStatus={historyStatus}
+              onRefresh={refreshHealth}
+            />
           </View>
 
           {showNameEditor && (
@@ -394,13 +414,17 @@ export default function HomeScreen() {
                 />
               </View>
 
-              <TaskHistoryList
-                items={items}
-                status={historyStatus}
-                onOpen={handleOpenBreakdown}
-                onDelete={handleDeleteBreakdown}
-                onRetry={refresh}
-              />
+              {isBreakingDown ? (
+                <BreakdownProgress />
+              ) : (
+                <TaskHistoryList
+                  items={items}
+                  status={historyStatus}
+                  onOpen={handleOpenBreakdown}
+                  onDelete={handleDeleteBreakdown}
+                  onRetry={refresh}
+                />
+              )}
             </View>
           </View>
         </ScrollView>

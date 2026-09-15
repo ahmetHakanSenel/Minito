@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../src/lib/ui/haptics';
 import { MinitoIcon } from '../src/components';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import {
@@ -68,12 +68,12 @@ export default function LoginScreen() {
     setPending(action);
     try {
       await task();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
     } catch (error) {
       const code = error instanceof AuthRepositoryError ? error.code : 'unknown';
       if (code !== 'cancelled') {
         setErrorCode(code);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        haptics.error();
       }
     } finally {
       setPending(null);
@@ -110,7 +110,7 @@ export default function LoginScreen() {
   };
 
   const toggleMode = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     setMode((current) => (current === 'signIn' ? 'signUp' : 'signIn'));
     setErrorCode(null);
     setNotice(null);

@@ -10,7 +10,7 @@ import { useAuroraContext } from '../src/lib/aurora';
 import { saveActiveSession, clearActiveSession } from '../src/lib/storage/activeSessionStore';
 import { recordFocusSession } from '../src/lib/stats/sessionStore';
 import { useTaskProgressSync } from '../src/features/tasks/controller/useTaskProgressSync';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../src/lib/ui/haptics';
 // Ambient audio temporarily disabled until asset is added
 // import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
 
@@ -102,7 +102,7 @@ export default function FocusModeScreen() {
 
   useEffect(() => {
     // Haptic feedback on mount
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
 
     // If no empathy screen, start at step 0
     if (!hasEmpathyScreen) {
@@ -122,7 +122,7 @@ export default function FocusModeScreen() {
     // From empathy screen (-1) to first step (0)
     if (currentStepIndex === -1) {
       setCurrentStepIndex(0);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      haptics.press();
       return;
     }
 
@@ -144,14 +144,14 @@ export default function FocusModeScreen() {
       // before starting new animation
       requestAnimationFrame(() => {
         setShowStepAnimation(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        haptics.success();
 
         // Move to next step after animation completes (wait for PremiumStepAnimation to finish)
         // PremiumStepAnimation duration is 2500ms for non-final steps
         nextTimeoutRef.current = setTimeout(() => {
           setShowStepAnimation(false);
           setCurrentStepIndex(currentStepIndex + 1);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          haptics.selection();
           nextTimeoutRef.current = null;
         }, 2500); // Match PremiumStepAnimation duration
       });
@@ -161,7 +161,7 @@ export default function FocusModeScreen() {
   const handlePrevious = () => {
     if (currentStepIndex > 0) {
       setCurrentStepIndex(currentStepIndex - 1);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptics.tap();
     }
   };
 
@@ -173,8 +173,8 @@ export default function FocusModeScreen() {
     setShowStepAnimation(false); // Don't show tick animation
     setShowConfetti(true); // Trigger confetti explosion
 
-    // Fire heavy haptics at the moment of explosion
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Fire the success pattern at the moment of explosion
+    haptics.success();
 
     // Navigation will be handled by ConfettiAnimation's onComplete callback
     // after both cannons finish their animations
