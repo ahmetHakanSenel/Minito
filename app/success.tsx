@@ -69,7 +69,7 @@ export default function SuccessScreen() {
                 entering={FadeIn.delay(700).springify().damping(12).mass(0.8).stiffness(150)}
                 className="text-textMuted text-base text-center mb-8"
               >
-                "{params.input}"
+                “{params.input}”
               </AnimatedText>
             )}
 
