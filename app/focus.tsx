@@ -16,6 +16,7 @@ import {
   clearActiveSession,
 } from '../src/lib/storage/activeSessionStore';
 import { recordFocusSession } from '../src/lib/stats/sessionStore';
+import { useTaskProgressSync } from '../src/features/tasks/controller/useTaskProgressSync';
 import * as Haptics from 'expo-haptics';
 // Ambient audio temporarily disabled until asset is added
 // import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
@@ -33,12 +34,14 @@ export default function FocusModeScreen() {
     empathyBridge?: string;
     firstStepHook?: string;
     resumeStepIndex?: string;
+    taskId?: string;
   }>();
   // Restoring a saved session skips the empathy intro and jumps to the step
   const initialStepIndex = params.resumeStepIndex
     ? Math.max(0, parseInt(params.resumeStepIndex, 10) || 0)
     : -1;
   const [currentStepIndex, setCurrentStepIndex] = useState(initialStepIndex); // -1 = empathy/hook screen
+  const { syncProgress, markCompleted } = useTaskProgressSync(params.taskId, Math.max(0, initialStepIndex));
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [showStepAnimation, setShowStepAnimation] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -85,7 +88,10 @@ export default function FocusModeScreen() {
       firstStepHook,
       currentStepIndex: Math.max(0, currentStepIndex),
       completedSteps: [...completedSteps],
+      taskId: params.taskId,
     });
+    // Standing on step N means steps 0..N-1 are done.
+    syncProgress(Math.max(0, currentStepIndex));
   }, [currentStepIndex, completedSteps, steps.length]);
 
   // Sync timer completion state with Aurora background pulse
@@ -183,6 +189,7 @@ export default function FocusModeScreen() {
 
     // Session finished — nothing left to restore
     clearActiveSession();
+    markCompleted(totalSteps);
 
     // Log the completed step-flow for the Insights screen
     recordFocusSession({

@@ -83,7 +83,7 @@
     "signOut": "Çıkış Yap",
     "privacyNotice": {
       "title": "Gizlilik Öncelikli:",
-      "text": "Minito gizlilik öncelikli bir tasarım izler. Görev girişleriniz asla düz metin olarak saklanmaz - yalnızca analitik amaçlı hash değerleri (HMAC_SHA256) kaydedilir. Bu, orijinal görevlerinizi yeniden oluşturamayacağımız anlamına gelir, gizliliğinizin korunduğundan emin olur."
+      "text": "Görev parçalamalarınız, her cihazdan devam edebilmeniz için hesabınıza kaydedilir. Onları yalnızca siz görebilirsiniz, basılı tutarak istediğinizi silebilirsiniz ve hesabınızı sildiğinizde hepsi kaldırılır. AI hizmeti için tutulan kullanım analitiğinde ise girdinizin metni değil, yalnızca hash değeri (HMAC_SHA256) saklanır."
     }
   },
   "panic": {
@@ -142,6 +142,25 @@
     "signOut": "Çıkış Yap",
     "coreFeatureTitle": "Temel Minito Özelliği",
     "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl."
+  },
+  "tasks": {
+    "recentTitle": "Son görevler",
+    "empty": "Parçaladığın görevler burada görünecek ve cihazların arasında senkronize olacak.",
+    "stepsProgress": "{{done}}/{{total}} adım",
+    "completed": "Tamamlandı",
+    "syncError": "Geçmiş yüklenemedi.",
+    "retry": "Tekrar dene",
+    "longPressHint": "Silmek için basılı tut",
+    "deleteTitle": "Bu görev silinsin mi?",
+    "deleteMessage": "Tüm cihazlarından kaldırılacak.",
+    "deleteFailed": "Silinemedi. Lütfen tekrar dene.",
+    "rateLimited": "Saatlik sınıra ulaştın. Biraz sonra tekrar dene.",
+    "time": {
+      "justNow": "Az önce",
+      "minutesAgo": "{{count}} dk önce",
+      "hoursAgo": "{{count}} sa önce",
+      "daysAgo": "{{count}} gün önce"
+    }
   },
   "audio": {
     "title": "Odak Sesleri",

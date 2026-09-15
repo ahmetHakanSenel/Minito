@@ -13,25 +13,31 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { LogOut, X } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { TaskInput, OfflineBanner, MinitoIcon } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
 import { DashboardModal } from '../src/modals';
-import { breakTask } from '../src/lib/api';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
-import { getOrCreateGuestId } from '../src/lib/guestIdentity';
+import { useTaskBreakdowns } from '../src/features/tasks/controller/useTaskBreakdowns';
+import { TaskHistoryList } from '../src/features/tasks/ui/TaskHistoryList';
+import type { BreakdownContent, TaskBreakdown } from '../src/repositories/taskRepository';
 import { FallbackReason } from '../src/safety';
 import {
   loadActiveSession,
   clearActiveSession,
   type ActiveSession,
 } from '../src/lib/storage/activeSessionStore';
-import * as Haptics from 'expo-haptics';
+
+type FocusLaunchOptions = {
+  taskId?: string;
+  resumeStepIndex?: number;
+};
 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { user, signOut } = useAuth();
+  const { items, historyStatus, isBreakingDown, refresh, breakDown, remove } = useTaskBreakdowns();
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [isDashboardVisible, setIsDashboardVisible] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -43,17 +49,18 @@ export default function HomeScreen() {
 
   const displayName = user?.email ?? t('dashboard.guest');
 
-  // Check for an interrupted focus session whenever home regains focus
+  // Returning from focus mode changes both the resumable session and task progress.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       loadActiveSession().then((session) => {
         if (!cancelled) setResumableSession(session);
       });
+      refresh();
       return () => {
         cancelled = true;
       };
-    }, [])
+    }, [refresh])
   );
 
   const handleSignOut = async () => {
@@ -69,19 +76,32 @@ export default function HomeScreen() {
     }
   };
 
-  const handleResumeSession = () => {
-    if (!resumableSession) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const openFocus = (content: BreakdownContent, { taskId, resumeStepIndex }: FocusLaunchOptions = {}) => {
     router.push({
       pathname: '/focus',
       params: {
-        steps: JSON.stringify(resumableSession.steps),
-        input: resumableSession.input,
-        empathyBridge: resumableSession.empathyBridge,
-        firstStepHook: resumableSession.firstStepHook,
-        resumeStepIndex: String(resumableSession.currentStepIndex),
+        steps: JSON.stringify(content.steps),
+        input: content.title,
+        empathyBridge: content.empathyBridge ?? '',
+        firstStepHook: content.firstStepHook ?? '',
+        ...(taskId ? { taskId } : {}),
+        ...(resumeStepIndex !== undefined ? { resumeStepIndex: String(resumeStepIndex) } : {}),
       },
     });
+  };
+
+  const handleResumeSession = () => {
+    if (!resumableSession) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    openFocus(
+      {
+        title: resumableSession.input,
+        steps: resumableSession.steps,
+        empathyBridge: resumableSession.empathyBridge,
+        firstStepHook: resumableSession.firstStepHook,
+      },
+      { taskId: resumableSession.taskId, resumeStepIndex: resumableSession.currentStepIndex }
+    );
   };
 
   const handleDismissSession = () => {
@@ -107,50 +127,71 @@ export default function HomeScreen() {
     }
   };
 
+  const handleBreakdownFailure = (reason: FallbackReason) => {
+    console.warn('Failed to break task:', reason);
+    if (reason === FallbackReason.DB_DOWN || reason === FallbackReason.AI_DOWN) {
+      setIsOffline(true);
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Alert.alert(
+      t('common.error'),
+      reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown')
+    );
+  };
+
   const handleBreakTask = async () => {
-    if (!input.trim()) return;
+    const trimmed = input.trim();
+    if (!trimmed || isBreakingDown) return;
 
-    setIsLoading(true);
     setIsOffline(false);
-
     try {
-      const guestId = await getOrCreateGuestId();
-      const result = await breakTask(input.trim(), guestId);
-
-      if (result.success && result.steps) {
-        if (result.isOfflineFallback) {
-          setIsOffline(true);
-        }
-
-        router.push({
-          pathname: '/focus',
-          params: {
-            steps: JSON.stringify(result.steps),
-            input: input.trim(),
-            empathyBridge: result.empathyBridge || '',
-            firstStepHook: result.firstStepHook || '',
-          },
-        });
-      } else if (!result.success) {
-        if (result.fallbackReason === FallbackReason.CONTENT_FLAGGED) {
-          // Panic screen renders its own localized content — no params needed
-          router.push('/panic');
-        } else {
-          console.warn('Failed to break task:', result.fallbackReason);
-          if (
-            result.fallbackReason === FallbackReason.DB_DOWN ||
-            result.fallbackReason === FallbackReason.AI_DOWN
-          ) {
-            setIsOffline(true);
-          }
-        }
+      const outcome = await breakDown(trimmed);
+      if (outcome.status === 'flagged') {
+        // Panic screen renders its own localized content — no params needed
+        router.push('/panic');
+        return;
       }
+      if (outcome.status === 'failed') {
+        handleBreakdownFailure(outcome.reason);
+        return;
+      }
+      setIsOffline(outcome.isOffline);
+      setInput('');
+      openFocus(outcome.content, { taskId: outcome.saved?.id });
     } catch (error) {
       console.error('Error breaking task:', error);
       setIsOffline(true);
-    } finally {
-      setIsLoading(false);
     }
+  };
+
+  const handleOpenBreakdown = (item: TaskBreakdown) => {
+    Haptics.selectionAsync();
+    // Completed tasks replay from the start without touching their saved progress.
+    if (item.completedAt !== null) {
+      openFocus(item);
+      return;
+    }
+    const resumeStepIndex =
+      item.completedStepCount > 0 ? Math.min(item.completedStepCount, item.steps.length - 1) : undefined;
+    openFocus(item, { taskId: item.id, resumeStepIndex });
+  };
+
+  const handleDeleteBreakdown = (item: TaskBreakdown) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(t('tasks.deleteTitle'), t('tasks.deleteMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: () => {
+          remove(item.id).catch(() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert(t('common.error'), t('tasks.deleteFailed'));
+          });
+        },
+      },
+    ]);
   };
 
   const handleDashboardNavigate = (screen: string) => {
@@ -188,7 +229,7 @@ export default function HomeScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           paddingTop: insets.top + 16,
-          paddingBottom: insets.bottom + 32,
+          paddingBottom: insets.bottom + 96,
           paddingHorizontal: 20,
         }}
         keyboardShouldPersistTaps="handled"
@@ -272,7 +313,15 @@ export default function HomeScreen() {
               value={input}
               onChangeText={setInput}
               onSubmit={handleBreakTask}
-              isLoading={isLoading}
+              isLoading={isBreakingDown}
+            />
+
+            <TaskHistoryList
+              items={items}
+              status={historyStatus}
+              onOpen={handleOpenBreakdown}
+              onDelete={handleDeleteBreakdown}
+              onRetry={refresh}
             />
           </View>
         </View>

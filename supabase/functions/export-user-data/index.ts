@@ -65,9 +65,23 @@ serve(async (req) => {
 
     const userId = user.id;
 
-    // Export user data
-    // Note: Per privacy-first design, we only store hashed input (input_hash)
-    // We cannot export the original task inputs as they are not stored
+    const { data: breakdowns, error: breakdownsError } = await supabaseAdmin
+      .from('task_breakdowns')
+      .select('title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (breakdownsError) {
+      console.error('Error fetching task breakdowns:', breakdownsError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to export user data' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const exportData = {
       user: {
         id: user.id,
@@ -75,24 +89,12 @@ serve(async (req) => {
         created_at: user.created_at,
         last_sign_in_at: user.last_sign_in_at,
       },
-      tasks: [] as Array<{
-        input_hash: string;
-        created_at: string;
-        latency_ms: number | null;
-        token_usage: number | null;
-        fallback_reason: string | null;
-      }>,
+      task_breakdowns: breakdowns ?? [],
       metadata: {
         export_date: new Date().toISOString(),
-        note: 'Original task inputs are not stored for privacy. Only hashed values (input_hash) are available.',
+        note: 'Includes every task breakdown saved to your account.',
       },
     };
-
-    // Fetch user's task records
-    // Note: This is a simplified implementation
-    // In production, you'd want to add a user_id column to tasks table
-    // For now, we'll return empty tasks array with a note
-    // If you have a way to link tasks to users (e.g., via guest_id mapping), implement that here
 
     // Return export data
     return new Response(
