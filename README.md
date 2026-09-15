@@ -22,7 +22,6 @@ Minito, “yapamıyorum” hissini yaşadığın anlarda devreye girer: görevin
 - [Teknoloji yığını](#teknoloji-yığını)
 - [Mimari ve veri akışı](#mimari-ve-veri-akışı)
 - [Geliştirme ipuçları](#geliştirme-ipuçları)
-- [Yardımcı scriptler](#yardımcı-scriptler)
 - [Ek dokümantasyon](#ek-dokümantasyon)
 - [SSS (Sık Sorulan Sorular)](#sss-sık-sorulan-sorular)
 - [Bilinen sınırlamalar](#bilinen-sınırlamalar)
@@ -178,7 +177,7 @@ Supabase Dashboard → **Edge Functions → break-task → Settings**:
 | `SUPABASE_URL` | Otomatik gelir |
 | `SUPABASE_SERVICE_ROLE_KEY` | Otomatik gelir |
 
-> Detaylı Türkçe rehber: [`SUPABASE_KURULUM_REHBERI.md`](./SUPABASE_KURULUM_REHBERI.md)  
+> Detaylı Türkçe rehber: [`docs/SUPABASE_KURULUM_REHBERI.md`](./docs/SUPABASE_KURULUM_REHBERI.md)  
 > İngilizce rehber: [`docs/SUPABASE_SETUP.md`](./docs/SUPABASE_SETUP.md)
 
 ---
@@ -349,7 +348,6 @@ minito/
 │       └── export-user-data/  # Veri dışa aktarma (GDPR)
 │
 ├── docs/                   # Ek kurulum rehberleri
-├── scripts/                # Yardımcı Node scriptleri
 ├── assets/                 # İkon, splash, ses dosyaları
 ├── app.json                # Expo yapılandırması
 ├── eas.json                # EAS build profilleri
@@ -477,32 +475,15 @@ const { t } = useTranslation();
 
 ---
 
-## Yardımcı scriptler
-
-```bash
-# Supabase’deki son görev adımlarını görüntüle (.env gerekli)
-node scripts/view-task-steps.js
-
-# Son AI yanıtlarını görüntüle
-node scripts/view-recent-responses.js
-
-# Gemini model listesi
-node scripts/list-gemini-models.js
-```
-
----
-
 ## Ek dokümantasyon
 
 | Dosya | İçerik |
 |-------|--------|
-| [`SUPABASE_KURULUM_REHBERI.md`](./SUPABASE_KURULUM_REHBERI.md) | Türkçe adım adım Supabase kurulumu |
-| [`TERMINAL_KOMUTLARI.txt`](./TERMINAL_KOMUTLARI.txt) | Kopyala-yapıştır terminal komutları |
+| [`docs/SUPABASE_KURULUM_REHBERI.md`](./docs/SUPABASE_KURULUM_REHBERI.md) | Türkçe adım adım Supabase kurulumu |
 | [`docs/SUPABASE_SETUP.md`](./docs/SUPABASE_SETUP.md) | İngilizce Supabase rehberi |
 | [`docs/OAUTH_SETUP.md`](./docs/OAUTH_SETUP.md) | Apple / Google OAuth kurulumu |
 | [`supabase/README.md`](./supabase/README.md) | Edge Function deploy özeti |
 | [`supabase/functions/break-task/README.md`](./supabase/functions/break-task/README.md) | break-task API detayları |
-| [`MINITO_TANI_RAPORU.md`](./MINITO_TANI_RAPORU.md) | Ürün / UX derin analiz raporu |
 
 ---
 
@@ -561,7 +542,7 @@ Node 18 veya 20 önerilir. `node -v` ile kontrol et.
 
 ### Windows’ta Supabase CLI nasıl kurulur?
 
-Global npm kurulumu artık desteklenmiyor. **`npx supabase`** kullan (kurulum gerektirmez) veya Scoop ile kur. Detay: [`TERMINAL_KOMUTLARI.txt`](./TERMINAL_KOMUTLARI.txt)
+Global npm kurulumu artık desteklenmiyor. **`npx supabase`** kullan (kurulum gerektirmez) veya Scoop ile kur.
 
 ### Projeye nasıl katkı veririm?
 

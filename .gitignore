@@ -42,5 +42,7 @@ yarn-error.*
 /ios
 /android
 
-.expo/
+# Supabase: edge function secrets and CLI state are machine-local
+supabase/.env.functions
+supabase/.temp/
 
