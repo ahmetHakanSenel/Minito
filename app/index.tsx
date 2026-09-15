@@ -39,6 +39,8 @@ type FocusLaunchOptions = {
   resumeStepIndex?: number;
 };
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { user, displayName, signOut, updateDisplayName } = useAuth();

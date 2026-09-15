@@ -441,6 +441,8 @@ const modalStyles = StyleSheet.create({
 // PLANNER SCREEN
 // ============================================================================
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function PlannerScreen() {
   const router = useRouter();
   const { projects, addProject, addTask, generateSubtasks } = useProjects();

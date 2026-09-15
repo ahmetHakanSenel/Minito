@@ -87,6 +87,8 @@ const SettingItem: React.FC<SettingItemProps> = ({
   );
 };
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function SettingsScreen() {
   const router = useRouter();
   const [notifications, setNotifications] = React.useState(true);

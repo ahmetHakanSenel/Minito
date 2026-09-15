@@ -145,6 +145,11 @@
     "coreFeatureTitle": "Core Minito Feature",
     "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps."
   },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "This screen hit an unexpected error. It has been reported, and trying again usually helps.",
+    "retry": "Try again"
+  },
   "profile": {
     "namePrompt": "What should we call you?",
     "namePlaceholder": "Your name or nickname",

@@ -31,6 +31,8 @@ const PLACEHOLDER_COLOR = '#71717A';
 const INPUT_CLASS =
   'bg-surface text-textMain rounded-xl px-4 py-4 text-base border border-white/10';
 
+export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
+
 export default function LoginScreen() {
   const { t } = useTranslation();
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, providers } =
