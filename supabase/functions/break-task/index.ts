@@ -1,23 +1,27 @@
-// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { crypto } from 'https://deno.land/std@0.168.0/crypto/mod.ts';
+import { createClient, type SupabaseClient, type User } from 'https://esm.sh/@supabase/supabase-js@2';
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
 
 /**
  * Edge Function: break-task
- * 
- * Breaks down a user task into actionable steps using OpenAI.
+ *
+ * Breaks down a user task into actionable steps using OpenAI or Gemini.
  * Implements fail-soft philosophy: never blocks UX, monetizes discreetly.
- * 
+ *
  * Steps:
- * 1. Sanitize input & HMAC_SHA256 hash for privacy
+ * 0. Authenticate the caller (a signed-in user JWT is required)
+ * 1. Sanitize input & HMAC-SHA256 hash for privacy
  * 2. Moderation (Fail-Safe) → if flagged, return fallback steps
- * 3. Rate Limit check (Fail-Soft) → log errors but do not block
+ * 3. Per-user rate limit (enforced; fails open only if the check itself errors)
  * 4. Prompt Cache → simple global variable with 60s TTL
- * 5. OpenAI Call → max_tokens: 500 and track token usage
- * 6. Persistence → Retry 3x in-memory; log failures to Sentry
+ * 5. AI Call → max_tokens: 600 and track token usage
+ * 6. Persistence → Retry 3x in-memory
  */
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // Zod schemas for validation
 const RequestBodySchema = z.object({
@@ -38,10 +42,12 @@ const ResponseBodySchema = z.object({
   first_step_hook: z.string().optional(),
   steps: z.array(z.string()).optional(),
   fallback_reason: z.string().optional(),
-  panic_kit: z.object({
-    headline: z.string(),
-    steps: z.array(PanicKitStepSchema),
-  }).optional(),
+  panic_kit: z
+    .object({
+      headline: z.string(),
+      steps: z.array(PanicKitStepSchema),
+    })
+    .optional(),
   error: z.string().optional(),
   token_usage: z.number().int().positive().optional(),
   latency_ms: z.number().int().positive().optional(),
@@ -49,6 +55,27 @@ const ResponseBodySchema = z.object({
 
 type RequestBody = z.infer<typeof RequestBodySchema>;
 type ResponseBody = z.infer<typeof ResponseBodySchema>;
+
+function jsonResponse(body: ResponseBody, status: number): Response {
+  // Validate response (fail-soft: log but never block the reply)
+  try {
+    ResponseBodySchema.parse(body);
+  } catch (validationError) {
+    console.warn('Response validation warning:', validationError);
+  }
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function requireEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) {
+    throw new Error(`Missing required secret: ${name}`);
+  }
+  return value;
+}
 
 // Prompt cache with 60s TTL
 interface CachedPrompt {
@@ -163,37 +190,52 @@ CRITICAL REMINDERS
 `;
 
 /**
- * Sanitize input and create HMAC_SHA256 hash
+ * Resolve the signed-in user behind the request's bearer token.
+ * Anon-key and expired tokens resolve to null and are rejected by the caller.
  */
-function sanitizeAndHash(input: string, secret: string): string {
-  // Sanitize: remove extra whitespace, trim
-  const sanitized = input.trim().replace(/\s+/g, ' ');
-  
-  // Create HMAC_SHA256 hash
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(sanitized);
-  
-  // Note: Deno's crypto API is async, but we'll use a simpler approach
-  // For production, you might want to use a proper HMAC library
-  // This is a simplified version for demonstration
-  const hash = crypto.subtle.digestSync('SHA-256', new Uint8Array([...keyData, ...messageData]));
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
+async function authenticate(req: Request, supabase: SupabaseClient): Promise<User | null> {
+  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return null;
+  return data.user;
+}
+
+let hmacKeyPromise: Promise<CryptoKey> | null = null;
+
+function getHmacKey(secret: string): Promise<CryptoKey> {
+  hmacKeyPromise ??= crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  return hmacKeyPromise;
+}
+
+/**
+ * HMAC-SHA256 of the sanitized input, so analytics can dedupe without storing the text.
+ */
+async function hashInput(sanitizedInput: string, secret: string): Promise<string> {
+  const key = await getHmacKey(secret);
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(sanitizedInput));
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
 }
 
 /**
  * Get system prompt with caching (60s TTL)
  */
-async function getSystemPrompt(supabase: any): Promise<string> {
+async function getSystemPrompt(supabase: SupabaseClient): Promise<string> {
   const now = Date.now();
-  
+
   // Check cache
-  if (promptCache && (now - promptCache.timestamp) < PROMPT_CACHE_TTL) {
+  if (promptCache && now - promptCache.timestamp < PROMPT_CACHE_TTL) {
     return promptCache.prompt;
   }
-  
+
   // Fetch from database
   try {
     const { data, error } = await supabase
@@ -201,19 +243,18 @@ async function getSystemPrompt(supabase: any): Promise<string> {
       .select('prompt_text')
       .eq('is_active', true)
       .single();
-    
+
     if (error || !data) {
       // Fallback to default prompt
       promptCache = { prompt: FALLBACK_SYSTEM_PROMPT, timestamp: now };
       return FALLBACK_SYSTEM_PROMPT;
     }
-    
-    const prompt = data.prompt_text;
+
+    const prompt: string = data.prompt_text;
     promptCache = { prompt, timestamp: now };
     return prompt;
   } catch (error) {
     console.error('Error fetching system prompt:', error);
-    // Fallback to default
     promptCache = { prompt: FALLBACK_SYSTEM_PROMPT, timestamp: now };
     return FALLBACK_SYSTEM_PROMPT;
   }
@@ -223,26 +264,35 @@ async function getSystemPrompt(supabase: any): Promise<string> {
  * Check moderation (Fail-Safe)
  * If content is flagged, return fallback panic kit
  */
-async function checkModeration(input: string, openaiKey: string): Promise<{ flagged: boolean; reason?: string }> {
+async function checkModeration(
+  input: string,
+  openaiKey: string
+): Promise<{ flagged: boolean; reason?: string }> {
+  // The moderation endpoint is OpenAI-only; without a key there is nothing to call.
+  if (!openaiKey) {
+    console.warn('OPENAI_API_KEY not set, skipping moderation');
+    return { flagged: false };
+  }
+
   try {
     const response = await fetch('https://api.openai.com/v1/moderations', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiKey}`,
+        Authorization: `Bearer ${openaiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ input }),
     });
-    
+
     if (!response.ok) {
       // Fail-safe: if moderation fails, assume safe (don't block user)
       console.warn('Moderation API failed, assuming safe:', response.statusText);
       return { flagged: false };
     }
-    
+
     const data = await response.json();
     const flagged = data.results?.[0]?.flagged === true;
-    
+
     return {
       flagged,
       reason: flagged ? 'CONTENT_FLAGGED' : undefined,
@@ -254,45 +304,33 @@ async function checkModeration(input: string, openaiKey: string): Promise<{ flag
   }
 }
 
-// Per-hour request ceilings. The endpoint is callable with the public anon
-// key, so without enforcement anyone extracting the key from the app binary
-// can burn the AI budget indefinitely.
-const RATE_LIMIT_PER_GUEST = 20;
-const RATE_LIMIT_PER_INPUT_HASH = 10; // anonymous requests without a guest_id
+// Per-hour request ceiling per signed-in user. Keyed by the verified user id, so it
+// cannot be dodged by rotating client-supplied identifiers.
+const RATE_LIMIT_PER_USER = 20;
 
 /**
  * Check rate limit (enforced).
  * Fail-soft only on infrastructure errors: if the check itself cannot run,
  * the request is allowed rather than blocking a legitimate user.
  */
-async function checkRateLimit(
-  inputHash: string,
-  guestId: string | undefined,
-  supabase: any
-): Promise<{ limited: boolean }> {
+async function checkRateLimit(userId: string, supabase: SupabaseClient): Promise<{ limited: boolean }> {
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-    let query = supabase
+    const { count, error } = await supabase
       .from('tasks')
       .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
       .gte('created_at', oneHourAgo);
 
-    const limit = guestId ? RATE_LIMIT_PER_GUEST : RATE_LIMIT_PER_INPUT_HASH;
-    query = guestId
-      ? query.eq('guest_id', guestId)
-      : query.eq('input_hash', inputHash);
-
-    const { count, error } = await query;
-
     if (error) {
-      console.warn('Rate limit check failed, allowing request:', error);
+      console.error('Rate limit check failed, allowing request:', error);
       return { limited: false };
     }
 
-    if ((count ?? 0) >= limit) {
+    if ((count ?? 0) >= RATE_LIMIT_PER_USER) {
       console.warn(
-        `Rate limit exceeded: ${count} requests in last hour (limit ${limit}, guest=${guestId ?? 'none'})`
+        `Rate limit exceeded: ${count} requests in last hour (limit ${RATE_LIMIT_PER_USER}, user=${userId})`
       );
       return { limited: true };
     }
@@ -315,32 +353,32 @@ type AiResult = {
   language?: string;
 };
 
-function cleanStepsArray(rawSteps: any[]): string[] {
+function cleanStepsArray(rawSteps: unknown[]): string[] {
   return rawSteps
-    .filter((step: any) => {
+    .filter((step): step is string => {
       if (typeof step !== 'string') return false;
       const trimmed = step.trim();
       // Filter out JSON syntax, code fences, and single bracket characters
-      if (trimmed === '```json' || trimmed === '```' || trimmed === '[' || trimmed === ']' || trimmed === '{' || trimmed === '}') return false;
+      if (['```json', '```', '[', ']', '{', '}'].includes(trimmed)) return false;
       return trimmed.length > 0;
     })
-    .map((step: string) => {
+    .map((step) => {
       let cleaned = step.trim();
       // Remove all quotes (both single and double) from start and end, and any trailing quotes
       cleaned = cleaned.replace(/^["']+|["']+$/g, '');
       // Remove trailing commas
       cleaned = cleaned.replace(/,\s*$/, '');
       // Remove numeric prefixes (1., 2), etc.)
-      cleaned = cleaned.replace(/^\d+[\.\)]\s*/, '');
+      cleaned = cleaned.replace(/^\d+[.)]\s*/, '');
       // Remove comment lines (// comments) - everything after // on the same line
       cleaned = cleaned.replace(/\s*\/\/.*$/g, '');
       // Remove any remaining JSON syntax characters at the end
-      cleaned = cleaned.replace(/[\[\]{}]\s*$/g, '');
+      cleaned = cleaned.replace(/[[\]{}]\s*$/g, '');
       // Remove any trailing quotes that might remain
       cleaned = cleaned.replace(/["']+$/g, '');
       return cleaned.trim();
     })
-    .filter((step: string) => step.length > 0);
+    .filter((step) => step.length > 0);
 }
 
 interface ParsedAiResponse {
@@ -348,6 +386,11 @@ interface ParsedAiResponse {
   first_step_hook?: string;
   steps: string[];
   language?: string;
+}
+
+function readString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' ? value.trim() : undefined;
 }
 
 function parseAiResponse(rawContent: string): ParsedAiResponse {
@@ -365,31 +408,23 @@ function parseAiResponse(rawContent: string): ParsedAiResponse {
   // Try direct JSON parse and variants (object or array)
   const objectMatch = cleanedContent.match(/\{[\s\S]*\}/);
   const arrayMatch = cleanedContent.match(/\[[\s\S]*\]/);
-  const parseCandidates = [
-    objectMatch?.[0],
-    arrayMatch?.[0],
-    cleanedContent,
-  ].filter(Boolean) as string[];
+  const parseCandidates = [objectMatch?.[0], arrayMatch?.[0], cleanedContent].filter(
+    (candidate): candidate is string => Boolean(candidate)
+  );
 
   for (const candidate of parseCandidates) {
     try {
-      const parsed = JSON.parse(candidate);
+      const parsed: unknown = JSON.parse(candidate);
       if (Array.isArray(parsed)) {
         steps = cleanStepsArray(parsed);
         if (steps.length) break;
       } else if (parsed && typeof parsed === 'object') {
-        // Extract new fields
-        if (typeof (parsed as any).empathy_bridge === 'string') {
-          empathy_bridge = (parsed as any).empathy_bridge.trim();
-        }
-        if (typeof (parsed as any).first_step_hook === 'string') {
-          first_step_hook = (parsed as any).first_step_hook.trim();
-        }
-        if (Array.isArray((parsed as any).steps)) {
-          steps = cleanStepsArray((parsed as any).steps);
-        }
-        if (typeof (parsed as any).language === 'string') {
-          language = (parsed as any).language.trim();
+        const record = parsed as Record<string, unknown>;
+        empathy_bridge = readString(record, 'empathy_bridge') ?? empathy_bridge;
+        first_step_hook = readString(record, 'first_step_hook') ?? first_step_hook;
+        language = readString(record, 'language') ?? language;
+        if (Array.isArray(record.steps)) {
+          steps = cleanStepsArray(record.steps);
         }
         if (steps.length) break;
       }
@@ -400,11 +435,10 @@ function parseAiResponse(rawContent: string): ParsedAiResponse {
 
   // Regex extraction if still empty (handles loosely formatted JSON)
   if (!steps.length) {
-    const stepsRegex = /"steps"\s*:\s*(\[[\s\S]*?\])/m;
-    const match = cleanedContent.match(stepsRegex);
+    const match = cleanedContent.match(/"steps"\s*:\s*(\[[\s\S]*?\])/m);
     if (match?.[1]) {
       try {
-        const parsed = JSON.parse(match[1]);
+        const parsed: unknown = JSON.parse(match[1]);
         if (Array.isArray(parsed)) {
           steps = cleanStepsArray(parsed);
         }
@@ -415,42 +449,22 @@ function parseAiResponse(rawContent: string): ParsedAiResponse {
   }
 
   // Extract other fields via regex if not found
-  if (!empathy_bridge) {
-    const empathyRegex = /"empathy_bridge"\s*:\s*"([^"]+)"/m;
-    const empathyMatch = cleanedContent.match(empathyRegex);
-    if (empathyMatch?.[1]) {
-      empathy_bridge = empathyMatch[1].trim();
-    }
-  }
-
-  if (!first_step_hook) {
-    const hookRegex = /"first_step_hook"\s*:\s*"([^"]+)"/m;
-    const hookMatch = cleanedContent.match(hookRegex);
-    if (hookMatch?.[1]) {
-      first_step_hook = hookMatch[1].trim();
-    }
-  }
-
-  if (!language) {
-    const langRegex = /"language"\s*:\s*"([^"]+)"/m;
-    const langMatch = cleanedContent.match(langRegex);
-    if (langMatch?.[1]) {
-      language = langMatch[1].trim();
-    }
-  }
+  empathy_bridge ??= cleanedContent.match(/"empathy_bridge"\s*:\s*"([^"]+)"/m)?.[1]?.trim();
+  first_step_hook ??= cleanedContent.match(/"first_step_hook"\s*:\s*"([^"]+)"/m)?.[1]?.trim();
+  language ??= cleanedContent.match(/"language"\s*:\s*"([^"]+)"/m)?.[1]?.trim();
 
   // Fallback: line-based extraction (bullets or numbered)
   if (!steps.length) {
     const lineBased = cleanedContent
       .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .filter((l) => !['```json', '```', '[', ']', '{', '}'].includes(l))
-      .filter((l) => !l.includes('steps":') && !l.includes('"language"'))
-      .filter((l) => !l.startsWith('//')); // Filter out pure comment lines
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .filter((line) => !['```json', '```', '[', ']', '{', '}'].includes(line))
+      .filter((line) => !line.includes('steps":') && !line.includes('"language"'))
+      .filter((line) => !line.startsWith('//'));
 
     // Prefer lines that look like list items
-    const listLines = lineBased.filter((l) => /^[-*\d]/.test(l));
+    const listLines = lineBased.filter((line) => /^[-*\d]/.test(line));
     steps = cleanStepsArray(listLines.length ? listLines : lineBased);
   }
 
@@ -463,6 +477,7 @@ const MAX_DISPLAY_NAME_LENGTH = 30;
 function sanitizeDisplayName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const cleaned = raw
+    // deno-lint-ignore no-control-regex
     .replace(/[ -"`\\{}<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -470,21 +485,9 @@ function sanitizeDisplayName(raw: unknown): string | null {
   return cleaned.length > 0 ? cleaned : null;
 }
 
-/**
- * Resolve the caller's preferred name from their JWT. Anon-key calls simply get no name.
- */
-async function resolveDisplayName(req: Request, supabase: any): Promise<string | null> {
-  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) return null;
-  try {
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data?.user) return null;
-    const metadata = data.user.user_metadata ?? {};
-    return sanitizeDisplayName(metadata.display_name ?? metadata.full_name ?? metadata.name);
-  } catch (error) {
-    console.warn('Could not resolve display name:', error);
-    return null;
-  }
+function displayNameOf(user: User): string | null {
+  const metadata = user.user_metadata ?? {};
+  return sanitizeDisplayName(metadata.display_name ?? metadata.full_name ?? metadata.name);
 }
 
 function buildUserPrompt(userInput: string, displayName: string | null): string {
@@ -515,21 +518,20 @@ async function callOpenAI(
   displayName: string | null,
   maxRetries = 3
 ): Promise<AiResult | null> {
-  const systemPrompt = prompt;
   const userPrompt = buildUserPrompt(userInput, displayName);
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openaiKey}`,
+          Authorization: `Bearer ${openaiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: prompt },
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 600,
@@ -538,51 +540,43 @@ async function callOpenAI(
           presence_penalty: 0.2, // Encourage diverse vocabulary
         }),
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
       }
-      
+
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      const tokenUsage = data.usage?.total_tokens || 0;
-      
+      const content: string | undefined = data.choices?.[0]?.message?.content;
+      const tokenUsage: number = data.usage?.total_tokens || 0;
+
       if (!content) {
         throw new Error('No content in OpenAI response');
       }
-      
+
       const parsed = parseAiResponse(content);
       if (!parsed.steps.length) {
         throw new Error('No steps found in AI response');
       }
-      return {
-        empathy_bridge: parsed.empathy_bridge,
-        first_step_hook: parsed.first_step_hook,
-        steps: parsed.steps,
-        tokenUsage,
-        language: parsed.language,
-      };
+      return { ...parsed, tokenUsage };
     } catch (error) {
       console.error(`OpenAI call attempt ${attempt} failed:`, error);
-      
+
       if (attempt === maxRetries) {
-        // All retries exhausted
         return null;
       }
-      
+
       // Wait before retry (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
     }
   }
-  
+
   return null;
 }
 
 /**
  * Call Gemini API with retry logic (3 attempts)
- * Uses Google Generative Language API (Gemini)
- * Supports both v1beta and v1 API versions for free tier compatibility
+ * Tries the v1 API first, then falls back to v1beta for older model compatibility.
  * Optimized LLM parameters for ADHD-friendly, creative responses
  */
 async function callGemini(
@@ -593,11 +587,7 @@ async function callGemini(
   displayName: string | null,
   maxRetries = 3
 ): Promise<AiResult | null> {
-  const systemPrompt = prompt;
   const userPrompt = buildUserPrompt(userInput, displayName);
-  
-  // Models are available in v1 API (as of 2025)
-  // Try v1 first, then fallback to v1beta for older compatibility
   const apiVersions = ['v1', 'v1beta'];
   let lastError: Error | null = null;
 
@@ -614,10 +604,7 @@ async function callGemini(
           body: JSON.stringify({
             contents: [
               {
-                parts: [
-                  { text: systemPrompt },
-                  { text: userPrompt },
-                ],
+                parts: [{ text: prompt }, { text: userPrompt }],
               },
             ],
             generationConfig: {
@@ -634,35 +621,28 @@ async function callGemini(
           // 429 (quota exceeded) - don't retry, fail immediately
           if (response.status === 429) {
             console.error(`Gemini API quota exceeded (${apiVersion}): ${errorText}`);
-            return null; // Return null immediately, don't retry
+            return null;
           }
           throw new Error(`Gemini API error (${apiVersion}): ${response.status} ${errorText}`);
         }
 
         const data = await response.json();
-        const candidates = data.candidates || [];
-        const firstCandidate = candidates[0];
-        const parts = firstCandidate?.content?.parts || [];
-        const content = parts.map((p: any) => p.text || '').join('\n').trim();
+        const parts: Array<{ text?: string }> = data.candidates?.[0]?.content?.parts || [];
+        const content = parts
+          .map((part) => part.text || '')
+          .join('\n')
+          .trim();
 
         if (!content) {
           throw new Error('No content in Gemini response');
         }
 
-        // Gemini usage bilgisi farklı olduğu için şimdilik 0 olarak işaretliyoruz
-        const tokenUsage = 0;
-
         const parsed = parseAiResponse(content);
         if (!parsed.steps.length) {
           throw new Error('No steps found in AI response');
         }
-        return {
-          empathy_bridge: parsed.empathy_bridge,
-          first_step_hook: parsed.first_step_hook,
-          steps: parsed.steps,
-          tokenUsage,
-          language: parsed.language,
-        };
+        // Gemini reports usage differently; token usage is not tracked for it yet.
+        return { ...parsed, tokenUsage: 0 };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         console.error(`Gemini call attempt ${attempt} (${apiVersion}) failed:`, error);
@@ -670,7 +650,7 @@ async function callGemini(
         // If this is the last attempt for this API version, try next version
         if (attempt === maxRetries && apiVersion === apiVersions[0]) {
           console.log(`Switching to ${apiVersions[1]} API version...`);
-          break; // Try next API version
+          break;
         }
 
         // Wait before retry (exponential backoff)
@@ -681,7 +661,6 @@ async function callGemini(
     }
   }
 
-  // All API versions and retries failed
   console.error('All Gemini API attempts failed:', lastError);
   return null;
 }
@@ -689,156 +668,117 @@ async function callGemini(
 /**
  * Main handler
  */
-serve(async (req) => {
+serve(async (req: Request) => {
   const startTime = Date.now();
-  
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
-    // CORS headers
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    };
-    
-    // Handle OPTIONS request
-    if (req.method === 'OPTIONS') {
-      return new Response('ok', { headers: corsHeaders });
-    }
-    
-    // Get environment variables
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    // Missing secrets are a deployment error: fail loudly instead of degrading to defaults.
+    const supabaseUrl = requireEnv('SUPABASE_URL');
+    const supabaseServiceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+    const hmacSecret = requireEnv('HMAC_SECRET');
     const openaiKey = Deno.env.get('OPENAI_API_KEY') || '';
     const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
     const aiProvider = (Deno.env.get('AI_PROVIDER') || 'openai').toLowerCase();
-    // Default Gemini model: use Gemini 2.0 Flash
     // Available models: gemini-2.0-flash, gemini-2.0-flash-001, gemini-2.5-flash, gemini-2.5-pro
     const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
-    const hmacSecret = Deno.env.get('HMAC_SECRET') || 'default-secret-change-in-production';
-    
+
     const useOpenAI = aiProvider === 'openai';
     const useGemini = aiProvider === 'gemini';
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Supabase credentials not configured');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // Step 0: Only signed-in users may spend the AI budget.
+    const user = await authenticate(req, supabase);
+    if (!user) {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
     }
-    
+
     // If configured provider has no API key, fail-soft: don't call external AI, let client fall back
     if ((useOpenAI && !openaiKey) || (useGemini && !geminiKey)) {
       console.warn(`AI provider "${aiProvider}" is selected but API key is missing. Skipping AI call.`);
-
-      const errorResponse: ResponseBody = {
-        success: false,
-        fallback_reason: 'AI_DOWN',
-        error: 'AI provider not configured',
-      };
-
-      // Validate response (fail-soft)
-      try {
-        ResponseBodySchema.parse(errorResponse);
-      } catch (validationError) {
-        console.warn('Response validation warning:', validationError);
-      }
-
-      return new Response(JSON.stringify(errorResponse), {
-        status: 503,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse(
+        { success: false, fallback_reason: 'AI_DOWN', error: 'AI provider not configured' },
+        503
+      );
     }
-    
-    // Initialize Supabase client
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
+
     // Parse and validate request body with Zod
     let body: RequestBody;
     try {
-      const rawBody = await req.json();
-      body = RequestBodySchema.parse(rawBody);
+      body = RequestBodySchema.parse(await req.json());
     } catch (validationError) {
-      // Fail-soft: Return validation error but don't crash
-      const errorResponse: ResponseBody = {
-        success: false,
-        fallback_reason: 'VALIDATION',
-        error: validationError instanceof z.ZodError 
-          ? `Validation error: ${validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
-          : 'Invalid request body',
-      };
-      
-      return new Response(
-        JSON.stringify(errorResponse),
+      return jsonResponse(
         {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+          success: false,
+          fallback_reason: 'VALIDATION',
+          error:
+            validationError instanceof z.ZodError
+              ? `Validation error: ${validationError.errors
+                  .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+                  .join(', ')}`
+              : 'Invalid request body',
+        },
+        400
       );
     }
-    
+
     const { input, guest_id, request_id } = body;
-    
-    // Step 1: Sanitize input & HMAC_SHA256 hash
+    const taskRecordBase = {
+      user_id: user.id,
+      guest_id: guest_id || null,
+      request_id: request_id || null,
+    };
+
+    // Step 1: Sanitize input & HMAC-SHA256 hash
     const sanitizedInput = input.trim().replace(/\s+/g, ' ');
-    const inputHash = sanitizeAndHash(sanitizedInput, hmacSecret);
-    
+    const inputHash = await hashInput(sanitizedInput, hmacSecret);
+
     // Step 2: Moderation (Fail-Safe)
     // The server sends only the reason code — the client renders panic-kit
     // content in the user's own locale. Never ship crisis copy from here.
     const moderationResult = await checkModeration(sanitizedInput, openaiKey);
     if (moderationResult.flagged) {
-      // Persist task record (fail-soft)
-      const latencyMs = Date.now() - startTime;
       supabase
         .from('tasks')
         .insert({
+          ...taskRecordBase,
           input_hash: inputHash,
-          guest_id: guest_id || null,
-          request_id: request_id || null,
           token_usage: null,
-          latency_ms: latencyMs,
+          latency_ms: Date.now() - startTime,
           fallback_reason: 'CONTENT_FLAGGED',
         })
-        .then(() => {}, (err) => console.warn('Failed to persist task:', err));
+        .then(
+          () => {},
+          (err: unknown) => console.warn('Failed to persist task:', err)
+        );
 
-      const flaggedResponse: ResponseBody = {
-        success: false,
-        fallback_reason: 'CONTENT_FLAGGED',
-      };
-
-      // Validate response (fail-soft)
-      try {
-        ResponseBodySchema.parse(flaggedResponse);
-      } catch (validationError) {
-        console.warn('Response validation warning:', validationError);
-      }
-
-      return new Response(
-        JSON.stringify(flaggedResponse),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return jsonResponse({ success: false, fallback_reason: 'CONTENT_FLAGGED' }, 200);
     }
 
     // Step 3: Rate Limit check (enforced)
-    // Note: rate-limited attempts are NOT persisted to `tasks`, so a blocked
+    // Rate-limited attempts are NOT persisted to `tasks`, so a blocked
     // user's retries never extend their own block window.
-    const { limited } = await checkRateLimit(inputHash, guest_id, supabase);
+    const { limited } = await checkRateLimit(user.id, supabase);
     if (limited) {
-      const rateLimitedResponse: ResponseBody = {
-        success: false,
-        fallback_reason: 'RATE_DOWN',
-        error: 'Too many requests. Please try again later.',
-      };
-
-      return new Response(JSON.stringify(rateLimitedResponse), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse(
+        {
+          success: false,
+          fallback_reason: 'RATE_DOWN',
+          error: 'Too many requests. Please try again later.',
+        },
+        429
+      );
     }
-    
+
     // Step 4: Get system prompt (with caching)
     const systemPrompt = await getSystemPrompt(supabase);
-    
-    const displayName = await resolveDisplayName(req, supabase);
+    const displayName = displayNameOf(user);
 
     // Step 5: AI Call (OpenAI or Gemini, with retry)
     let aiResult: AiResult | null = null;
@@ -850,133 +790,73 @@ serve(async (req) => {
     } else {
       console.warn(`Unknown AI_PROVIDER "${aiProvider}", treating as AI_DOWN`);
     }
-    
+
     if (!aiResult) {
-      // All retries failed
-      const latencyMs = Date.now() - startTime;
-      
-      // Persist failure (fail-soft)
       supabase
         .from('tasks')
         .insert({
+          ...taskRecordBase,
           input_hash: inputHash,
-          guest_id: guest_id || null,
-          request_id: request_id || null,
           token_usage: null,
-          latency_ms: latencyMs,
+          latency_ms: Date.now() - startTime,
           fallback_reason: 'AI_DOWN',
         })
-        .then(() => {}, (err) => console.warn('Failed to persist task:', err));
-      
-      const errorResponse: ResponseBody = {
-        success: false,
-        fallback_reason: 'AI_DOWN',
-        error: 'AI service is temporarily unavailable. Please try again later.',
-      };
-      
-      // Validate response (fail-soft)
-      try {
-        ResponseBodySchema.parse(errorResponse);
-      } catch (validationError) {
-        console.warn('Response validation warning:', validationError);
-      }
-      
-      return new Response(
-        JSON.stringify(errorResponse),
+        .then(
+          () => {},
+          (err: unknown) => console.warn('Failed to persist task:', err)
+        );
+
+      return jsonResponse(
         {
-          status: 503,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+          success: false,
+          fallback_reason: 'AI_DOWN',
+          error: 'AI service is temporarily unavailable. Please try again later.',
+        },
+        503
       );
     }
-    
+
     const { empathy_bridge, first_step_hook, steps, tokenUsage } = aiResult;
     const latencyMs = Date.now() - startTime;
-    
+
     // Step 6: Persistence (with retry, fail-soft)
-    let persistAttempts = 0;
-    const maxPersistAttempts = 3;
-    
-    while (persistAttempts < maxPersistAttempts) {
+    for (let persistAttempt = 1; persistAttempt <= 3; persistAttempt++) {
       try {
         const { error } = await supabase.from('tasks').insert({
+          ...taskRecordBase,
           input_hash: inputHash,
-          guest_id: guest_id || null,
-          request_id: request_id || null,
           token_usage: tokenUsage,
           latency_ms: latencyMs,
           fallback_reason: null,
-          steps: steps, // Store the generated steps as JSONB
+          steps,
         });
-        
-        if (!error) {
-          break; // Success
-        }
-        
-        persistAttempts++;
-        if (persistAttempts < maxPersistAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * persistAttempts));
-        }
+        if (!error) break;
+        console.warn(`Persistence attempt ${persistAttempt} failed:`, error);
       } catch (error) {
-        persistAttempts++;
-        console.warn(`Persistence attempt ${persistAttempts} failed:`, error);
-        if (persistAttempts < maxPersistAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * persistAttempts));
-        }
+        console.warn(`Persistence attempt ${persistAttempt} failed:`, error);
+      }
+      if (persistAttempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * persistAttempt));
       }
     }
-    
-    // Validate and return success response with new neuro-companion fields
-    const successResponse: ResponseBody = {
-      success: true,
-      empathy_bridge,
-      first_step_hook,
-      steps,
-      token_usage: tokenUsage,
-      latency_ms: latencyMs,
-    };
-    
-    // Validate response with Zod (fail-soft: log but don't block)
-    try {
-      ResponseBodySchema.parse(successResponse);
-    } catch (validationError) {
-      console.warn('Response validation warning:', validationError);
-      // Continue anyway - fail-soft
-    }
-    
-    return new Response(
-      JSON.stringify(successResponse),
+
+    return jsonResponse(
       {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+        success: true,
+        empathy_bridge,
+        first_step_hook,
+        steps,
+        token_usage: tokenUsage,
+        latency_ms: latencyMs,
+      },
+      200
     );
   } catch (error) {
+    // Details stay in the logs; the client only learns that the server failed.
     console.error('Edge function error:', error);
-    
-    const errorResponse: ResponseBody = {
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-      fallback_reason: 'DB_DOWN',
-    };
-    
-    // Validate response (fail-soft)
-    try {
-      ResponseBodySchema.parse(errorResponse);
-    } catch (validationError) {
-      console.warn('Response validation warning:', validationError);
-    }
-    
-    return new Response(
-      JSON.stringify(errorResponse),
-      {
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json',
-        },
-      }
+    return jsonResponse(
+      { success: false, error: 'Internal server error', fallback_reason: 'DB_DOWN' },
+      500
     );
   }
 });
-
