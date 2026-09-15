@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated, { ZoomIn, FadeIn } from 'react-native-reanimated';
-import { SuccessIcon, NativeAdCard } from '../src/components';
+import { SuccessIcon } from '../src/components';
 import { getRandomSuccessMessage } from '../src/lib/SuccessMessages';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -15,7 +14,6 @@ export default function SuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ totalSteps: string; input: string }>();
   const totalSteps = parseInt(params.totalSteps || '0', 10);
-  const insets = useSafeAreaInsets();
 
   // Get random success message based on current language (creates novelty for ADHD engagement)
   const successMessage = useMemo(() => {
@@ -37,7 +35,6 @@ export default function SuccessScreen() {
             flexGrow: 1,
             justifyContent: 'center',
             paddingVertical: 40,
-            paddingBottom: 120, // Space for ad at bottom
           }}
         >
           <View className="flex-1 justify-center items-center px-6">
@@ -88,19 +85,6 @@ export default function SuccessScreen() {
             </AnimatedView>
           </View>
         </ScrollView>
-
-        {/* Native Ad at bottom - Fixed position, responsive with safe area */}
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            paddingBottom: Math.max(insets.bottom, 16),
-          }}
-        >
-          <NativeAdCard showAd={true} />
-        </View>
       </View>
     </View>
   );
