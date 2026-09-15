@@ -137,7 +137,11 @@
     "resume": "Resume"
   },
   "dashboard": {
-    "guest": "Guest"
+    "guest": "Guest",
+    "welcome": "Welcome back",
+    "signOut": "Sign Out",
+    "coreFeatureTitle": "Core Minito Feature",
+    "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps."
   },
   "audio": {
     "title": "Focus Sounds",
