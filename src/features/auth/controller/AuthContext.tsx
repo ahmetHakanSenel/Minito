@@ -20,6 +20,7 @@ type AuthContextValue = {
   user: User | null;
   displayName: string | null;
   isInitializing: boolean;
+  isBackendAvailable: boolean;
   providers: SocialProviders;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<SignUpResult>;
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       displayName: readDisplayName(user),
       isInitializing,
+      isBackendAvailable: authRepository.isBackendAvailable,
       providers,
       signInWithEmail: authRepository.signInWithEmail,
       signUpWithEmail: authRepository.signUpWithEmail,

@@ -48,8 +48,10 @@
     "continueWithApple": "Apple ile Devam Et",
     "continueWithGoogle": "Google ile Devam Et",
     "checkEmail": "E-postanızı onaylamak için gelen kutunuzu kontrol edin, ardından giriş yapın.",
+    "backendUnavailable": "Minito şu an sunucusuna ulaşamıyor, bu yüzden giriş yapılamıyor. Lütfen daha sonra tekrar deneyin.",
     "errors": {
       "invalid_input": "Geçerli bir e-posta ve en az 6 karakterli bir şifre girin.",
+      "backend_unavailable": "Minito şu an sunucusuna ulaşamıyor. Lütfen daha sonra tekrar deneyin.",
       "invalid_name": "Sana nasıl hitap edeceğimizi yaz.",
       "invalid_credentials": "E-posta veya şifre hatalı.",
       "email_not_confirmed": "Giriş yapmadan önce lütfen e-postanızı onaylayın.",

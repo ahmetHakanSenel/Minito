@@ -1,5 +1,5 @@
 import { isAuthError, isAuthRetryableFetchError, type Session } from '@supabase/supabase-js';
-import { supabase } from '../data/supabase/client';
+import { BackendUnavailableError, getSupabase, isBackendConfigured } from '../data/supabase/client';
 import { isAppleSignInAvailable, requestAppleIdToken } from '../data/auth/appleAuth';
 import { isGoogleSignInAvailable, requestGoogleIdToken } from '../data/auth/googleAuth';
 
@@ -11,6 +11,7 @@ export type AuthErrorCode =
   | 'invalid_email'
   | 'rate_limited'
   | 'network'
+  | 'backend_unavailable'
   | 'provider_unavailable'
   | 'cancelled'
   | 'unknown';
@@ -56,6 +57,9 @@ function toRepositoryError(error: unknown): AuthRepositoryError {
   if (error instanceof AuthRepositoryError) {
     return error;
   }
+  if (error instanceof BackendUnavailableError) {
+    return new AuthRepositoryError('backend_unavailable', error);
+  }
   if (isAuthRetryableFetchError(error)) {
     return new AuthRepositoryError('network', error);
   }
@@ -65,13 +69,27 @@ function toRepositoryError(error: unknown): AuthRepositoryError {
   return new AuthRepositoryError('unknown', error);
 }
 
+// Resolving the client per call turns a missing backend into a typed, recoverable error.
+function auth() {
+  try {
+    return getSupabase().auth;
+  } catch (error) {
+    throw toRepositoryError(error);
+  }
+}
+
 function onSessionChange(listener: (session: Session | null) => void): () => void {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => listener(session));
+  if (!isBackendConfigured) {
+    // Nothing to restore without a backend; report "signed out" so the app can finish booting.
+    listener(null);
+    return () => {};
+  }
+  const { data } = auth().onAuthStateChange((_event, session) => listener(session));
   return () => data.subscription.unsubscribe();
 }
 
 async function signInWithEmail(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await auth().signInWithPassword({ email, password });
   if (error) {
     throw toRepositoryError(error);
   }
@@ -82,7 +100,7 @@ async function signUpWithEmail(
   password: string,
   displayName: string
 ): Promise<SignUpResult> {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await auth().signUp({
     email,
     password,
     options: { data: { display_name: displayName } },
@@ -98,6 +116,7 @@ async function signInWithProvider(
   provider: 'google' | 'apple',
   requestIdToken: () => Promise<string | null>
 ): Promise<void> {
+  const supabaseAuth = auth();
   let token: string | null;
   try {
     token = await requestIdToken();
@@ -107,14 +126,14 @@ async function signInWithProvider(
   if (token === null) {
     throw new AuthRepositoryError('cancelled');
   }
-  const { error } = await supabase.auth.signInWithIdToken({ provider, token });
+  const { error } = await supabaseAuth.signInWithIdToken({ provider, token });
   if (error) {
     throw toRepositoryError(error);
   }
 }
 
 async function signOut(): Promise<void> {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await auth().signOut();
   if (error) {
     throw toRepositoryError(error);
   }
@@ -122,13 +141,14 @@ async function signOut(): Promise<void> {
 
 // Supabase emits USER_UPDATED afterwards, so session listeners pick up the new name.
 async function updateDisplayName(displayName: string): Promise<void> {
-  const { error } = await supabase.auth.updateUser({ data: { display_name: displayName } });
+  const { error } = await auth().updateUser({ data: { display_name: displayName } });
   if (error) {
     throw toRepositoryError(error);
   }
 }
 
 export const authRepository = {
+  isBackendAvailable: isBackendConfigured,
   onSessionChange,
   signInWithEmail,
   signUpWithEmail,

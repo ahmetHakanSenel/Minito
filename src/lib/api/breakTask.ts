@@ -1,5 +1,5 @@
 import { tracedAxios } from '../requestTracing';
-import { supabase } from '../../data/supabase/client';
+import { getSupabase } from '../../data/supabase/client';
 import { FallbackReason } from '../../safety';
 import { getOfflineFallbackSteps } from '../offlineFallback';
 
@@ -104,7 +104,7 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
     // The edge function only serves signed-in users; the JWT identifies them for rate limiting.
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = await getSupabase().auth.getSession();
     if (!session) {
       return { success: false, fallbackReason: FallbackReason.VALIDATION, error: 'Not signed in' };
     }

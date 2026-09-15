@@ -1,15 +1,19 @@
-import { supabase } from '../../data/supabase/client';
+import { getSupabase } from '../../data/supabase/client';
 import { breakTask } from '../../lib/api/breakTask';
 import { FallbackReason } from '../../safety';
 import { taskRepository } from '../taskRepository';
 
-jest.mock('../../data/supabase/client', () => ({ supabase: { from: jest.fn() } }));
+jest.mock('../../data/supabase/client', () => {
+  const client = { from: jest.fn() };
+  return { getSupabase: jest.fn(() => client) };
+});
 jest.mock('../../lib/api/breakTask', () => ({ breakTask: jest.fn() }));
 jest.mock('../../lib/guestIdentity', () => ({
   getOrCreateGuestId: jest.fn(async () => 'guest-1'),
 }));
 
-const mockedFrom = jest.mocked(supabase.from);
+const mockedFrom = jest.mocked(getSupabase().from);
+const mockedGetSupabase = jest.mocked(getSupabase);
 const mockedBreakTask = jest.mocked(breakTask);
 
 type QueryResult = { data: unknown; error: unknown };
@@ -66,6 +70,14 @@ describe('taskRepository.listRecent', () => {
 
   it('reports a missing table as unavailable', async () => {
     mockQuery({ data: null, error: { code: 'PGRST205', message: 'relation not found' } });
+
+    await expect(taskRepository.listRecent(8)).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('reports a missing backend configuration as unavailable', async () => {
+    mockedGetSupabase.mockImplementationOnce(() => {
+      throw new Error('Supabase is not configured');
+    });
 
     await expect(taskRepository.listRecent(8)).rejects.toMatchObject({ code: 'unavailable' });
   });

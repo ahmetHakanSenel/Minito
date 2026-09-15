@@ -1,5 +1,5 @@
 import type { PostgrestError } from '@supabase/supabase-js';
-import { supabase } from '../data/supabase/client';
+import { getSupabase } from '../data/supabase/client';
 import type { Tables } from '../data/supabase/database.types';
 import { breakTask } from '../lib/api/breakTask';
 import { getOrCreateGuestId } from '../lib/guestIdentity';
@@ -64,6 +64,15 @@ function toRepositoryError(error: PostgrestError): TaskRepositoryError {
   );
 }
 
+// A missing backend configuration degrades to the same "no history" state as a missing table.
+function table() {
+  try {
+    return getSupabase().from(TABLE);
+  } catch (error) {
+    throw new TaskRepositoryError('unavailable', error);
+  }
+}
+
 function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {
   return {
     id: row.id,
@@ -80,8 +89,7 @@ function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {
 }
 
 async function listRecent(limit: number): Promise<TaskBreakdown[]> {
-  const { data, error } = await supabase
-    .from(TABLE)
+  const { data, error } = await table()
     .select(COLUMNS)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -92,8 +100,7 @@ async function listRecent(limit: number): Promise<TaskBreakdown[]> {
 }
 
 async function save(content: BreakdownContent): Promise<TaskBreakdown> {
-  const { data, error } = await supabase
-    .from(TABLE)
+  const { data, error } = await table()
     .insert({
       title: content.title,
       empathy_bridge: content.empathyBridge,
@@ -141,18 +148,14 @@ async function breakDown(input: string): Promise<BreakdownOutcome> {
 }
 
 async function recordProgress(id: string, completedStepCount: number): Promise<void> {
-  const { error } = await supabase
-    .from(TABLE)
-    .update({ completed_step_count: completedStepCount })
-    .eq('id', id);
+  const { error } = await table().update({ completed_step_count: completedStepCount }).eq('id', id);
   if (error) {
     throw toRepositoryError(error);
   }
 }
 
 async function markCompleted(id: string, totalSteps: number): Promise<void> {
-  const { error } = await supabase
-    .from(TABLE)
+  const { error } = await table()
     .update({ completed_step_count: totalSteps, completed_at: new Date().toISOString() })
     .eq('id', id);
   if (error) {
@@ -161,7 +164,7 @@ async function markCompleted(id: string, totalSteps: number): Promise<void> {
 }
 
 async function remove(id: string): Promise<void> {
-  const { error } = await supabase.from(TABLE).delete().eq('id', id);
+  const { error } = await table().delete().eq('id', id);
   if (error) {
     throw toRepositoryError(error);
   }
