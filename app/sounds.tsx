@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Play, Pause, Volume2 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 import { useAudioContext, AUDIO_TRACKS } from '../src/context';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -18,6 +19,7 @@ interface SoundCardProps {
 }
 
 const SoundCard: React.FC<SoundCardProps> = ({ track, isActive, isPlaying, onPress, index }) => {
+  const { t } = useTranslation();
   return (
     <AnimatedView entering={FadeInDown.delay(index * 60).duration(300)}>
       <TouchableOpacity
@@ -29,8 +31,8 @@ const SoundCard: React.FC<SoundCardProps> = ({ track, isActive, isPlaying, onPre
           <Volume2 size={24} color={track.color} strokeWidth={2} />
         </View>
         <View style={styles.soundInfo}>
-          <Text style={styles.soundName}>{track.name}</Text>
-          <Text style={styles.soundDesc}>{track.description}</Text>
+          <Text style={styles.soundName}>{t(`audio.tracks.${track.id}.name`)}</Text>
+          <Text style={styles.soundDesc}>{t(`audio.tracks.${track.id}.description`)}</Text>
         </View>
         {isActive && (
           <View style={[styles.playIndicator, { backgroundColor: track.color }]}>
@@ -50,6 +52,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function SoundsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { currentTrack, isPlaying, play, pause, resume } = useAudioContext();
 
   const handleBack = () => {
@@ -84,7 +87,7 @@ export default function SoundsScreen() {
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Odak Sesleri</Text>
+        <Text style={styles.headerTitle}>{t('audio.title')}</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -94,8 +97,8 @@ export default function SoundsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>Arka Plan Sesleri</Text>
-        <Text style={styles.sectionSubtitle}>Odaklanmanı artırmak için bir ses seç</Text>
+        <Text style={styles.sectionTitle}>{t('audio.sectionTitle')}</Text>
+        <Text style={styles.sectionSubtitle}>{t('audio.sectionSubtitle')}</Text>
 
         <View style={styles.soundsList}>
           {AUDIO_TRACKS.map((track, index) => (

@@ -25,6 +25,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -40,7 +41,7 @@ export interface SessionCompletionModalProps {
   pickupCount: number;
   taskTitle: string;
   onTaskCompleted: () => void; // Marks task as done
-  onJustSession: () => void; // Keeps task active, adds XP
+  onJustSession: () => void; // Keeps the task open
 }
 
 // ============================================================================
@@ -56,6 +57,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
   onTaskCompleted,
   onJustSession,
 }) => {
+  const { t } = useTranslation();
   const [showConfetti, setShowConfetti] = React.useState(false);
   const celebrationScale = useSharedValue(0.5);
   const buttonAScale = useSharedValue(1);
@@ -117,11 +119,13 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
   const formatDuration = (minutes: number) => {
     if (minutes < 60) {
-      return `${minutes} dakika`;
+      return t('duration.minutes', { count: minutes });
     }
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return mins > 0 ? `${hours} saat ${mins} dakika` : `${hours} saat`;
+    return mins > 0
+      ? t('duration.hoursMinutes', { hours, minutes: mins })
+      : t('duration.hours', { count: hours });
   };
 
   // Calculate focus score (less pickups = better)
@@ -160,11 +164,14 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
             {/* Title */}
             <AnimatedView entering={FadeInDown.delay(200).springify()}>
               <View style={styles.titleRow}>
-                <Text style={styles.title}>Harika!</Text>
+                <Text style={styles.title}>{t('sessionComplete.title')}</Text>
                 <FocusIcon size={22} color="#C4B5FD" strokeWidth={2} />
               </View>
               <Text style={styles.subtitle} numberOfLines={2}>
-                “{taskTitle}” için {formatDuration(sessionDuration)} odaklandın
+                {t('sessionComplete.subtitle', {
+                  task: taskTitle,
+                  duration: formatDuration(sessionDuration),
+                })}
               </Text>
             </AnimatedView>
 
@@ -178,7 +185,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                 <View style={styles.statIconContainer}>
                   <Clock size={24} color="#60A5FA" strokeWidth={2} />
                 </View>
-                <Text style={styles.statLabel}>Süre</Text>
+                <Text style={styles.statLabel}>{t('sessionComplete.duration')}</Text>
                 <Text style={styles.statValue}>{formatDuration(sessionDuration)}</Text>
               </View>
 
@@ -189,8 +196,10 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                 >
                   <Smartphone size={24} color="#FBBF24" strokeWidth={2} />
                 </View>
-                <Text style={styles.statLabel}>Kaldırma</Text>
-                <Text style={styles.statValue}>{pickupCount} kez</Text>
+                <Text style={styles.statLabel}>{t('sessionComplete.pickups')}</Text>
+                <Text style={styles.statValue}>
+                  {t('sessionComplete.pickupCount', { count: pickupCount })}
+                </Text>
               </View>
             </AnimatedView>
 
@@ -199,7 +208,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
               entering={FadeInDown.delay(400).springify()}
               style={styles.focusScoreContainer}
             >
-              <Text style={styles.focusScoreLabel}>Odak Skoru</Text>
+              <Text style={styles.focusScoreLabel}>{t('sessionComplete.focusScore')}</Text>
               <Text style={styles.focusScoreValue}>{focusScore}</Text>
             </AnimatedView>
 
@@ -223,7 +232,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                     style={styles.buttonPrimary}
                   >
                     <CheckCircle2 size={22} color="#FFFFFF" strokeWidth={2.5} />
-                    <Text style={styles.buttonPrimaryText}>Görev Tamamlandı</Text>
+                    <Text style={styles.buttonPrimaryText}>{t('sessionComplete.taskDone')}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </Animated.View>
@@ -237,16 +246,14 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                   activeOpacity={1}
                   style={styles.buttonSecondary}
                 >
-                  <Text style={styles.buttonSecondaryText}>Sadece Oturum</Text>
+                  <Text style={styles.buttonSecondaryText}>{t('sessionComplete.justSession')}</Text>
                   <ArrowRight size={18} color="rgba(255,255,255,0.7)" strokeWidth={2} />
                 </TouchableOpacity>
               </Animated.View>
             </AnimatedView>
 
             {/* Helper Text */}
-            <Text style={styles.helperText}>
-              “Sadece Oturum” seçersen görev aktif kalır ve XP kazanırsın
-            </Text>
+            <Text style={styles.helperText}>{t('sessionComplete.helper')}</Text>
           </View>
         </SafeAreaView>
       </AnimatedView>

@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import * as Haptics from 'expo-haptics';
 import { readJson, writeJson } from '../lib/storage/jsonStore';
+import i18n from '../lib/i18n/config';
 
 // ============================================================================
 // DATA TYPES - ADHD "Next Action" focused Project Management
@@ -141,44 +142,31 @@ const calculateProgress = (tasks: Task[]): number => {
  * Returns canned subtask suggestions matched on keywords in the project title.
  * The planner presents them explicitly as demo suggestions, never as AI output.
  */
+type SampleKey = 'thesis' | 'fitness' | 'language';
+
+// Title keywords in every supported language; the suggestion text itself lives in the locale files.
+const SAMPLE_KEYWORDS: [SampleKey, string[]][] = [
+  ['thesis', ['tez', 'thesis']],
+  ['fitness', ['fitness', 'spor', 'gym', 'workout']],
+  ['language', ['dil', 'language']],
+];
+
+function sampleSuggestions(key: SampleKey | 'default'): string[] {
+  const suggestions = i18n.t(`planner.samples.${key}`, { returnObjects: true });
+  return Array.isArray(suggestions)
+    ? suggestions.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
 const generateSampleSubtasks = async (projectTitle: string): Promise<string[]> => {
   // A short pause lets the suggestion list animate in instead of popping.
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  // Sample suggestions keyed by keywords in the title
-  const mockSuggestions: Record<string, string[]> = {
-    tez: [
-      'Konu araştırması yap',
-      'Kaynak topla',
-      'Taslak oluştur',
-      'İlk bölümü yaz',
-      'Danışmana gönder',
-    ],
-    fitness: [
-      'Hedef belirle',
-      'Program oluştur',
-      'İlk antrenman',
-      'Beslenme planı',
-      'Haftalık değerlendirme',
-    ],
-    dil: [
-      'Temel kelimeleri öğren',
-      'Günlük pratik yap',
-      'Konuşma pratiği',
-      'Gramer çalış',
-      'Film/dizi izle',
-    ],
-  };
-
   const lowerTitle = projectTitle.toLowerCase();
-  for (const [key, suggestions] of Object.entries(mockSuggestions)) {
-    if (lowerTitle.includes(key)) {
-      return suggestions;
-    }
-  }
-
-  // Default suggestions
-  return ['İlk adımı belirle', 'Araştırma yap', 'Plan oluştur', 'Uygulamaya başla', 'Değerlendir'];
+  const match = SAMPLE_KEYWORDS.find(([, keywords]) =>
+    keywords.some((keyword) => lowerTitle.includes(keyword))
+  );
+  return sampleSuggestions(match ? match[0] : 'default');
 };
 
 // ============================================================================
@@ -344,30 +332,14 @@ export function useProjects() {
 }
 
 // ============================================================================
-// UTILITY: Format due date in Turkish
+// UTILITY: Format due date in the active language
 // ============================================================================
 
 export function formatDueDate(date?: Date): string | undefined {
   if (!date) return undefined;
-
-  const months = [
-    'Ocak',
-    'Şubat',
-    'Mart',
-    'Nisan',
-    'Mayıs',
-    'Haziran',
-    'Temmuz',
-    'Ağustos',
-    'Eylül',
-    'Ekim',
-    'Kasım',
-    'Aralık',
-  ];
-
-  const day = date.getDate();
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-
-  return `${day} ${month} ${year}`;
+  return date.toLocaleDateString(i18n.language, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }

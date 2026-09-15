@@ -145,7 +145,11 @@
     "welcome": "Tekrar hoş geldin",
     "signOut": "Çıkış Yap",
     "coreFeatureTitle": "Temel Minito Özelliği",
-    "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl."
+    "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl.",
+    "controlCenter": "Kontrol Merkezi",
+    "premiumPlan": "Premium plan",
+    "freePlan": "Ücretsiz plan",
+    "quickAccess": "Hızlı erişim"
   },
   "errorBoundary": {
     "title": "Bir şeyler ters gitti",
@@ -180,7 +184,49 @@
     "demoSuggest": "Örnek görev öner",
     "demoSuggesting": "Örnekler hazırlanıyor…",
     "demoBadge": "DEMO",
-    "demoNote": "Şimdilik örnek adımlar; AI destekli planlama yakında."
+    "demoNote": "Şimdilik örnek adımlar; AI destekli planlama yakında.",
+    "title": "Planlayıcı",
+    "activeProjects": "Aktif projeler",
+    "newProject": "Yeni proje",
+    "projectName": "Proje adı",
+    "projectNamePlaceholder": "Örn: Bitirme tezi",
+    "color": "Renk",
+    "suggestionsTitle": "Önerilen görevler (eklemek için dokun):",
+    "subtasks": "Alt görevler",
+    "subtaskPlaceholder": "Yeni görev ekle…",
+    "create": "Proje oluştur",
+    "nextStep": "Sonraki adım",
+    "due": "Bitiş: {{date}}",
+    "samples": {
+      "thesis": [
+        "Konu araştırması yap",
+        "Kaynak topla",
+        "Taslak oluştur",
+        "İlk bölümü yaz",
+        "Danışmana gönder"
+      ],
+      "fitness": [
+        "Hedef belirle",
+        "Program oluştur",
+        "İlk antrenmanı yap",
+        "Beslenme planı hazırla",
+        "Haftayı değerlendir"
+      ],
+      "language": [
+        "Temel kelimeleri öğren",
+        "Her gün biraz pratik yap",
+        "Konuşma pratiği yap",
+        "Gramer çalış",
+        "Bir film ya da dizi izle"
+      ],
+      "default": [
+        "İlk adımı belirle",
+        "Araştırma yap",
+        "Plan oluştur",
+        "Uygulamaya başla",
+        "Nasıl gittiğini değerlendir"
+      ]
+    }
   },
   "profile": {
     "namePrompt": "Sana nasıl hitap edelim?",
@@ -219,13 +265,29 @@
   },
   "audio": {
     "title": "Odak Sesleri",
-    "stop": "Sesi durdur"
+    "stop": "Sesi durdur",
+    "sectionTitle": "Arka plan sesleri",
+    "sectionSubtitle": "Odaklanmanı artırmak için bir ses seç",
+    "tracks": {
+      "brown_noise": { "name": "Kahverengi gürültü", "description": "Derin odak" },
+      "white_noise": { "name": "Beyaz gürültü", "description": "Konsantrasyon" },
+      "rain": { "name": "Yağmur", "description": "Rahatlama" },
+      "forest": { "name": "Orman", "description": "Doğa" }
+    }
   },
   "stats": {
     "title": "İçgörüler",
     "emptyTitle": "Henüz içgörü yok",
     "emptyText": "Planlayıcıdan bir odak oturumu tamamladığında ritmin, devamlılığın ve akış verilerin burada görünecek — hepsi gerçek, hiçbiri uydurma değil.",
-    "emptyAction": "Planlayıcıyı aç"
+    "emptyAction": "Planlayıcıyı aç",
+    "energyFlow": "Enerji akışı",
+    "noProjectData": "Henüz proje verisi yok",
+    "focusRhythm": "Odak ritmi",
+    "noData": "Henüz veri yok",
+    "peakTime": "Zirve saatin:",
+    "consistency": "Devamlılık",
+    "legendLess": "Az",
+    "legendMore": "Çok"
   },
   "flowState": {
     "flow": {
@@ -249,8 +311,91 @@
     "customDuration": "Özel süre...",
     "minutes": "dakika",
     "mute": "Sessiz",
-    "brownNoise": "Brown Noise",
+    "brownNoise": "Kahverengi Gürültü",
     "rain": "Yağmur",
-    "lofi": "Lo-Fi"
+    "lofi": "Lo-Fi",
+    "durationOption": "{{count}} dk"
+  },
+  "sessionComplete": {
+    "title": "Harika!",
+    "subtitle": "“{{task}}” için {{duration}} odaklandın",
+    "duration": "Süre",
+    "pickups": "Kaldırma",
+    "pickupCount": "{{count}} kez",
+    "focusScore": "Odak skoru",
+    "taskDone": "Görev tamamlandı",
+    "justSession": "Sadece oturum",
+    "helper": "“Sadece oturum” seçersen görev daha sonrası için açık kalır."
+  },
+  "duration": {
+    "minutes": "{{count}} dakika",
+    "hours": "{{count}} saat",
+    "hoursMinutes": "{{hours}} saat {{minutes}} dakika",
+    "minutesShort": "{{count}} dk"
+  },
+  "offlineSteps": {
+    "cleaning": [
+      "Küçük bir alanla başla (ör. masan ya da bir köşe)",
+      "Temizlik malzemelerini topla: çöp poşeti, bez ve yeri değişecek eşyalar için bir kutu",
+      "Eşyaları üç gruba ayır: kalacak, bağışlanacak, atılacak",
+      "Yüzeyleri uygun bir temizleyiciyle sil",
+      "Eşyaları yerlerine geri koy",
+      "Çöpü ve geri dönüşümü çıkar",
+      "Bir an dur ve temiz alanının tadını çıkar"
+    ],
+    "study": [
+      "Sessiz, dikkat dağıtıcısız bir yer bul",
+      "Gereken her şeyi topla (kitaplar, notlar, bilgisayar vb.)",
+      "Konuyu küçük, yönetilebilir parçalara böl",
+      "Odaklı çalışma için bir zamanlayıcı kur (ör. 25 dakika)",
+      "Oturumlar arasında kısa molalar ver (5-10 dakika)",
+      "Aktif hatırlama yap: öğrendiklerini kendine sor",
+      "Sonunda ana noktaları gözden geçirip özetle"
+    ],
+    "work": [
+      "Hedefi ve beklenen sonucu netleştir",
+      "Projeyi daha küçük görevlere böl",
+      "Görevleri önem ve teslim tarihine göre sırala",
+      "Her görev için belirli zaman blokları ayır",
+      "Dikkat dağıtıcıları kaldır (telefon, bildirimler)",
+      "Enerjin en yüksekken en zor görevle başla",
+      "İlerlemeyi gözden geçir ve planı gerektiği gibi güncelle"
+    ],
+    "health": [
+      "Bugün yapabileceğini hissettiğin bir aktivite seç",
+      "Belirli bir saat ve yer belirle",
+      "Gereken ekipmanı ya da kıyafeti hazırla",
+      "Isınma ya da hafif hareketlerle başla",
+      "Aktiviteyi kendi temponda yap",
+      "Sonrasında soğuma ve esneme yap",
+      "Su iç ve gerektiği kadar dinlen"
+    ],
+    "social": [
+      "Nasıl bir sosyal etkileşime ihtiyacın olduğunu belirle",
+      "Güvendiğin bir kişiye ulaş",
+      "Belirli bir aktivite ya da zaman öner",
+      "Planlar değişirse esnek ol",
+      "Miktardan çok kaliteli zamana odaklan",
+      "Kendi sınırlarına ve enerjine saygı göster",
+      "Bağı sürdürmek için sonrasında haber ver"
+    ],
+    "financial": [
+      "İlgili tüm finansal belgeleri topla",
+      "Mevcut finansal durumunu gözden geçir",
+      "Finansal hedeflerini belirle",
+      "Basit bir bütçe ya da harcama planı oluştur",
+      "Mümkünse otomatik birikim kur",
+      "Örüntüleri görmek için bir hafta harcamalarını takip et",
+      "Finansal sağlığını iyileştirmek için küçük bir değişiklik yap"
+    ],
+    "general": [
+      "Görevi daha küçük, net adımlara böl",
+      "Hangi kaynaklara ya da araçlara ihtiyacın olduğunu belirle",
+      "Gerçekçi bir süre ya da zaman aralığı belirle",
+      "En kolay ya da en motive edici adımla başla",
+      "Belirli bir süre boyunca üzerinde çalış (ör. 15 dakika)",
+      "Gerektiğinde mola ver",
+      "Yol boyunca küçük kazanımları kutla"
+    ]
   }
 }

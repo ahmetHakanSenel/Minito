@@ -3,9 +3,8 @@ import { Audio, AVPlaybackStatus } from 'expo-av';
 
 // Audio tracks available
 export interface AudioTrack {
+  /** Also the key under audio.tracks for the track's localized name and description. */
   id: string;
-  name: string;
-  description: string;
   color: string;
   // In a real app, this would be a require() or remote URL
   // For now we'll use placeholder - audio files need to be added to assets
@@ -13,30 +12,10 @@ export interface AudioTrack {
 }
 
 export const AUDIO_TRACKS: AudioTrack[] = [
-  {
-    id: 'brown_noise',
-    name: 'Brown Noise',
-    description: 'Deep Focus',
-    color: '#8B4513',
-  },
-  {
-    id: 'white_noise',
-    name: 'White Noise',
-    description: 'Concentration',
-    color: '#E5E5E5',
-  },
-  {
-    id: 'rain',
-    name: 'Yağmur Sesi',
-    description: 'Relax',
-    color: '#60A5FA',
-  },
-  {
-    id: 'forest',
-    name: 'Orman',
-    description: 'Nature',
-    color: '#34D399',
-  },
+  { id: 'brown_noise', color: '#8B4513' },
+  { id: 'white_noise', color: '#E5E5E5' },
+  { id: 'rain', color: '#60A5FA' },
+  { id: 'forest', color: '#34D399' },
 ];
 
 interface AudioContextType {
@@ -129,7 +108,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         setCurrentTrack(track);
         setIsPlaying(true);
-        console.log('Playing:', track.name);
+        console.log('Playing:', track.id);
       } catch (error) {
         console.error('Error playing audio:', error);
       } finally {

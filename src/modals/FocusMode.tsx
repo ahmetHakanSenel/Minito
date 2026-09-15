@@ -420,7 +420,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
   const formatRemainingMinutes = (seconds: number) => {
     const minutes = Math.ceil(seconds / 60);
     // Zen-Engineer format: No "remaining/kaldı" - just clean info
-    return `${minutes} dk • ${t('focusMode.focusLabel')}`;
+    return `${t('duration.minutesShort', { count: minutes })} • ${t('focusMode.focusLabel')}`;
   };
 
   // ========================================================================
@@ -594,7 +594,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
                     <Pause size={24} color="rgba(255,255,255,0.6)" />
                   )}
                   <Text style={[styles.pauseButtonText, !isPaused && styles.pauseButtonTextMuted]}>
-                    {isPaused ? 'Devam Et' : 'Duraklat'}
+                    {isPaused ? t('focusMode.resume') : t('focusMode.pause')}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>

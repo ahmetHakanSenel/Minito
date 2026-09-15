@@ -145,7 +145,11 @@
     "welcome": "Welcome back",
     "signOut": "Sign Out",
     "coreFeatureTitle": "Core Minito Feature",
-    "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps."
+    "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps.",
+    "controlCenter": "Control Center",
+    "premiumPlan": "Premium plan",
+    "freePlan": "Free plan",
+    "quickAccess": "Quick access"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -180,7 +184,49 @@
     "demoSuggest": "Suggest sample tasks",
     "demoSuggesting": "Preparing samples…",
     "demoBadge": "DEMO",
-    "demoNote": "Sample steps for now; AI-powered planning is coming soon."
+    "demoNote": "Sample steps for now; AI-powered planning is coming soon.",
+    "title": "Planner",
+    "activeProjects": "Active projects",
+    "newProject": "New project",
+    "projectName": "Project name",
+    "projectNamePlaceholder": "e.g. Graduation thesis",
+    "color": "Color",
+    "suggestionsTitle": "Suggested tasks (tap to add):",
+    "subtasks": "Subtasks",
+    "subtaskPlaceholder": "Add a task…",
+    "create": "Create project",
+    "nextStep": "Next step",
+    "due": "Due {{date}}",
+    "samples": {
+      "thesis": [
+        "Research the topic",
+        "Gather sources",
+        "Draft an outline",
+        "Write the first chapter",
+        "Send it to your advisor"
+      ],
+      "fitness": [
+        "Set a goal",
+        "Build a routine",
+        "Do the first workout",
+        "Plan your meals",
+        "Review the week"
+      ],
+      "language": [
+        "Learn core vocabulary",
+        "Practice a little every day",
+        "Practice speaking",
+        "Study grammar",
+        "Watch a film or series"
+      ],
+      "default": [
+        "Define the first step",
+        "Do some research",
+        "Make a plan",
+        "Start doing it",
+        "Review how it went"
+      ]
+    }
   },
   "profile": {
     "namePrompt": "What should we call you?",
@@ -219,13 +265,29 @@
   },
   "audio": {
     "title": "Focus Sounds",
-    "stop": "Stop sound"
+    "stop": "Stop sound",
+    "sectionTitle": "Background sounds",
+    "sectionSubtitle": "Pick a sound to deepen your focus",
+    "tracks": {
+      "brown_noise": { "name": "Brown noise", "description": "Deep focus" },
+      "white_noise": { "name": "White noise", "description": "Concentration" },
+      "rain": { "name": "Rain", "description": "Relax" },
+      "forest": { "name": "Forest", "description": "Nature" }
+    }
   },
   "stats": {
     "title": "Insights",
     "emptyTitle": "No insights yet",
     "emptyText": "Complete a focus session from the Planner and your rhythm, consistency and flow data will appear here — all of it real, none of it made up.",
-    "emptyAction": "Open the Planner"
+    "emptyAction": "Open the Planner",
+    "energyFlow": "Energy flow",
+    "noProjectData": "No project data yet",
+    "focusRhythm": "Focus rhythm",
+    "noData": "No data yet",
+    "peakTime": "Your peak hours:",
+    "consistency": "Consistency",
+    "legendLess": "Less",
+    "legendMore": "More"
   },
   "flowState": {
     "flow": {
@@ -251,6 +313,89 @@
     "mute": "Mute",
     "brownNoise": "Brown Noise",
     "rain": "Rain",
-    "lofi": "Lo-Fi"
+    "lofi": "Lo-Fi",
+    "durationOption": "{{count}}m"
+  },
+  "sessionComplete": {
+    "title": "Great job!",
+    "subtitle": "{{duration}} of focus on “{{task}}”",
+    "duration": "Duration",
+    "pickups": "Pickups",
+    "pickupCount": "{{count}}×",
+    "focusScore": "Focus score",
+    "taskDone": "Task done",
+    "justSession": "Just the session",
+    "helper": "Choose “Just the session” to keep the task open for later."
+  },
+  "duration": {
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
+    "hoursMinutes": "{{hours}} h {{minutes}} min",
+    "minutesShort": "{{count}} min"
+  },
+  "offlineSteps": {
+    "cleaning": [
+      "Start with one small area (e.g., your desk or a corner)",
+      "Gather cleaning supplies: trash bag, cleaning cloth, and a container for items to relocate",
+      "Sort items into three piles: keep, donate, and trash",
+      "Clean surfaces with appropriate cleaner",
+      "Put items back in their designated places",
+      "Take out trash and recycling",
+      "Take a moment to appreciate your clean space"
+    ],
+    "study": [
+      "Find a quiet, distraction-free space",
+      "Gather all necessary materials (books, notes, laptop, etc.)",
+      "Break the material into smaller, manageable chunks",
+      "Set a timer for focused study sessions (e.g., 25 minutes)",
+      "Take short breaks between sessions (5-10 minutes)",
+      "Use active recall: test yourself on what you learned",
+      "Review and summarize key points at the end"
+    ],
+    "work": [
+      "Clarify the goal and expected outcome",
+      "Break the project into smaller tasks",
+      "Prioritize tasks by importance and deadline",
+      "Set specific time blocks for each task",
+      "Remove distractions (phone, notifications)",
+      "Start with the most challenging task when energy is highest",
+      "Review progress and adjust plan as needed"
+    ],
+    "health": [
+      "Choose an activity that feels achievable today",
+      "Set a specific time and place",
+      "Prepare any needed equipment or clothing",
+      "Start with a warm-up or gentle movement",
+      "Do the activity at your own pace",
+      "Cool down and stretch afterward",
+      "Hydrate and rest as needed"
+    ],
+    "social": [
+      "Identify what kind of social interaction you need",
+      "Reach out to one person you trust",
+      "Suggest a specific activity or time",
+      "Be flexible if plans need to change",
+      "Focus on quality time over quantity",
+      "Respect your own boundaries and energy levels",
+      "Follow up afterward to maintain connection"
+    ],
+    "financial": [
+      "Gather all relevant financial documents",
+      "Review your current financial situation",
+      "Identify your financial goals",
+      "Create a simple budget or spending plan",
+      "Set up automatic savings if possible",
+      "Track expenses for a week to see patterns",
+      "Make one small change to improve your financial health"
+    ],
+    "general": [
+      "Break the task into smaller, specific steps",
+      "Identify what resources or tools you need",
+      "Set a realistic deadline or time frame",
+      "Start with the easiest or most motivating step",
+      "Work on it for a set amount of time (e.g., 15 minutes)",
+      "Take breaks when needed",
+      "Celebrate small wins along the way"
+    ]
   }
 }

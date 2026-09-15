@@ -156,7 +156,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
         >
           {/* Header */}
           <View style={modalStyles.header}>
-            <Text style={modalStyles.title}>Yeni Proje</Text>
+            <Text style={modalStyles.title}>{t('planner.newProject')}</Text>
             <TouchableOpacity onPress={handleClose} style={modalStyles.closeButton}>
               <X size={24} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
@@ -164,19 +164,19 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
           {/* Title Input */}
           <View style={modalStyles.inputContainer}>
-            <Text style={modalStyles.label}>Proje Adı</Text>
+            <Text style={modalStyles.label}>{t('planner.projectName')}</Text>
             <TextInput
               style={modalStyles.input}
               value={title}
               onChangeText={setTitle}
-              placeholder="Örn: Bitirme Tezi"
+              placeholder={t('planner.projectNamePlaceholder')}
               placeholderTextColor="rgba(255,255,255,0.3)"
             />
           </View>
 
           {/* Color Picker */}
           <View style={modalStyles.colorSection}>
-            <Text style={modalStyles.label}>Renk</Text>
+            <Text style={modalStyles.label}>{t('planner.color')}</Text>
             <View style={modalStyles.colorGrid}>
               {PROJECT_COLORS.map((color) => (
                 <TouchableOpacity
@@ -214,9 +214,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
           {/* Suggested Tasks Preview */}
           {suggestedTasks.length > 0 && (
             <AnimatedView entering={FadeIn.duration(200)} style={modalStyles.suggestedContainer}>
-              <Text style={modalStyles.suggestedTitle}>
-                Önerilen Görevler (eklemek için dokun):
-              </Text>
+              <Text style={modalStyles.suggestedTitle}>{t('planner.suggestionsTitle')}</Text>
               {suggestedTasks.map((task, index) => (
                 <TouchableOpacity
                   key={index}
@@ -232,13 +230,13 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
           {/* Manual Task Input */}
           <View style={modalStyles.manualTaskSection}>
-            <Text style={modalStyles.label}>Alt Görevler</Text>
+            <Text style={modalStyles.label}>{t('planner.subtasks')}</Text>
             <View style={modalStyles.manualTaskInputRow}>
               <TextInput
                 style={modalStyles.manualTaskInput}
                 value={newTaskText}
                 onChangeText={setNewTaskText}
-                placeholder="Yeni görev ekle..."
+                placeholder={t('planner.subtaskPlaceholder')}
                 placeholderTextColor="rgba(255,255,255,0.3)"
                 onSubmitEditing={handleAddManualTask}
                 returnKeyType="done"
@@ -282,7 +280,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               end={{ x: 1, y: 1 }}
               style={modalStyles.addButtonGradient}
             >
-              <Text style={modalStyles.addButtonText}>Proje Oluştur</Text>
+              <Text style={modalStyles.addButtonText}>{t('planner.create')}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </AnimatedView>
@@ -541,7 +539,7 @@ export default function PlannerScreen() {
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Planlayıcı</Text>
+        <Text style={styles.headerTitle}>{t('planner.title')}</Text>
         {/* Removed header add button - using bottom bar instead */}
         <View style={styles.headerSpacer} />
       </View>
@@ -553,7 +551,7 @@ export default function PlannerScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Section Title */}
-        <Text style={styles.sectionTitle}>Aktif Projeler</Text>
+        <Text style={styles.sectionTitle}>{t('planner.activeProjects')}</Text>
 
         {/* Empty State */}
         {sortedProjects.length === 0 && (
@@ -601,7 +599,7 @@ export default function PlannerScreen() {
               activeOpacity={0.7}
             >
               <Plus size={18} color="#71717a" strokeWidth={2} />
-              <Text style={styles.dockedAddText}>Yeni Proje</Text>
+              <Text style={styles.dockedAddText}>{t('planner.newProject')}</Text>
             </TouchableOpacity>
           </BlurView>
         ) : (
@@ -612,7 +610,7 @@ export default function PlannerScreen() {
               activeOpacity={0.7}
             >
               <Plus size={18} color="#71717a" strokeWidth={2} />
-              <Text style={styles.dockedAddText}>Yeni Proje</Text>
+              <Text style={styles.dockedAddText}>{t('planner.newProject')}</Text>
             </TouchableOpacity>
           </View>
         )}

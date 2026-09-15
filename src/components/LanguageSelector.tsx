@@ -14,7 +14,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 export const LanguageSelector: React.FC = () => {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { changeLanguage } = useChangeLanguage();
   const currentLanguage = i18n.language;
 
@@ -56,7 +56,7 @@ export const LanguageSelector: React.FC = () => {
 
   return (
     <View className="mb-6">
-      <Text className="text-textMain text-base font-semibold mb-3">Language</Text>
+      <Text className="text-textMain text-base font-semibold mb-3">{t('settings.language')}</Text>
       <View className="flex-row">
         {SUPPORTED_LANGUAGES.map((language) => (
           <LanguageButton key={language} language={language} />

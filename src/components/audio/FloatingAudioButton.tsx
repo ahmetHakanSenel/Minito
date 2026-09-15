@@ -224,8 +224,8 @@ export const FloatingAudioButton: React.FC = () => {
                   <Volume2 size={18} color={track.color} strokeWidth={2} />
                 </View>
                 <View style={styles.trackInfo}>
-                  <Text style={styles.trackName}>{track.name}</Text>
-                  <Text style={styles.trackDesc}>{track.description}</Text>
+                  <Text style={styles.trackName}>{t(`audio.tracks.${track.id}.name`)}</Text>
+                  <Text style={styles.trackDesc}>{t(`audio.tracks.${track.id}.description`)}</Text>
                 </View>
                 {isActive && (
                   <View style={[styles.stateBadge, { backgroundColor: track.color }]}>

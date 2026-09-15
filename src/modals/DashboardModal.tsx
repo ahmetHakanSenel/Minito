@@ -14,6 +14,8 @@ import { X, Calendar, Headphones, BarChart3, Settings, Crown, User } from 'lucid
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../features/auth/controller/AuthContext';
 
 const { width } = Dimensions.get('window');
 const CARD_GAP = 12;
@@ -57,10 +59,15 @@ const QuickActionCard: React.FC<QuickActionCardProps> = ({ icon, label, bgColor,
 export const DashboardModal: React.FC<DashboardModalProps> = ({
   visible,
   onClose,
-  userName = 'Kullanıcı',
+  userName,
   isPremium = false,
   onNavigate,
 }) => {
+  const { t } = useTranslation();
+  const { displayName, user } = useAuth();
+  // Screens that do not pass a name still show the signed-in user's handle.
+  const name = userName ?? displayName ?? user?.email ?? t('dashboard.guest');
+
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
@@ -94,7 +101,7 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
           >
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Kontrol Merkezi</Text>
+              <Text style={styles.headerTitle}>{t('dashboard.controlCenter')}</Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={handleClose}
@@ -111,7 +118,7 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
                   <User size={28} color="#FFFFFF" strokeWidth={2} />
                 </View>
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{userName}</Text>
+                  <Text style={styles.userName}>{name}</Text>
                   {isPremium ? (
                     <LinearGradient
                       colors={['#F59E0B', '#D97706']}
@@ -120,38 +127,38 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
                       style={styles.premiumBadge}
                     >
                       <Crown size={12} color="#FFFFFF" strokeWidth={2.5} />
-                      <Text style={styles.premiumText}>Premium Plan</Text>
+                      <Text style={styles.premiumText}>{t('dashboard.premiumPlan')}</Text>
                     </LinearGradient>
                   ) : (
-                    <Text style={styles.freeText}>Ücretsiz Plan</Text>
+                    <Text style={styles.freeText}>{t('dashboard.freePlan')}</Text>
                   )}
                 </View>
               </View>
 
               {/* Quick Actions Grid */}
-              <Text style={styles.sectionTitle}>Hızlı Erişim</Text>
+              <Text style={styles.sectionTitle}>{t('dashboard.quickAccess')}</Text>
               <View style={styles.actionsGrid}>
                 <QuickActionCard
                   icon={<Calendar size={28} color="#60A5FA" strokeWidth={2} />}
-                  label="Planlayıcı"
+                  label={t('planner.title')}
                   bgColor="rgba(96, 165, 250, 0.15)"
                   onPress={() => handleNavigate('planner')}
                 />
                 <QuickActionCard
                   icon={<Headphones size={28} color="#A78BFA" strokeWidth={2} />}
-                  label="Odak Sesleri"
+                  label={t('audio.title')}
                   bgColor="rgba(167, 139, 250, 0.15)"
                   onPress={() => handleNavigate('sounds')}
                 />
                 <QuickActionCard
                   icon={<BarChart3 size={28} color="#34D399" strokeWidth={2} />}
-                  label="İstatistikler"
+                  label={t('stats.title')}
                   bgColor="rgba(52, 211, 153, 0.15)"
                   onPress={() => handleNavigate('stats')}
                 />
                 <QuickActionCard
                   icon={<Settings size={28} color="#9CA3AF" strokeWidth={2} />}
-                  label="Ayarlar"
+                  label={t('settings.title')}
                   bgColor="rgba(156, 163, 175, 0.15)"
                   onPress={() => handleNavigate('settings')}
                 />
