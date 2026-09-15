@@ -1,4 +1,4 @@
-import { supabase } from '../supabase/client';
+import { supabase } from '../../data/supabase/client';
 import i18n from './config';
 
 /**

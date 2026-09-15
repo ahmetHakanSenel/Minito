@@ -69,7 +69,8 @@ export const useAmbientAudio = () => {
   const fadeOut = async (audioSound: Audio.Sound) => {
     const steps = 20; // 20 steps for smooth fade
     const stepDuration = 2000 / steps; // 2 seconds total
-    const currentVolume = (await audioSound.getStatusAsync()).volume || 0.3;
+    const status = await audioSound.getStatusAsync();
+    const currentVolume = (status.isLoaded ? status.volume : 0) || 0.3;
     const volumeStep = currentVolume / steps;
 
     return new Promise<void>((resolve) => {

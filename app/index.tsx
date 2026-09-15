@@ -8,7 +8,7 @@ import { TaskInput, OfflineBanner, MinitoIcon } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
 import { DashboardModal } from '../src/modals';
 import { breakTask } from '../src/lib/api';
-import { useAuth } from '../src/lib/auth';
+import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { getOrCreateGuestId } from '../src/lib/guestIdentity';
 import { FallbackReason } from '../src/safety';
 import {

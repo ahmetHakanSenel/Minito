@@ -60,7 +60,6 @@ export async function initI18n(): Promise<void> {
   await i18n
     .use(initReactI18next)
     .init({
-      compatibilityJSON: 'v3', // For React Native compatibility
       resources: {
         en: { translation: en },
         tr: { translation: tr },

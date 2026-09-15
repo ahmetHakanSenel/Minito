@@ -1,5 +1,5 @@
 import { tracedAxios } from '../requestTracing';
-import { supabase } from '../supabase/client';
+import { supabase } from '../../data/supabase/client';
 
 const SUPABASE_EDGE_FUNCTION_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_URL;
 

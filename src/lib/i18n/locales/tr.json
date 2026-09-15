@@ -37,9 +37,28 @@
   "login": {
     "title": "Minito'ya Hoş Geldiniz",
     "subtitle": "Görevlerinizi cihazlar arasında senkronize etmek için giriş yapın",
+    "emailPlaceholder": "E-posta",
+    "passwordPlaceholder": "Şifre",
+    "signIn": "Giriş Yap",
+    "signUp": "Hesap Oluştur",
+    "switchToSignUp": "Hesabınız yok mu? Kayıt olun",
+    "switchToSignIn": "Zaten hesabınız var mı? Giriş yapın",
+    "or": "veya",
     "continueWithApple": "Apple ile Devam Et",
     "continueWithGoogle": "Google ile Devam Et",
-    "continueAsGuest": "Misafir Olarak Devam Et"
+    "checkEmail": "E-postanızı onaylamak için gelen kutunuzu kontrol edin, ardından giriş yapın.",
+    "errors": {
+      "invalid_input": "Geçerli bir e-posta ve en az 6 karakterli bir şifre girin.",
+      "invalid_credentials": "E-posta veya şifre hatalı.",
+      "email_not_confirmed": "Giriş yapmadan önce lütfen e-postanızı onaylayın.",
+      "user_already_exists": "Bu e-posta ile kayıtlı bir hesap zaten var.",
+      "weak_password": "Şifre çok zayıf. En az 6 karakter kullanın.",
+      "invalid_email": "Lütfen geçerli bir e-posta adresi girin.",
+      "rate_limited": "Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.",
+      "network": "Ağ hatası. Bağlantınızı kontrol edip tekrar deneyin.",
+      "provider_unavailable": "Bu giriş yöntemi bu cihazda kullanılamıyor.",
+      "unknown": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    }
   },
   "privacy": {
     "title": "Gizlilik ve Veri",
