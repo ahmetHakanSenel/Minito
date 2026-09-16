@@ -1,41 +1,35 @@
 # Minito
 
-**An ADHD-friendly task-initiation app that turns an overwhelming task into small, doable steps with AI, built on a hardened Supabase backend.**
+[![CI](https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml)
 
-Minito is a React Native (Expo) app backed by Supabase Auth, PostgreSQL with Row Level Security and a Deno Edge Function that calls OpenAI or Gemini. You type a task that feels too big; Minito answers with an empathy line, a laughably easy first action, and 3 to 7 atomic micro-steps, then walks you through them one at a time in a distraction-free focus mode.
+**An ADHD-friendly task-starter: type a task that feels too big, get a laughably easy first action
+and 3–7 atomic steps, then work through them one at a time.**
 
-This README focuses on the engineering: architecture, security posture and the trade-offs behind them.
+Minito is a React Native (Expo) app on Supabase: Auth, Postgres with Row Level Security, and Deno
+Edge Functions that call OpenAI or Gemini. This README is about the engineering: how the system
+fails safely, how its claims are tested, and the trade-offs behind it.
 
 ---
 
-## Highlights
+## For reviewers: where to look
 
-- **Layered client architecture:** Data sources → repositories → controllers → UI, with typed error codes crossing each boundary.
-- **Security-first backend:**
-  - RLS on every user-facing table; internal tables locked to the service role.
-  - Auth-required Edge Function with per-user and per-IP rate limits.
-  - HMAC-hashed analytics.
-  - Prompt-injection hardening: user text is fenced as data and cannot break out of its fence.
-- **Structured AI output:**
-  - A versioned, layered prompt.
-  - Zod-validated JSON steps.
-  - Exactly one repair round-trip, then a deterministic fallback.
-  - Deno tests in CI.
-- **Day-2 AI operations:**
-  - Per-request telemetry: model, prompt version, latencies, token split, why the model stopped and which rule it broke.
-  - A closed feedback loop that scores a prompt version by the people using it.
-  - An offline evaluation set, so a prompt or model change is judged by measurement rather than impression.
-- **Encrypted session storage:** AES-256 session encryption with the key held in the iOS Keychain or Android Keystore.
-- **Graceful degradation everywhere:**
-  - The app boots even without backend config.
-  - Breakdowns fall back to localized offline steps.
-  - History hides itself when its table is missing.
-  - Outages surface as a quiet notice, not a crash.
-- **Production tooling:**
-  - Strict TypeScript, generated database types, ESLint and Prettier.
-  - Jest tests, route-level error boundaries and Sentry.
-  - A CI pipeline that type-checks the Deno functions and scans the full git history for secrets.
-- **Complete EN/TR localization:** 253 keys at parity, no hardcoded UI strings, locale-aware dates.
+| Claim | Evidence |
+| ----- | -------- |
+| The AI budget cannot be drained by concurrency or by cycling accounts | [`014_atomic_rate_limits.sql`](supabase/migrations/014_atomic_rate_limits.sql). [`database.test.mjs`](supabase/tests/database.test.mjs) fires 60 concurrent calls at a limit of 20 and gets exactly 20 grants |
+| The model is untrusted in both directions | [`pipeline.ts`](supabase/functions/break-task/pipeline.ts): a fence that tags cannot break, a zod contract, one repair, a deterministic fallback |
+| Every request-path rule is tested without a network | [`handler.ts`](supabase/functions/break-task/handler.ts) takes its side effects as dependencies; [`handler.test.ts`](supabase/functions/break-task/handler.test.ts) covers auth, ordering, fail-open and error paths |
+| RLS and grants are verified, not assumed | Migrations run on a real Postgres that reproduces Supabase's default grants ([`bootstrap.sql`](supabase/tests/bootstrap.sql)). Schema-wide checks catch any table without RLS and any function without a pinned `search_path` |
+| The system is operable | [`RUNBOOK.md`](docs/RUNBOOK.md): SLOs with an error budget, a catalogue of log events, alerts, playbooks, expand/contract deploys. Its SQL ([`telemetry-queries.sql`](docs/ops/telemetry-queries.sql)) runs in CI |
+| Security is reasoned about | [`THREAT_MODEL.md`](docs/THREAT_MODEL.md): 19 threats, each mapped to its control and the test that proves it, plus accepted risks with revisit triggers |
+| Prompt changes are judged by measurement | [`scripts/eval.ts`](scripts/eval.ts) and a committed [baseline](docs/eval/README.md#baseline) |
+
+**169 automated tests**, all run by CI on every push:
+
+- 83 Jest tests for the app.
+- 61 Deno tests for the edge functions.
+- 25 database tests against Postgres.
+
+CI also runs a type-drift check against the migrations and a gitleaks scan of the full history.
 
 ---
 
@@ -43,366 +37,279 @@ This README focuses on the engineering: architecture, security posture and the t
 
 ```mermaid
 flowchart LR
-  subgraph Device["Mobile client · Expo / React Native"]
+  subgraph Device["Mobile app · Expo / React Native"]
     direction TB
     UI["Screens<br/>expo-router + Stack.Protected"] --> CTRL["Controllers<br/>AuthContext · feature hooks"]
-    CTRL --> REPO["Repositories<br/>auth · tasks · health"]
-    REPO --> DATA["Data sources<br/>typed Supabase client · probes"]
-    DATA --> SESSION[("Session store<br/>AES-256 ciphertext in AsyncStorage")]
-    SESSION -. "per-write key" .-> KEYCHAIN[("Keychain / Keystore<br/>expo-secure-store")]
+    CTRL --> REPO["Repositories<br/>typed error codes"]
+    REPO --> DATA["Data sources<br/>typed Supabase client"]
+    DATA --> SESSION[("Session<br/>AES-256 ciphertext")]
+    SESSION -. "key per write" .-> KEYCHAIN[("Keychain / Keystore")]
   end
 
-  DATA -- "sign-in, refresh" --> AUTH["Supabase Auth"]
-  DATA -- "PostgREST + user JWT" --> PG[("PostgreSQL<br/>Row Level Security")]
-  DATA -- "POST break-task + user JWT" --> EF["Edge Function · break-task<br/>Deno"]
-  EF -- "verify JWT" --> AUTH
-  EF -- "service role: rate limits,<br/>HMAC-hashed analytics" --> PG
-  EF -- "versioned layered prompt<br/>+ fenced input, JSON mode" --> AI["AI provider<br/>OpenAI / Gemini"]
+  DATA -- "PostgREST + user JWT" --> PG[("Postgres<br/>RLS on every table")]
+  DATA -- "POST + user JWT" --> EF["break-task<br/>Deno Edge Function"]
+  EF -- "verify JWT" --> AUTH["Supabase Auth"]
+  EF -- "check_and_consume_quota()<br/>telemetry (service role)" --> PG
+  EF -- "moderation" --> MOD["OpenAI moderation"]
+  EF -- "fenced prompt, JSON mode" --> AI["OpenAI / Gemini"]
 ```
+
+The app is layered: data sources → repositories → controllers → UI. Typed error codes cross each
+boundary, so a missing backend becomes `backend_unavailable` on the login screen, not a crash at
+import time.
 
 ### One breakdown, end to end
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant App as Mobile client
-  participant EF as break-task (Edge)
-  participant DB as PostgreSQL
-  participant LLM as AI provider
+  participant App
+  participant EF as break-task
+  participant DB as Postgres
+  participant LLM as Model
 
-  App->>EF: POST { input } + user JWT
-  EF->>EF: Verify JWT → 401 for anon or expired tokens
-  EF->>EF: Validate body (zod) · HMAC-SHA256 the input
-  EF->>DB: Count last hour by user_id and by client_ip_hash
-  alt quota exceeded
+  App->>EF: POST { input } + JWT
+  EF->>EF: Readiness (503) · JWT (401) · body (400)
+  par
+    EF->>EF: Moderation (3 s timeout, fails open)
+  and
+    EF->>DB: check_and_consume_quota(ip), then (user)
+  end
+  alt flagged
+    EF-->>App: 200 CONTENT_FLAGGED → support screen
+  else quota exhausted
     EF-->>App: 429 RATE_DOWN
-  else within quota
-    EF->>LLM: Layered prompt (task-breakdown-v2) + fenced task input
-    LLM-->>EF: JSON (provider JSON mode)
-    EF->>EF: JSON.parse + zod TaskBreakdownSchema
-    opt reply breaks the contract
-      EF->>LLM: One repair request carrying the validation issues
-      LLM-->>EF: Corrected JSON
-      EF->>EF: Re-validate, else use the deterministic fallback plan
+  else
+    EF->>LLM: Layered prompt + fenced task
+    LLM-->>EF: JSON
+    opt breaks the contract
+      EF->>LLM: One repair, carrying the zod issues
     end
-    EF-)DB: Telemetry row, after the reply (input as HMAC)
-    EF-->>App: breakdown (typed steps) + meta.prompt_version and source
-    App->>DB: Save breakdown to task_breakdowns (RLS: owner only)
+    EF-->>App: plan + meta { prompt_version, source, request_id }
+    EF-)DB: Telemetry row, after the reply (idempotent)
+    App->>DB: Save to history (RLS: owner only)
   end
 ```
 
-### Client layers
+---
 
-| Layer        | Location                                      | Responsibility                                                                                                          |
-| ------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| UI           | `app/`, `src/features/*/ui`, `src/components` | Screens and presentational components; no direct Supabase access                                                        |
-| Controllers  | `src/features/*/controller`                   | React state: `AuthContext`, `useTaskBreakdowns`, `useTaskProgressSync`, `useSystemHealth`                               |
-| Repositories | `src/repositories`                            | Business rules and error mapping into typed codes such as `invalid_credentials`, `backend_unavailable` or `unavailable` |
-| Data sources | `src/data`                                    | Supabase client, encrypted session storage, native Google/Apple ID-token providers, health probes                       |
+## Reliability
 
-Navigation is guarded at the root with Expo Router's `Stack.Protected`. The splash screen stays up until the persisted session is restored, so the guard never flashes the wrong screen.
+Every dependency has a defined failure mode, chosen for someone who is struggling to start: a
+calm, generic plan now beats an error message.
+
+| When this fails | The system | The user sees |
+| --------------- | ---------- | ------------- |
+| Model provider | Retries once, then `503 AI_DOWN` inside a 17 s budget | Offline steps and a quiet notice |
+| Model output | One repair, then a deterministic plan that is itself schema-checked at load | A generic but usable plan |
+| Moderation | Fails open after 3 s and logs it | Nothing |
+| Quota check | Fails open and logs an error; the provider spend limit is the backstop | Nothing |
+| Supabase Auth | Answers `503`, never `401` | Offline steps; **nobody is signed out** |
+| Telemetry write | Retries after the reply; the insert is idempotent | Nothing |
+| No backend config | Boots signed out, with typed "unavailable" errors | An explanation on the login screen |
+
+SLOs, measured from the telemetry table over 28 days:
+
+| SLI | SLO |
+| --- | --- |
+| Availability | 99% of eligible requests answered with a plan |
+| Latency | 95% answered within 12 s |
+| Quality | 97% of plans come from the model, not the fallback |
+
+The [runbook](docs/RUNBOOK.md) explains how each target was chosen, tracks the error budget, and
+has alerts and playbooks for each failure above.
 
 ---
 
 ## AI pipeline
 
-`break-task` returns a typed plan, never free text. The pipeline lives in `supabase/functions/break-task/pipeline.ts`. It has no HTTP or storage dependencies and is covered by Deno tests in CI.
+`break-task` returns a typed plan, never free text.
 
-| Stage          | What happens                                                                                                                                                                                  |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Layered prompt | Identity, Rules, Tone, Decomposition and Output Contract layers form one system prompt, versioned as `PROMPT_VERSION = 'task-breakdown-v2'`                                                   |
-| Generate       | Provider JSON mode (OpenAI `response_format`, Gemini `responseMimeType`), with per-call timeouts inside a 17 s request budget                                                                 |
-| Validate       | `JSON.parse`, then zod `TaskBreakdownSchema`: 3–7 steps of `{ id, title, instruction, estimated_minutes (1–10), difficulty }`, a first step that must be `easy`, plus `empathy_bridge`, `first_step_hook` and `stopping_point` |
-| Repair         | Exactly one follow-up request carrying the validation issues, with no transport retries                                                                                                       |
-| Fallback       | A deterministic, schema-valid plan in the task's language, validated at module load, so a bad reply never surfaces as an error                                                                |
+| Stage | What happens |
+| ----- | ------------ |
+| Prompt | Five layers (identity, rules, tone, decomposition, output contract), versioned as `PROMPT_VERSION` |
+| Fence | The task and display name are wrapped in tags. Every `<` and `>` inside them becomes `‹ ›`, so no tag can be opened or closed, however it is nested or spaced |
+| Generate | Provider JSON mode. Each call has a 9 s timeout; one retry is allowed on network errors and 5xx, never on `429` |
+| Validate | zod: 3–7 steps with unique ids, a first step that is `easy`, 1–10 minutes each, length caps on every string |
+| Repair | Exactly one follow-up request carrying the issues. Issues are rewritten so they never quote the model's output, because they are logged |
+| Fallback | A deterministic plan in the task's language. It is validated at module load, so a broken fallback fails the deploy, not a user |
 
-What the function reports:
+Every request writes one telemetry row: model, prompt version, model time and end-to-end time,
+token split (including cached prompt tokens), finish reason, the contract rule that broke, and
+whether the answer matched the task's language. `language_match` stays null when a one-word task
+gives no language evidence, so a guess is never scored as a mismatch.
 
-- **Response metadata:** Every response carries `meta: { prompt_version, source }`, where the source is `model`, `repaired` or `fallback`.
-- **Logs:** Every log line is structured JSON tagged with the prompt version. Logs never include the task text or the model's reply.
+Users can rate a finished plan with one tap. The score goes through
+`submit_breakdown_feedback()`, which can only write a valid score, only on the caller's own row.
 
-What the client does with it:
+**Offline evaluation.** `npm run eval:ai` runs 20 fixed tasks (Turkish and English, including a
+single word and a question) through the real pipeline. The committed `gpt-4o-mini` baseline:
 
-- **One reader:** `src/lib/breakdownSteps.ts` reads steps from responses, database rows, saved sessions and route params.
-- **Legacy upgrade:** It upgrades legacy string steps, so history created before structured output still opens.
-- **Focus screen:** It shows each step's title, instruction and difficulty, uses the estimate to timebox the step, and shows the stopping point on the last step.
-- **History:** Server fallback plans, like offline ones, are not saved.
+- 20/20 valid on the first try, 20/20 in the right language.
+- Model time: p50 3.5 s, p95 6.5 s.
+- Cost: under one cent for the whole run.
 
-### Quality and observability, end to end
-
-```mermaid
-flowchart TB
-  IN["Task input<br/>fenced in &lt;task_input&gt;"] --> GEN["Generate<br/>JSON mode · task-breakdown-v2"]
-  GEN --> VAL{"zod<br/>TaskBreakdownSchema"}
-  VAL -- valid --> OK["source: model"]
-  VAL -- invalid --> REP["One repair request<br/>carrying the zod issues"]
-  REP --> VAL2{"zod re-check"}
-  VAL2 -- valid --> FIX["source: repaired"]
-  VAL2 -- invalid --> FB["Deterministic plan<br/>source: fallback"]
-  OK --> OUT["Typed breakdown<br/>+ meta.prompt_version"]
-  FIX --> OUT
-  FB --> OUT
-  OK -. telemetry .-> TEL[("tasks row<br/>ai_model · prompt_version<br/>ai_latency_ms · latency_ms<br/>token_usage · breakdown_source")]
-  FIX -. telemetry .-> TEL
-  FB -. telemetry .-> TEL
-  OUT --> DONE["Finished focus session"]
-  DONE -- "one tap: fits · too big · too small · tone" --> RPC["submit_breakdown_feedback()<br/>SECURITY DEFINER, owner-only"]
-  RPC -- feedback_score --> TEL
-```
-
-Each answered request attempts one telemetry row, so cost, speed and quality can be read per prompt version. The insert retries three times and then gives up: telemetry is best-effort and never blocks the reply, so a row can be missing where the database was down.
-
-| Column                          | Question it answers                                                            |
-| ------------------------------- | ------------------------------------------------------------------------------ |
-| `prompt_version` · `ai_model`   | Which prompt and model produced this plan?                                     |
-| `breakdown_source`              | How often does the model get it right first time, need a repair, or fall back? |
-| `ai_latency_ms` · `latency_ms`  | How much of the wait is the model, and how much is us?                         |
-| `token_usage`                   | What does a breakdown cost?                                                    |
-| `finish_reason`                 | Did the model finish, or run out of output room? Both look like broken JSON    |
-| `validation_issues`             | Which contract rule the first reply broke                                      |
-| `language_match`                | Did it answer in the language it was asked in?                                 |
-| `feedback_score`                | Did the plan actually fit the person who asked for it?                         |
-
-- **Measured, not guessed:** `ai_latency_ms` is measured with `performance.now()` around the provider calls, failed attempts included, so a retry is visible rather than hidden inside the total.
-- **Feedback path:** `tasks` stays closed to clients. A score is written only through `submit_breakdown_feedback()`, which validates the score and matches the row by request id **and** `auth.uid()`, so nobody can score a row that isn't theirs.
-- **No content, ever:** Telemetry and logs carry ids, counts and durations. The task text lives on only as an HMAC.
-
-### Deciding by measurement, not impression
-
-Production traffic is the slowest possible way to learn whether a prompt change helped, so the structural half of that question is answered offline instead. `npm run eval:ai` runs a fixed set of 20 tasks (Turkish and English, including a single word, a vague feeling and a question rather than a task) through the real pipeline and reports first-try pass rate, repair rate, fallback rate, language match, tokens, latency and cost. A run costs a few cents, so a temperature or model comparison is an afternoon rather than a quarter.
-
-What it deliberately does not claim to measure is tone, and whether the plan actually got someone started. Those need real users — which is exactly what `feedback_score` is for. `--dry-run` exercises every outcome with a fake provider, so CI keeps the harness working without a key or a bill.
+`--dry-run` exercises every outcome with a fake provider, and CI runs it.
 
 ---
 
 ## Security
 
-### Row Level Security and a locked-down schema
+The full analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md). The essentials:
 
-| Table               | Access model                                                                                                                                             |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `task_breakdowns`   | RLS with owner-only `SELECT/INSERT/UPDATE/DELETE` policies (`auth.uid() = user_id`); `user_id` defaults to `auth.uid()` and cascades on account deletion |
-| `tasks` (analytics) | RLS enabled with **no** policies: unreadable and unwritable by app clients, reachable only by the Edge Function's service role, plus `submit_breakdown_feedback()`, which can write only a score, only on the caller's own row                           |
-| `system_prompts`    | Same lockdown. It is no longer read at all: the prompt is versioned in code, so a table edit can't break the output contract                            |
-| `translations`      | Public read; the "any authenticated user can write" policy was dropped once sign-up became open                                                          |
-
-The lockdown is verified from the outside: with the public anon key, `tasks` and `system_prompts` return zero rows (`supabase/migrations/007_lock_down_internal_tables.sql`).
-
-### Encrypted session storage
-
-Supabase sessions routinely exceed `expo-secure-store`'s ~2 KB value limit, so storing them there directly would silently break persistence. Minito uses the pattern Supabase recommends for Expo (`src/data/supabase/secureSessionStorage.ts`):
-
-- **Fresh key per write:** Every write encrypts the session with a new AES-256 key.
-- **Key location:** The key lives in the Keychain or Keystore via `expo-secure-store`.
-- **Ciphertext location:** Only ciphertext is written to AsyncStorage.
-- **Legacy sessions:** Plaintext sessions from before encryption are discarded on first read instead of being trusted.
-
-### Edge Function hardening (`supabase/functions/break-task`)
-
-- **Authenticated only:**
-  - The bearer token must belong to a signed-in user.
-  - Anon-key and expired tokens get `401` before any work happens.
-- **Two-dimensional rate limiting:**
-  - 20 requests per hour per verified `user_id`.
-  - 40 per hour per client IP, so one address can't farm free accounts.
-  - The IP is stored only as an HMAC.
-- **Real HMAC-SHA256:**
-  - Analytics store `HMAC-SHA256(input)` via Web Crypto, never the raw text.
-  - `HMAC_SECRET` is mandatory; the function refuses to run without it instead of falling back to a default.
-- **Type-checked:** No `@ts-nocheck`; every function passes `deno check` in CI.
-- **No leaking internals:** 5xx responses return a generic message; details stay in the logs.
-
-### Prompt-injection hardening
-
-Two user-controlled values reach the model: the task and the display name.
-
-1. **Fenced as data:**
-   - The task is wrapped in `<task_input>` tags and the name in `<user_name>` tags.
-   - The Rules layer tells the model that everything inside them is untrusted data.
-   - The model must ignore role changes, instruction overrides and schema-bypass attempts found there.
-2. **An unbreakable fence:** Those tags are stripped from the values first, so the input can't close its own fence and speak from outside it.
-3. **The name is read server-side and sanitized:**
-   - It comes from the verified JWT's `user_metadata`, never from the request body.
-   - Control characters (`\p{Cc}`), quotes, backticks, braces and angle brackets are stripped.
-   - Whitespace is collapsed and the name is capped at 30 characters.
-
-In addition:
-
-- **Server-owned instructions:** The prompt is versioned in code and can't be edited at runtime.
-- **Validated input:** The request body is schema-validated and capped at 1,000 characters.
-- **Contract-bound output:** Even a successful injection can only yield a schema-valid plan of short steps. Anything else fails validation and ends in the repair or the fallback.
-
-### Privacy
-
-- **What the analytics table holds:** The user's own words are stored only as an HMAC, never in plain text. The generated plan is kept, because judging a prompt version means being able to read what it produced. That table is closed to clients and reachable only by the service role.
-- **What the user sees:** Their readable history lives in `task_breakdowns`, owner-only under RLS.
-- **Data export:** GDPR export (`export-user-data`) includes every saved breakdown.
-- **Account deletion:** Deletion (`delete-user`) removes the account, and all owned rows cascade with it.
-- **Monitoring:** Sentry tracks users by opaque id only; `sendDefaultPii` is off.
+- **Least privilege in the database.**
+  - RLS is on every table.
+  - `task_breakdowns` is owner-only.
+  - `tasks` (telemetry) and `rate_limits` have no client policies at all.
+  - Privileged functions run with an empty `search_path`, and are revoked from `anon` and
+    `authenticated` explicitly: Supabase grants both by default, so revoking from `PUBLIC` alone
+    would not be enough.
+- **Authenticated AI only.**
+  - The anon key gets `401` before any work is done.
+  - Quotas are 40/h per IP, then 20/h per user, enforced atomically.
+  - Counters are not tied to accounts, so deleting and re-creating an account does not reset them.
+- **No text at rest where it is not needed.**
+  - The task text is stored only as an HMAC.
+  - Logs carry ids, counts and durations.
+  - IP hashes and guest ids were dropped from the schema once nothing needed them.
+- **Encrypted sessions.**
+  - AES-256 with a fresh key per write; the key lives in the Keychain or Keystore.
+  - Writes are ordered so that a crash at any step leaves a readable session.
+  - The Supabase client's process lock serializes token refreshes.
+- **Privacy rights.**
+  - `export-user-data` returns the account, the saved history and the AI request log.
+  - `delete-user` removes the account; every owned row cascades.
+  - Telemetry expires after 90 days.
 
 ---
 
-## Engineering decisions and trade-offs
+## Testing
 
-**Why one repair request, and then a deterministic fallback?**
+| Layer | Tool | What it proves |
+| ----- | ---- | -------------- |
+| App | Jest (`jest-expo`) | Repositories map errors to typed codes. The API client degrades correctly for each status. Session storage survives a crash at each step. Every static translation key exists in both languages, with matching placeholders |
+| Edge functions | `deno test` | The request path's ordering and failure rules, the pipeline's contract and repair, provider timeouts and retries, moderation fail-open, auth outage handling |
+| Database | `node:test` + Postgres | Migrations apply cleanly. RLS holds across users. Grants are correct under Supabase's defaults. Quotas hold under 60 concurrent calls. Cascades work. Schema-wide invariants hold. The runbook's queries run |
+| Schema drift | Supabase CLI | The committed TypeScript types equal what the migrations produce |
+| Secrets | gitleaks | The full history, on every push |
 
-- **Why one repair:** A model that misses the contract usually misses it narrowly, for example with a six-word title or a 12-minute step. One repair request that carries the exact zod issues fixes those cases cheaply.
-- **Why not more:** A second or third repair mostly burns latency and tokens on a model that is already confused. For someone who is struggling to start, a calm, generic plan now beats a perfect plan in 30 seconds.
-- **Why a real plan:** The fallback is a plan, not an error. It is validated against the same schema, so the client never needs a special case for it.
+To check that the database suite catches real mistakes, three faults were introduced by hand
+and each one made the suite fail:
 
-**Why a silent fallback instead of an always-on system status?**
-An observability panel is an engineering tool. For users of a calm, ADHD-focused app, a blinking status pill adds noise and quiet anxiety while telling them nothing they can act on. The client still probes the auth health endpoint and the AI gateway on every dashboard focus:
-
-- **How the AI probe works:** It is an anon request that `break-task` rejects with `401` before doing any AI work, so it costs no budget.
-- **What the user sees:** A warning card appears only when a service is actually down.
-- **What stays hidden:** Slowness alone is never shown, because the user can't do anything about it.
-
-**Why aren't raw task texts stored for analytics?**
-Analytics only need counts, latency and deduplication, so the `tasks` table stores an HMAC of the input, not the text. The one place titles are stored is `task_breakdowns`, the user's own history:
-
-- **Why it exists:** Users need it to resume a task on another device.
-- **Who can see it:** Only the owner, enforced by RLS.
-- **What users can do:** Export it, delete a row with a long press, or delete their account to erase it all.
-
-**Why best-effort sync instead of an offline mutation queue?**
-Progress updates during focus mode are fire-and-forget: a failed write is logged and dropped, never retried in the foreground. In an app meant to lower activation energy, a spinner or error in the middle of a step would do more harm than a slightly stale history. The trade-off is explicit: a durable offline queue is the natural next step if cross-device progress ever becomes critical. The same philosophy applies elsewhere:
-
-- **Failed save:** A failed history save never blocks the user from starting the task.
-- **Offline steps:** Offline fallback steps are never saved, because they're generic.
-
-**Why does the app boot without backend configuration?**
-A missing `EXPO_PUBLIC_SUPABASE_*` variable used to crash the app at import time. `getSupabase()` now throws a typed `BackendUnavailableError`:
-
-- **Auth:** Repositories map it to `backend_unavailable`, so the app boots signed out and the login screen explains the situation instead of crashing.
-- **History:** It maps to `unavailable`, so the history list hides itself.
-
-**Why encrypt-then-AsyncStorage instead of SecureStore alone?**
-SecureStore has a ~2 KB value limit and Supabase sessions routinely outgrow it. Keeping only the key in the keystore gives hardware-backed protection without that size ceiling. A known limitation is that AES-CTR has no integrity tag: it protects confidentiality, not tampering by someone who can already write the app's storage.
-
-**Why do rate limits fail open?**
-If the rate-limit query itself errors, the request is allowed rather than locking every user out during a database hiccup. The limits are a budget guard, not an authorization boundary; authorization is enforced separately by JWT verification.
-
-**Why a members-only AI endpoint instead of guest access?**
-Guest access would put the AI budget behind the public anon key, and IP-based limits alone are best-effort, since `x-forwarded-for` can be partially spoofed. Requiring a verified user makes every request attributable.
+- A missing `REVOKE`.
+- A count-then-write quota.
+- A function without a pinned `search_path`.
 
 ---
 
-## Product polish
+## Engineering decisions
 
-- **Complete localization:**
-  - English and Turkish at full key parity: 253 keys, and every static `t()` key used in code resolves.
-  - Dates use the active locale.
-  - Offline fallback steps and planner sample suggestions are localized too.
-- **Haptic vocabulary (`src/lib/ui/haptics.ts`):** One tactile language across the app; unsupported platforms fail silently.
+**Why an atomic SQL function for rate limiting?** The first version counted telemetry rows. Those
+rows were written after the AI call finished, so parallel requests could not see each other, and
+they cascaded away with the account. One `INSERT … ON CONFLICT DO UPDATE` removes the race, and a
+table with no user link removes the reset. A fixed window can let up to twice the limit through
+at a boundary; for a budget guard that is worth one row and one statement per caller.
 
-  | Pattern     | Used for                                                    |
-  | ----------- | ----------------------------------------------------------- |
-  | `selection` | Scrolling, toggles, choices                                 |
-  | `tap`       | Secondary taps such as back, dismiss or opening a sheet     |
-  | `press`     | Primary actions such as submit or resume                    |
-  | `commit`    | The one heavy impact, reserved for starting an AI breakdown |
-  | `success`   | Completed steps and saved changes                           |
-  | `warning`   | Destructive confirmations                                   |
-  | `error`     | Failures                                                    |
+**Why does the handler take its dependencies as an argument?** It makes the ordering rules
+testable: safety before quota, IP before user, readiness before auth. Those rules are the ones
+that matter most and are easiest to break in a refactor.
 
-- **Staged AI progress:**
-  - "Analyzing, generating, finalizing" over shimmering skeleton rows.
-  - The last stage holds until the server answers, so the UI never claims to be done early.
-- **Honest UI:**
-  - Unbuilt settings are shown as disabled "Coming soon" rows instead of switches that do nothing.
-  - Keyword-based planner suggestions carry a **DEMO** badge.
-- **Keyboard-safe forms:** A shared hook keeps the focused form above the keyboard under Android edge-to-edge.
-- **Accessibility:** Roles, labels, selected and disabled states, and live regions on the core flows.
-- **Consistent empty states:** One `EmptyState` component (icon, copy, call to action) across history, planner and insights.
+**Why do quota and moderation fail open?** A database or safety-service hiccup should not lock out
+someone who is already struggling to start. Each failure is logged at a level that can page, and
+the provider account's spend limit is the hard ceiling. The trade-off is written down in the
+threat model, together with when to revisit it.
+
+**Why answer `503` when Auth is down?** The app treats `401` as "your session is gone" and signs the
+user out. Answering `401` during an Auth outage would sign out every active user at once.
+
+**Why one repair, then a deterministic plan?** A model that misses the contract usually misses it
+narrowly, and one repair that carries the exact issues fixes that cheaply. Further rounds mostly
+burn latency on a model that is already confused.
+
+**Why expand/contract migrations?** Migration 015 drops columns that the previous function version
+still writes. Shipping add → deploy → remove keeps every step compatible with the code running at
+that moment.
+
+**Why best-effort progress sync instead of an offline queue?** A spinner in the middle of a step
+does more harm than slightly stale history. A durable queue is the natural next step if
+cross-device progress ever becomes critical.
+
+**Why no always-on status indicator?** For this audience, a blinking status pill is noise. The app
+probes quietly and shows a notice only when something is actually down.
 
 ---
 
 ## Tech stack
 
-| Area              | Choices                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| App               | Expo SDK 54, React Native 0.81 (New Architecture), React 19, TypeScript (strict)         |
-| Navigation and UI | Expo Router 6 (`Stack.Protected`), NativeWind, Reanimated 4, Lucide                      |
-| Backend           | Supabase Auth, PostgreSQL with RLS, Edge Functions (Deno)                                |
-| AI                | OpenAI `gpt-4o-mini` or Google Gemini, switchable via `AI_PROVIDER`                      |
-| Security          | `expo-secure-store`, `aes-js`, `expo-crypto`, Web Crypto HMAC                            |
-| Quality           | Jest (`jest-expo`), ESLint (`eslint-config-expo`), Prettier, generated DB types          |
-| Observability     | Sentry (release and environment tags, opaque user id), route-level error boundaries      |
-| CI                | GitHub Actions: typecheck, lint, format, tests, `deno check`, gitleaks full-history scan |
+| Area | Choices |
+| ---- | ------- |
+| App | Expo SDK 54, React Native 0.81 (New Architecture), React 19, TypeScript (strict) |
+| UI | Expo Router 6 (`Stack.Protected`), NativeWind, Reanimated 4, Skia |
+| Backend | Supabase Auth, Postgres (RLS), Edge Functions (Deno) |
+| AI | OpenAI `gpt-4o-mini` or Gemini, switchable by secret; OpenAI moderation |
+| Quality | Jest, Deno test, `node:test` + Postgres, ESLint (zero warnings), Prettier |
+| Operations | Structured JSON logs, SQL telemetry and SLO queries, Sentry (opaque user ids only) |
+| CI | GitHub Actions: app, edge functions, database with type drift, gitleaks; Dependabot |
 
 ---
 
 ## Getting started
 
-**Prerequisites:** Node 20+, a Supabase project, and an OpenAI or Gemini API key. Google sign-in needs a development build; email sign-in works in Expo Go.
-
 ```bash
 npm install
-# create a .env file in the project root with the variables below
+cp .env.example .env    # Supabase URL and anon key
 npm start
 ```
 
-**App environment (`.env`)**
+The app boots without a backend, in a signed-out offline mode. Backend setup, sign-in providers,
+scheduled jobs and the checks to run are in [`docs/SETUP.md`](docs/SETUP.md) (Turkish:
+[`docs/SETUP.tr.md`](docs/SETUP.tr.md)).
 
-| Variable                            | Required | Purpose                                                   |
-| ----------------------------------- | -------- | --------------------------------------------------------- |
-| `EXPO_PUBLIC_SUPABASE_URL`          | Yes      | Supabase project URL                                      |
-| `EXPO_PUBLIC_SUPABASE_ANON_KEY`     | Yes      | Public anon key; all data access is still governed by RLS |
-| `EXPO_PUBLIC_SENTRY_DSN`            | No       | Enables Sentry; monitoring is a no-op without it          |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`  | No       | Shows Google sign-in                                      |
-| `EXPO_PUBLIC_APPLE_SIGN_IN_ENABLED` | No       | `true` shows Sign in with Apple on iOS                    |
-
-**Backend**
-
-1. Apply the SQL files in `supabase/migrations` in order.
-2. Set the function secrets:
-   - `supabase secrets set HMAC_SECRET=$(openssl rand -hex 32)` (required)
-   - `AI_PROVIDER` (`openai` or `gemini`)
-   - `OPENAI_API_KEY` and/or `GEMINI_API_KEY`
-3. Deploy the functions: `npx supabase functions deploy break-task` (and `delete-user`, `export-user-data`).
-4. Regenerate client types after any schema change: `npm run gen:types`.
-
-More detail: [`docs/SUPABASE_SETUP.md`](./docs/SUPABASE_SETUP.md), [`docs/OAUTH_SETUP.md`](./docs/OAUTH_SETUP.md), [`supabase/functions/break-task/README.md`](./supabase/functions/break-task/README.md). A Turkish setup guide lives in [`docs/SUPABASE_KURULUM_REHBERI.md`](./docs/SUPABASE_KURULUM_REHBERI.md).
-
-**Scripts**
-
-| Command                           | What it does                                                    |
-| --------------------------------- | --------------------------------------------------------------- |
-| `npm run typecheck`               | `tsc --noEmit` in strict mode                                   |
-| `npm run lint`                    | ESLint                                                          |
-| `npm run format` / `format:check` | Prettier                                                        |
-| `npm test`                        | Jest suite for the repository layer                             |
-| `npm run gen:types`               | Regenerate `database.types.ts` from the linked Supabase project |
+| Command | What it does |
+| ------- | ------------ |
+| `npm test` | Jest |
+| `npm run test:edge` | Deno tests for the edge functions |
+| `npm run test:db` | Database tests (needs a local Postgres; see setup) |
+| `npm run typecheck` · `lint` · `format:check` | Static checks |
+| `npm run gen:types` | Regenerates the database types from the migrations |
+| `npm run eval:ai` | Offline evaluation of the AI pipeline |
 
 ---
 
 ## Project structure
 
 ```
-app/                     Expo Router screens; every route exports an ErrorBoundary
+app/                         Expo Router screens; each exports an error boundary
 src/
-  data/                  Supabase client, encrypted session storage, auth providers, health probes
-  repositories/          auth, tasks and health repositories (+ __tests__)
-  features/
-    auth/                AuthContext, DisplayNameEditor
-    tasks/               breakdown history, progress sync, staged progress UI
-    health/              health checks and the silent outage notice
-  components/            shared UI (EmptyState, RouteErrorBoundary, TaskInput, …)
-  lib/                   i18n (EN/TR), Sentry, haptics, keyboard handling, offline fallback
+  data/                      Supabase client, encrypted session storage, auth providers, probes
+  repositories/              auth, tasks, feedback, health (+ tests)
+  features/                  auth, tasks, health, settings: controllers and UI
+  components/  modals/       shared UI
+  lib/                       API client, i18n (EN/TR), haptics, monitoring, time
 supabase/
-  functions/             break-task, delete-user, export-user-data (Deno)
-  migrations/            schema, RLS policies and the security lockdown (001–010)
-.github/workflows/ci.yml typecheck · lint · format · test · deno check · gitleaks
+  functions/_shared/         HTTP and auth helpers shared by all functions
+  functions/break-task/      handler, pipeline, providers, moderation (+ tests)
+  functions/delete-user/     right to erasure
+  functions/export-user-data/ right of access
+  migrations/                001–015: schema, RLS, atomic quotas, hardening
+  tests/                     database test suite and the Supabase bootstrap
+scripts/eval.ts              offline evaluation harness
+docs/
+  SETUP.md  RUNBOOK.md  THREAT_MODEL.md
+  ops/telemetry-queries.sql  SLI, error budget, cost and quality queries
+  eval/                      evaluation task set and baseline results
 ```
 
 ---
 
 ## Known limitations and next steps
 
-- **iOS:** Not yet configured for release (`bundleIdentifier` and Apple sign-in entitlements).
-- **Moderation:** Runs only when an OpenAI key is present; with Gemini it is skipped and logged.
-- **Planner:** Projects and focus insights are stored on-device only; breakdown history is the synced source of truth.
-- **Rate limiting:** Fails open on database errors, and client IPs are best-effort.
-- **Session encryption:** AES-CTR provides confidentiality without an integrity tag.
-- **Deprecated dependency:** `expo-av` should migrate to `expo-audio`.
-- **Offline progress:** A durable offline mutation queue would make progress sync fully offline-first.
+- **iOS** is not configured for release yet (bundle identifier, Apple sign-in entitlements, and a
+  nonce for Apple ID tokens).
+- **Planner projects and focus insights** are stored on the device only. The breakdown history is
+  the synced source of truth.
+- **Progress sync** is best-effort. A durable offline mutation queue would make it offline-first.
+- **Session encryption** uses AES-CTR, which gives confidentiality but no integrity tag.
+- **Telemetry** is read with SQL. A dashboard and alert delivery (for example, a scheduled
+  function posting to a chat channel) are the next operational step.
+- **`expo-av`** is deprecated and should move to `expo-audio`.
