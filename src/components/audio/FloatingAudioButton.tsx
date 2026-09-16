@@ -17,10 +17,10 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { useAudioContext, AUDIO_TRACKS, AudioTrack } from '../../context';
 import { SoftGlow } from '../SoftGlow';
+import { haptics } from '../../lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -114,14 +114,14 @@ export const FloatingAudioButton: React.FC = () => {
   const barColor = isPlaying ? trackColor : `${trackColor}99`;
 
   const openSheet = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     setSheetVisible(true);
   };
 
   const closeSheet = () => setSheetVisible(false);
 
   const handleTrackPress = async (track: AudioTrack) => {
-    Haptics.selectionAsync();
+    haptics.selection();
     if (currentTrack?.id === track.id) {
       if (isPlaying) {
         await pause();
@@ -134,7 +134,7 @@ export const FloatingAudioButton: React.FC = () => {
   };
 
   const handleStop = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     setSheetVisible(false);
     await stop();
   };

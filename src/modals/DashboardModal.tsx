@@ -4,10 +4,10 @@ import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Calendar, Headphones, BarChart3, Settings, Crown, User } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../features/auth/controller/AuthContext';
+import { haptics } from '../lib/ui/haptics';
 
 const CARD_GAP = 12;
 
@@ -30,7 +30,7 @@ interface QuickActionCardProps {
 
 const QuickActionCard: React.FC<QuickActionCardProps> = ({ icon, label, bgColor, onPress }) => {
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onPress();
   };
 
@@ -60,7 +60,7 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
   const name = userName ?? displayName ?? user?.email ?? t('dashboard.guest');
 
   const handleClose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onClose();
   };
 

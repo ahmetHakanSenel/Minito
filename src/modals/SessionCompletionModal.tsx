@@ -23,10 +23,10 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import { useTranslation } from 'react-i18next';
 import { splitDuration } from '../lib/time/duration';
+import { haptics } from '../lib/ui/haptics';
 
 const { width } = Dimensions.get('window');
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -71,7 +71,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
         withTiming(1.2, { duration: 300, easing: Easing.out(Easing.back(2)) }),
         withSpring(1, { damping: 10, stiffness: 100 })
       );
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
     } else {
       setShowConfetti(false);
       celebrationScale.value = 0.5;
@@ -79,13 +79,13 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
   }, [visible]);
 
   const handleTaskCompleted = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    haptics.success();
     onTaskCompleted();
     onClose();
   };
 
   const handleJustSession = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onJustSession();
     onClose();
   };

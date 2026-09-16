@@ -16,12 +16,12 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInUp, Easing } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useProjects, formatDueDate } from '../src/context/ProjectContext';
 import { ProjectCard } from '../src/components/planner/ProjectCard';
 import { DashboardModal } from '../src/modals';
 import { EmptyState } from '../src/components/feedback/EmptyState';
+import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -99,7 +99,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleAdd = () => {
     if (title.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       const allTasks = manualTasks.map((t) => t.title);
       onAdd(title.trim(), selectedColor, allTasks);
       handleClose();
@@ -108,7 +108,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleAddManualTask = () => {
     if (newTaskText.trim()) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptics.tap();
       setManualTasks((prev) => [
         ...prev,
         { id: `manual-${Date.now()}`, title: newTaskText.trim() },
@@ -118,12 +118,12 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   };
 
   const handleRemoveManualTask = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     setManualTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
   const handleAddSuggestedToManual = (task: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     if (!manualTasks.find((t) => t.title === task)) {
       setManualTasks((prev) => [
         ...prev,
@@ -135,7 +135,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   const handleGenerateSubtasks = async () => {
     if (!title.trim()) return;
     setIsGenerating(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     try {
       const tasks = await onGenerateSubtasks(title.trim());
       setSuggestedTasks(tasks);
@@ -187,7 +187,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                     selectedColor === color && modalStyles.colorSelected,
                   ]}
                   onPress={() => {
-                    Haptics.selectionAsync();
+                    haptics.selection();
                     setSelectedColor(color);
                   }}
                 />
@@ -490,7 +490,7 @@ export default function PlannerScreen() {
   });
 
   const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     // Navigate back to home and open DashboardModal (Control Center)
     router.replace({
       pathname: '/',
@@ -522,7 +522,7 @@ export default function PlannerScreen() {
   );
 
   const handleOpenAddModal = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     setShowAddModal(true);
   };
 

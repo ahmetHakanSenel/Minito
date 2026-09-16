@@ -13,8 +13,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Check, Pause, Play, RotateCcw, Square } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
 import { DurationWheels } from './time/DurationWheels';
+import { haptics } from '../lib/ui/haptics';
 
 interface InlineTimerProps {
   initialMinutes: number;
@@ -90,10 +90,10 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   }, [clearCompletionFeedback, clearTimer, initialTotal]);
 
   const tripleHapticBurst = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    haptics.commit();
     completionTimeoutsRef.current.push(
-      setTimeout(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 180),
-      setTimeout(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 360)
+      setTimeout(() => haptics.commit(), 180),
+      setTimeout(() => haptics.commit(), 360)
     );
   }, []);
 
@@ -126,7 +126,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
       setRemaining(plannedTotal);
     }
     setIsRunning(true);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     timerRef.current = setInterval(() => {
       setRemaining((current) => Math.max(0, current - 1));
     }, 1000);
@@ -135,7 +135,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   const handlePause = () => {
     clearTimer();
     setIsRunning(false);
-    void Haptics.selectionAsync();
+    haptics.selection();
   };
 
   const handleReset = () => {
@@ -146,14 +146,14 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
     setIsCompletionLoop(false);
     setRemaining(plannedTotal);
     onCompletionStateChange?.(false);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
   };
 
   const handleStopCompletion = () => {
     clearCompletionFeedback();
     setIsCompletionLoop(false);
     onCompletionStateChange?.(false);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     onComplete?.();
   };
 
@@ -170,7 +170,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
 
   const toggleEditing = () => {
     if (isRunning || isCompletionLoop) return;
-    void Haptics.selectionAsync();
+    haptics.selection();
     setIsEditing((current) => !current);
   };
 

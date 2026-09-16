@@ -4,9 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Play, Pause, Volume2 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { useAudioContext, AUDIO_TRACKS } from '../src/context';
+import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -56,7 +56,7 @@ export default function SoundsScreen() {
   const { currentTrack, isPlaying, play, pause, resume } = useAudioContext();
 
   const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     // Navigate back to home and open DashboardModal (Control Center)
     router.replace({
       pathname: '/',
@@ -65,7 +65,7 @@ export default function SoundsScreen() {
   };
 
   const handleTrackPress = async (trackId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
 
     if (currentTrack?.id === trackId) {
       if (isPlaying) {

@@ -4,6 +4,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -20,13 +21,14 @@ import {
   HelpCircle,
   LogOut,
   Shield,
-  Volume2,
+  Vibrate,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { SUPPORTED_LANGUAGES } from '../src/lib/i18n';
 import { useChangeLanguage } from '../src/lib/i18n/I18nProvider';
 import { haptics } from '../src/lib/ui/haptics';
+import { useHapticsPreference } from '../src/features/settings/useHapticsPreference';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -90,6 +92,7 @@ export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const { signOut } = useAuth();
   const { changeLanguage } = useChangeLanguage();
+  const { enabled: hapticsEnabled, setEnabled: setHapticsEnabled } = useHapticsPreference();
   const currentLanguage = (i18n.language || 'en').split('-')[0];
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -175,12 +178,25 @@ export default function SettingsScreen() {
             index={1}
             comingSoon
           />
-          <SettingRow
-            icon={<Volume2 size={20} color="#34D399" strokeWidth={2} />}
-            label={t('settings.soundEffects')}
-            index={2}
-            comingSoon
-          />
+          {/* The app has no sound effects; vibration is the feedback it actually gives. */}
+          <AnimatedView entering={FadeInDown.delay(100).duration(250)}>
+            <View style={styles.settingItem}>
+              <View style={styles.settingIcon}>
+                <Vibrate size={20} color="#34D399" strokeWidth={2} />
+              </View>
+              <View style={styles.settingText}>
+                <Text style={styles.settingTitle}>{t('settings.haptics')}</Text>
+                <Text style={styles.settingHint}>{t('settings.hapticsHint')}</Text>
+              </View>
+              <Switch
+                value={hapticsEnabled}
+                onValueChange={(next) => void setHapticsEnabled(next)}
+                trackColor={{ false: 'rgba(255, 255, 255, 0.15)', true: '#8B5CF6' }}
+                thumbColor="#FFFFFF"
+                accessibilityLabel={t('settings.haptics')}
+              />
+            </View>
+          </AnimatedView>
         </View>
 
         <Text style={styles.sectionTitle}>{t('settings.support')}</Text>
@@ -290,6 +306,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#FFFFFF',
+  },
+  settingText: {
+    flex: 1,
+    marginRight: 12,
+  },
+  settingTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  settingHint: {
+    marginTop: 2,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.45)',
   },
   settingLabelDanger: {
     color: '#EF4444',

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 
 import { LivingAuraOrb, type OrbState } from './LivingAuraOrb';
+import { haptics } from '../../lib/ui/haptics';
 
 // Title tint per state — lighter than the orb colors so text stays readable
 const TITLE_COLORS: Record<OrbState, string> = {
@@ -53,7 +53,7 @@ export const FlowStateVisualizer: React.FC<FlowStateVisualizerProps> = ({
 
   const handleLongPress = useCallback(() => {
     if (!enableDebugMode) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     setCurrentState((prev) => STATE_ORDER[(STATE_ORDER.indexOf(prev) + 1) % STATE_ORDER.length]);
     setIsDebugOverride(true);
   }, [enableDebugMode]);

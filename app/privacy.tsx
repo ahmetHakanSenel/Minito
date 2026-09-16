@@ -13,10 +13,10 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { deleteUserAccount, exportUserData } from '../src/lib/api/userData';
 import { LanguageSelector } from '../src/components';
-import * as Haptics from 'expo-haptics';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -37,7 +37,7 @@ export default function PrivacyScreen() {
 
     try {
       setExporting(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      haptics.press();
 
       const data = await exportUserData();
 
@@ -48,7 +48,7 @@ export default function PrivacyScreen() {
       const isAvailable = await Sharing.isAvailableAsync();
       if (isAvailable) {
         await Sharing.shareAsync(exportFile.uri);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        haptics.success();
         Alert.alert(
           t('common.success'),
           t('privacy.exportData.success', {
@@ -60,7 +60,7 @@ export default function PrivacyScreen() {
       }
     } catch (error: any) {
       console.error('Export error:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      haptics.error();
       Alert.alert(t('common.error'), error.message || t('errors.exportFailed'));
     } finally {
       setExporting(false);
@@ -87,12 +87,12 @@ export default function PrivacyScreen() {
           onPress: async () => {
             try {
               setDeleting(true);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              haptics.commit();
 
               await deleteUserAccount();
               await signOut();
 
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              haptics.success();
               Alert.alert(
                 t('common.success'),
                 t('privacy.deleteAccount.success', {
@@ -107,7 +107,7 @@ export default function PrivacyScreen() {
               );
             } catch (error: any) {
               console.error('Delete error:', error);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              haptics.error();
               Alert.alert(t('common.error'), error.message || t('errors.deleteFailed'));
             } finally {
               setDeleting(false);
@@ -120,7 +120,7 @@ export default function PrivacyScreen() {
 
   const handleSignOut = async () => {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      haptics.press();
       await signOut();
       router.replace('/');
     } catch (error: any) {
