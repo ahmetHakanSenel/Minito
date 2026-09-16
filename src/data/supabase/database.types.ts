@@ -9,6 +9,89 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      planner_projects: {
+        Row: {
+          client_updated_at: string
+          color: string
+          created_at: string
+          deleted_at: string | null
+          due_date: string | null
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_updated_at: string
+          color: string
+          created_at?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          id: string
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          client_updated_at?: string
+          color?: string
+          created_at?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      planner_tasks: {
+        Row: {
+          client_updated_at: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_completed: boolean
+          position: number
+          project_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_updated_at: string
+          created_at?: string
+          deleted_at?: string | null
+          id: string
+          is_completed?: boolean
+          position?: number
+          project_id: string
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          client_updated_at?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_completed?: boolean
+          position?: number
+          project_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_tasks_project_id_user_id_fkey"
+            columns: ["project_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "planner_projects"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       rate_limits: {
         Row: {
           identifier: string
@@ -188,6 +271,10 @@ export type Database = {
         Returns: boolean
       }
       cleanup_old_tasks: { Args: never; Returns: number }
+      cleanup_planner_tombstones: {
+        Args: { p_older_than?: string }
+        Returns: number
+      }
       cleanup_rate_limits: { Args: { p_older_than?: string }; Returns: number }
       submit_breakdown_feedback: {
         Args: { p_request_id: string; p_score: string }

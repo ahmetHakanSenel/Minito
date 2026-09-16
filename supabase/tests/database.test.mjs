@@ -397,6 +397,240 @@ describe('submit_breakdown_feedback', () => {
   });
 });
 
+describe('planner sync', () => {
+  const upsertProject = (
+    client,
+    id,
+    { title = 'Thesis', clientUpdatedAt, deletedAt = null } = {}
+  ) =>
+    client.query(
+      `INSERT INTO public.planner_projects (id, title, color, client_updated_at, deleted_at)
+       VALUES ($1, $2, '#8B5CF6', $3, $4)
+       ON CONFLICT (id) DO UPDATE SET
+         title = EXCLUDED.title,
+         client_updated_at = EXCLUDED.client_updated_at,
+         deleted_at = EXCLUDED.deleted_at`,
+      [id, title, clientUpdatedAt, deletedAt]
+    );
+
+  /** Runs `fn` as the user and commits, so a later block sees the result. */
+  async function commitAs(userId, fn) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL ROLE authenticated');
+      await client.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]);
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  test('a replayed push is the same row, and an older edit never overwrites a newer one', async () => {
+    const user = await createUser();
+    const id = crypto.randomUUID();
+
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { title: 'Newer', clientUpdatedAt: '2026-09-16T12:00:00Z' })
+    );
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { title: 'Older', clientUpdatedAt: '2026-09-16T11:00:00Z' })
+    );
+    const afterStale = await pool.query('SELECT title FROM public.planner_projects WHERE id = $1', [
+      id,
+    ]);
+    assert.equal(afterStale.rows[0].title, 'Newer');
+
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { title: 'Newer', clientUpdatedAt: '2026-09-16T12:00:00Z' })
+    );
+
+    const { rows } = await pool.query(
+      'SELECT title, count(*) OVER ()::int AS n FROM public.planner_projects WHERE id = $1',
+      [id]
+    );
+    assert.deepEqual(rows, [{ title: 'Newer', n: 1 }]);
+  });
+
+  test('a stale push cannot bring back a deleted project', async () => {
+    const user = await createUser();
+    const id = crypto.randomUUID();
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { clientUpdatedAt: '2026-09-16T10:00:00Z' })
+    );
+    await commitAs(user, (client) =>
+      upsertProject(client, id, {
+        clientUpdatedAt: '2026-09-16T12:00:00Z',
+        deletedAt: '2026-09-16T12:00:00Z',
+      })
+    );
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { title: 'Offline edit', clientUpdatedAt: '2026-09-16T11:00:00Z' })
+    );
+
+    const { rows } = await pool.query(
+      'SELECT title, deleted_at IS NOT NULL AS deleted FROM public.planner_projects WHERE id = $1',
+      [id]
+    );
+    assert.deepEqual(rows[0], { title: 'Thesis', deleted: true });
+  });
+
+  test('a device clock far in the future cannot lock a row', async () => {
+    const user = await createUser();
+    const id = crypto.randomUUID();
+    await commitAs(user, (client) =>
+      upsertProject(client, id, {
+        title: 'From the future',
+        clientUpdatedAt: '2099-01-01T00:00:00Z',
+      })
+    );
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { title: 'Now', clientUpdatedAt: new Date(Date.now() + 120_000) })
+    );
+
+    const { rows } = await pool.query('SELECT title FROM public.planner_projects WHERE id = $1', [
+      id,
+    ]);
+    assert.equal(rows[0].title, 'Now');
+  });
+
+  test('the pull cursor follows the server clock, whatever the device reports', async () => {
+    const user = await createUser();
+    const id = crypto.randomUUID();
+    await commitAs(user, (client) =>
+      upsertProject(client, id, { clientUpdatedAt: '2001-01-01T00:00:00Z' })
+    );
+    const { rows } = await pool.query(
+      "SELECT updated_at > NOW() - INTERVAL '1 minute' AS fresh FROM public.planner_projects WHERE id = $1",
+      [id]
+    );
+    assert.equal(rows[0].fresh, true);
+  });
+
+  test('users see only their own projects and tasks', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const project = crypto.randomUUID();
+    await commitAs(bob, async (client) => {
+      await upsertProject(client, project, { clientUpdatedAt: new Date() });
+      await client.query(
+        `INSERT INTO public.planner_tasks (id, project_id, title, client_updated_at)
+         VALUES ($1, $2, 'Bob task', NOW())`,
+        [crypto.randomUUID(), project]
+      );
+    });
+
+    const visible = await as('authenticated', alice, async (client) => {
+      const projects = await client.query('SELECT count(*)::int AS n FROM public.planner_projects');
+      const tasks = await client.query('SELECT count(*)::int AS n FROM public.planner_tasks');
+      return [projects.rows[0].n, tasks.rows[0].n];
+    });
+    assert.deepEqual(visible, [0, 0]);
+  });
+
+  test('an upsert cannot take over another user’s row', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const id = crypto.randomUUID();
+    await commitAs(bob, (client) => upsertProject(client, id, { clientUpdatedAt: new Date() }));
+
+    await assert.rejects(
+      as('authenticated', alice, (client) =>
+        upsertProject(client, id, { title: 'Hijacked', clientUpdatedAt: '2099-01-01T00:00:00Z' })
+      ),
+      PERMISSION_DENIED
+    );
+  });
+
+  test('a task cannot be attached to another user’s project', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const bobsProject = crypto.randomUUID();
+    await commitAs(bob, (client) =>
+      upsertProject(client, bobsProject, { clientUpdatedAt: new Date() })
+    );
+
+    await assert.rejects(
+      as('authenticated', alice, (client) =>
+        client.query(
+          `INSERT INTO public.planner_tasks (id, project_id, title, client_updated_at)
+           VALUES ($1, $2, 'Sneaky', NOW())`,
+          [crypto.randomUUID(), bobsProject]
+        )
+      ),
+      { code: '23503' }
+    );
+  });
+
+  test('clients cannot hard-delete, and anonymous callers cannot read', async () => {
+    const user = await createUser();
+    const id = crypto.randomUUID();
+    await commitAs(user, (client) => upsertProject(client, id, { clientUpdatedAt: new Date() }));
+
+    await assert.rejects(
+      as('authenticated', user, (client) =>
+        client.query('DELETE FROM public.planner_projects WHERE id = $1', [id])
+      ),
+      PERMISSION_DENIED
+    );
+    await assert.rejects(
+      as('anon', null, (client) => client.query('SELECT * FROM public.planner_tasks')),
+      PERMISSION_DENIED
+    );
+  });
+
+  test('old tombstones are purged together with their tasks; live rows stay', async () => {
+    const user = await createUser();
+    const gone = crypto.randomUUID();
+    const kept = crypto.randomUUID();
+    await commitAs(user, async (client) => {
+      await upsertProject(client, gone, { clientUpdatedAt: new Date(), deletedAt: new Date() });
+      await upsertProject(client, kept, { clientUpdatedAt: new Date() });
+      await client.query(
+        `INSERT INTO public.planner_tasks (id, project_id, title, client_updated_at)
+         VALUES ($1, $2, 'Orphan to be', NOW())`,
+        [crypto.randomUUID(), gone]
+      );
+    });
+    await pool.query(
+      "UPDATE public.planner_projects SET deleted_at = NOW() - INTERVAL '31 days' WHERE id = $1",
+      [gone]
+    );
+
+    await as('service_role', null, (client) =>
+      client.query('SELECT public.cleanup_planner_tombstones()')
+    );
+    // `as` rolls back, so purge for real as the owner of the tables.
+    await pool.query('SELECT public.cleanup_planner_tombstones()');
+
+    const { rows } = await pool.query(
+      `SELECT
+         (SELECT count(*) FROM public.planner_projects WHERE id = ANY($1))::int AS projects,
+         (SELECT count(*) FROM public.planner_tasks WHERE project_id = $2)::int AS tasks`,
+      [[gone, kept], gone]
+    );
+    assert.deepEqual(rows[0], { projects: 1, tasks: 0 });
+  });
+
+  test('account deletion removes the planner', async () => {
+    const user = await createUser();
+    await commitAs(user, (client) =>
+      upsertProject(client, crypto.randomUUID(), { clientUpdatedAt: new Date() })
+    );
+    await pool.query('DELETE FROM auth.users WHERE id = $1', [user]);
+    const { rows } = await pool.query(
+      'SELECT count(*)::int AS n FROM public.planner_projects WHERE user_id = $1',
+      [user]
+    );
+    assert.equal(rows[0].n, 0);
+  });
+});
+
 describe('translations', () => {
   test('are readable by anyone and writable by no client', async () => {
     await pool.query(
