@@ -12,6 +12,8 @@ import { AuroraProvider } from '../src/lib/aurora';
 import { AudioProvider } from '../src/context';
 import { ProjectProvider } from '../src/context/ProjectContext';
 import { initSentry } from '../src/lib/monitoring/sentry';
+import { loadPreferences } from '../src/lib/storage/preferencesStore';
+import { setHapticsEnabled } from '../src/lib/ui/haptics';
 import '../global.css';
 
 initSentry();
@@ -62,6 +64,10 @@ export default function RootLayout() {
     if (Platform.OS === 'android') {
       NavigationBar.setButtonStyleAsync('light');
     }
+    // Until this resolves haptics stay on, which is also the default.
+    loadPreferences()
+      .then((preferences) => setHapticsEnabled(preferences.haptics))
+      .catch(() => {});
   }, []);
 
   return (

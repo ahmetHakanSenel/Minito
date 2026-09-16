@@ -14,12 +14,12 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { Project, Task, formatDueDate, useProjects } from '../../context/ProjectContext';
 import { FocusMode, SessionCompletionModal, SessionSetupModal, SessionConfig } from '../../modals';
 import { recordFocusSession } from '../../lib/stats/sessionStore';
 import { useAudioContext } from '../../context/AudioContext';
 import { useTranslation } from 'react-i18next';
+import { haptics } from '../../lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -77,12 +77,12 @@ const TaskItem: React.FC<TaskItemProps> = ({
   isNextStep = false,
 }) => {
   const handleStartFocus = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     onStartFocus(task);
   }, [task, onStartFocus]);
 
   const handleToggle = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onToggle();
   }, [onToggle]);
 
@@ -156,7 +156,7 @@ const NextStepPreview: React.FC<NextStepPreviewProps> = ({
 }) => {
   const { t } = useTranslation();
   const handleStartFocus = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     onStartFocus(task);
   }, [task, onStartFocus]);
 
@@ -232,7 +232,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   };
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onToggle();
   };
 

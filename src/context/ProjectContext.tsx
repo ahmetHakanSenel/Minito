@@ -7,9 +7,9 @@ import React, {
   useRef,
   ReactNode,
 } from 'react';
-import * as Haptics from 'expo-haptics';
 import { readJson, writeJson } from '../lib/storage/jsonStore';
 import i18n from '../lib/i18n/config';
+import { haptics } from '../lib/ui/haptics';
 
 // ============================================================================
 // DATA TYPES - ADHD "Next Action" focused Project Management
@@ -254,7 +254,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   }, []);
 
   const toggleTask = useCallback((projectId: string, taskId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id !== projectId) return p;
@@ -285,7 +285,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   }, []);
 
   const completeTaskById = useCallback((projectId: string, taskId: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    haptics.success();
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id !== projectId) return p;

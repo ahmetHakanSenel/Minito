@@ -4,7 +4,6 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, BarChart3 } from 'lucide-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import {
   FlowStateVisualizer,
@@ -22,6 +21,7 @@ import {
   computeFlowMetrics,
   type FocusSessionRecord,
 } from '../src/lib/stats/sessionStore';
+import { haptics } from '../src/lib/ui/haptics';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ANALYTICS SCREEN — computed from real recorded sessions only
@@ -71,7 +71,7 @@ export default function AnalyticsScreen() {
   );
 
   const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     router.replace({
       pathname: '/',
       params: { openDashboard: 'true' },

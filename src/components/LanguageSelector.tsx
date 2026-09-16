@@ -3,8 +3,8 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useChangeLanguage } from '../lib/i18n/I18nProvider';
 import { SUPPORTED_LANGUAGES } from '../lib/i18n';
-import * as Haptics from 'expo-haptics';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { haptics } from '../lib/ui/haptics';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -20,7 +20,7 @@ export const LanguageSelector: React.FC = () => {
 
   const handleLanguageChange = async (language: string) => {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptics.tap();
       await changeLanguage(language);
     } catch (error) {
       console.error('Failed to change language:', error);
