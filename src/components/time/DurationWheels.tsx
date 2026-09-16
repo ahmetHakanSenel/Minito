@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { joinDuration, splitDuration } from '../../lib/time/duration';
@@ -23,11 +23,18 @@ export function DurationWheels({ value, onChange, maxHours }: DurationWheelsProp
   const parts = splitDuration(value);
   const showHours = maxHours !== undefined;
 
+  // Two dials can report in the same tick; each must merge into the other's latest value, not
+  // into the one this render started with.
+  const latestRef = useRef(value);
+  latestRef.current = value;
+
   const update = useCallback(
     (field: 'hours' | 'minutes' | 'seconds', next: number) => {
-      onChange(joinDuration({ ...splitDuration(value), [field]: next }));
+      const merged = joinDuration({ ...splitDuration(latestRef.current), [field]: next });
+      latestRef.current = merged;
+      onChange(merged);
     },
-    [onChange, value]
+    [onChange]
   );
 
   return (

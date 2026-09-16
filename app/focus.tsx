@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StatusBar,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  useWindowDimensions,
-} from 'react-native';
+import { View, Text, StatusBar, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+// Gesture-aware, so the step timer's dial can take a vertical drag from the page.
+import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';

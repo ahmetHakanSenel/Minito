@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SplashScreen, Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as NavigationBar from 'expo-navigation-bar';
 import { AuthProvider, useAuth } from '../src/features/auth/controller/AuthContext';
 import { I18nProvider } from '../src/lib/i18n/I18nProvider';
@@ -72,24 +73,27 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider style={styles.safeArea}>
-      <AudioProvider>
-        <AuroraProvider>
-          <ProjectProvider>
-            <View style={styles.container}>
-              <AuroraBackground />
+    // Gestures (the time dials) need a gesture root at the top of the tree.
+    <GestureHandlerRootView style={styles.safeArea}>
+      <SafeAreaProvider style={styles.safeArea}>
+        <AudioProvider>
+          <AuroraProvider>
+            <ProjectProvider>
+              <View style={styles.container}>
+                <AuroraBackground />
 
-              <I18nProvider>
-                <AuthProvider>
-                  <RootNavigator />
-                </AuthProvider>
-                <FloatingAudioButton />
-              </I18nProvider>
-            </View>
-          </ProjectProvider>
-        </AuroraProvider>
-      </AudioProvider>
-    </SafeAreaProvider>
+                <I18nProvider>
+                  <AuthProvider>
+                    <RootNavigator />
+                  </AuthProvider>
+                  <FloatingAudioButton />
+                </I18nProvider>
+              </View>
+            </ProjectProvider>
+          </AuroraProvider>
+        </AudioProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

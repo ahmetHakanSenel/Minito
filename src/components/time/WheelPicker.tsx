@@ -1,36 +1,51 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, type FlatList, type LayoutChangeEvent } from 'react-native';
+import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  Extrapolation,
-  interpolate,
+  Easing,
+  cancelAnimation,
   runOnJS,
   useAnimatedReaction,
-  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { haptics } from '../../lib/ui/haptics';
+import { nearestDetent, stripTranslate, wrap } from './dialMath';
 
 /**
- * An endlessly looping wheel, like a physical combination lock: 59 is always one flick away from
- * 00, in both directions.
+ * A detent dial, closer to setting a watch than to scrolling a list.
  *
- * The loop is an illusion built from a long list of repeated cycles, started in the middle and
- * quietly re-centred whenever it settles near either end. Nobody flicks through a hundred cycles,
- * so the seam is never reached.
+ * Every value is a detent: the dial follows the finger, clicks (a haptic tick) each time a value
+ * crosses the window, and on release glides to rest exactly on a value, decelerating without
+ * overshoot. No 3D tilt and no springs, so nothing wobbles.
+ *
+ * It is not a list. A short strip of labels covering one lap, plus a margin either side, is
+ * translated on the UI thread, and the position wraps modulo the lap, so the dial turns forever
+ * without re-rendering a single label. That also keeps it legal inside a vertical ScrollView,
+ * where a virtualized list is not.
  */
 
-const ITEM_HEIGHT = 44;
-const VISIBLE_ITEMS = 5;
-const PADDING = (ITEM_HEIGHT * (VISIBLE_ITEMS - 1)) / 2;
-// Enough rows that even a short cycle (0–4 hours) has room to spin.
-const MIN_TOTAL_ROWS = 3000;
-// Re-centre once a settle lands this many cycles from either end.
-const EDGE_CYCLES = 10;
+const ROW_HEIGHT = 40;
+const VISIBLE_ROWS = 5;
+const WINDOW_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
+const CENTER_OFFSET = (WINDOW_HEIGHT - ROW_HEIGHT) / 2;
+// Rows beyond the window on either side, so a partly visible row always has a label to draw.
+const MARGIN_ROWS = Math.ceil(VISIBLE_ROWS / 2) + 1;
+// How far a flick carries, in seconds of its release velocity.
+const FLICK_CARRY_S = 0.16;
+// A fast spin would otherwise queue more ticks than the haptic engine can render crisply.
+const TICK_MIN_INTERVAL_MS = 32;
+
+const WELL_COLOR = '#12121C';
+const WELL_COLOR_CLEAR = 'rgba(18, 18, 28, 0)';
+
+export const WHEEL_HEIGHT = WINDOW_HEIGHT;
 
 type WheelPickerProps = {
-  /** Number of distinct values; the wheel shows 0 … count − 1. */
+  /** Number of distinct values; the dial shows 0 … count − 1 and wraps. */
   count: number;
   value: number;
   onChange: (value: number) => void;
@@ -39,217 +54,303 @@ type WheelPickerProps = {
   accessibilityLabel?: string;
 };
 
-type WheelRowProps = {
-  index: number;
-  label: string;
-  scrollY: SharedValue<number>;
+const pad2 = (value: number) => value.toString().padStart(2, '0');
+
+type StripProps = {
+  labels: string[];
+  /** Absolute index of the first label; the middle lap starts at index `count`. */
+  firstIndex: number;
+  count: number;
+  position: SharedValue<number>;
+  /** Where, inside its container, the selected row's top edge sits. */
+  offset: number;
+  textStyle: TextStyle;
+  tickStyle: ViewStyle;
 };
 
-// Each row reads the shared scroll position on the UI thread, so the 3D tilt costs no renders.
-const WheelRow = memo(function WheelRow({ index, label, scrollY }: WheelRowProps) {
-  const style = useAnimatedStyle(() => {
-    const distance = (index * ITEM_HEIGHT - scrollY.value) / ITEM_HEIGHT;
-    const reach = Math.min(Math.abs(distance), 3);
-    return {
-      opacity: interpolate(reach, [0, 1, 2, 3], [1, 0.45, 0.18, 0.05]),
-      transform: [
-        { perspective: 500 },
-        {
-          rotateX: `${interpolate(distance, [-3, 0, 3], [62, 0, -62], Extrapolation.CLAMP)}deg`,
-        },
-        { scale: interpolate(reach, [0, 2], [1, 0.86], Extrapolation.CLAMP) },
-      ],
-    };
-  });
+// One strip of labels, moved as a whole: its translateY is the only thing that animates.
+const Strip = memo(function Strip({
+  labels,
+  firstIndex,
+  count,
+  position,
+  offset,
+  textStyle,
+  tickStyle,
+}: StripProps) {
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: stripTranslate(position.value, count, firstIndex, offset, ROW_HEIGHT) },
+    ],
+  }));
 
   return (
-    <Animated.View style={[styles.row, style]}>
-      <Text style={styles.rowText}>{label}</Text>
+    <Animated.View style={style}>
+      {labels.map((label, i) => (
+        <View key={i} style={styles.row}>
+          <View style={tickStyle} />
+          <Text style={textStyle}>{label}</Text>
+          <View style={tickStyle} />
+        </View>
+      ))}
     </Animated.View>
   );
 });
-
-const pad2 = (value: number) => value.toString().padStart(2, '0');
 
 export function WheelPicker({
   count,
   value,
   onChange,
   formatValue = pad2,
-  width = 72,
+  width = 76,
   accessibilityLabel,
 }: WheelPickerProps) {
-  const cycles = Math.max(100, Math.ceil(MIN_TOTAL_ROWS / count));
-  const middleCycle = Math.floor(cycles / 2);
-  const rows = useMemo(
-    () => Array.from({ length: cycles * count }, (_, index) => index),
-    [cycles, count]
-  );
-
-  const listRef = useRef<FlatList<number>>(null);
-  const scrollY = useSharedValue((middleCycle * count + value) * ITEM_HEIGHT);
-  // The last value this wheel reported, so an echo from the parent never scrolls it back.
+  const position = useSharedValue(value);
+  const dragStart = useSharedValue(0);
+  // The value last reported to the parent, so its echo never turns the dial back.
   const reportedRef = useRef(value);
-  const [ready, setReady] = useState(false);
+  // Set while the dial turns itself to a value the parent chose (a preset). The values it passes
+  // on the way still click, but are not reported: two dials doing that at once would each
+  // overwrite the other's half of the duration and pull each other back.
+  const externalTargetRef = useRef<number | null>(null);
+  const lastTickRef = useRef(0);
 
-  const indexForValue = useCallback(
-    (target: number, near: number) => {
-      const cycle = Math.floor(near / count);
-      // Of the three candidates around the current cycle, take the closest: the wheel turns the
-      // short way, never through a full revolution.
-      const candidates = [cycle - 1, cycle, cycle + 1].map((c) => c * count + target);
-      return candidates.reduce((best, candidate) =>
-        Math.abs(candidate - near) < Math.abs(best - near) ? candidate : best
-      );
-    },
-    [count]
-  );
-
-  const scrollToIndex = useCallback((index: number, animated: boolean) => {
-    listRef.current?.scrollToOffset({ offset: index * ITEM_HEIGHT, animated });
-  }, []);
-
-  const handleLayout = useCallback(
-    (_event: LayoutChangeEvent) => {
-      if (ready) return;
-      scrollToIndex(middleCycle * count + value, false);
-      setReady(true);
-    },
-    [ready, scrollToIndex, middleCycle, count, value]
-  );
-
-  // A value set from outside (a preset chip) turns the wheel to it.
-  useEffect(() => {
-    if (!ready || value === reportedRef.current) return;
-    reportedRef.current = value;
-    const current = Math.round(scrollY.value / ITEM_HEIGHT);
-    scrollToIndex(indexForValue(value, current), true);
-  }, [value, ready, indexForValue, scrollToIndex, scrollY]);
+  const labels = useMemo(() => {
+    const labelAt = (index: number) => formatValue(wrap(index, count));
+    const range = (from: number, to: number) =>
+      Array.from({ length: to - from }, (_, i) => labelAt(from + i));
+    // The visible value always lies in the middle lap, [count, 2·count). The dim strip needs the
+    // rows around it that can show in the window; the lens only ever shows one row and its
+    // neighbours while they slide through.
+    const dimFirst = count - MARGIN_ROWS;
+    const lensFirst = count - 1;
+    return {
+      dim: range(dimFirst, 2 * count + MARGIN_ROWS),
+      dimFirst,
+      lens: range(lensFirst, 2 * count + 1),
+      lensFirst,
+    };
+  }, [count, formatValue]);
 
   const report = useCallback(
     (index: number) => {
-      const next = ((index % count) + count) % count;
+      const next = wrap(index, count);
+      const now = Date.now();
+      if (now - lastTickRef.current >= TICK_MIN_INTERVAL_MS) {
+        lastTickRef.current = now;
+        haptics.selection();
+      }
+      if (externalTargetRef.current !== null) {
+        if (next === externalTargetRef.current) externalTargetRef.current = null;
+        return;
+      }
       if (next === reportedRef.current) return;
       reportedRef.current = next;
-      haptics.selection();
       onChange(next);
     },
     [count, onChange]
   );
 
-  const onScroll = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
-  });
+  // Any direct handling of the dial makes it the user's again.
+  const releaseExternal = useCallback(() => {
+    externalTargetRef.current = null;
+  }, []);
 
-  // The value changes as each row crosses the centre, not only when the wheel stops: the tick
-  // under the finger is what makes it feel like a physical dial.
+  // The click: fires as each value crosses the centre of the window, while the dial moves.
   useAnimatedReaction(
-    () => Math.round(scrollY.value / ITEM_HEIGHT),
-    (index, previous) => {
-      if (previous !== null && index !== previous) {
-        runOnJS(report)(index);
+    () => Math.round(position.value),
+    (current, previous) => {
+      if (previous !== null && current !== previous) {
+        runOnJS(report)(current);
       }
     },
     [report]
   );
 
-  const handleSettle = useCallback(
-    (offsetY: number) => {
-      const index = Math.round(offsetY / ITEM_HEIGHT);
-      report(index);
-      const cycle = Math.floor(index / count);
-      if (cycle < EDGE_CYCLES || cycle > cycles - EDGE_CYCLES) {
-        // Same value, middle of the list: invisible to the user, endless in practice.
-        scrollToIndex(middleCycle * count + (((index % count) + count) % count), false);
-      }
+  const settleTo = useCallback(
+    (target: number) => {
+      'worklet';
+      const distance = Math.abs(target - position.value);
+      position.value = withTiming(target, {
+        // Longer throws take longer to come to rest, like a flywheel; a nudge simply snaps.
+        duration: Math.min(700, 140 + distance * 45),
+        easing: Easing.out(Easing.cubic),
+      });
     },
-    [report, count, cycles, middleCycle, scrollToIndex]
+    [position]
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: number }) => (
-      <WheelRow index={item} label={formatValue(item % count)} scrollY={scrollY} />
-    ),
-    [formatValue, count, scrollY]
+  // A value set from outside (a preset) turns the dial the short way round to it.
+  useEffect(() => {
+    if (value === reportedRef.current) return;
+    reportedRef.current = value;
+    cancelAnimation(position);
+    const target = nearestDetent(position.value, value, count);
+    // Only a dial that will actually pass values needs to hold its reports back.
+    externalTargetRef.current = target === Math.round(position.value) ? null : value;
+    settleTo(target);
+  }, [value, count, position, settleTo]);
+
+  const step = useCallback(
+    (direction: 1 | -1) => {
+      releaseExternal();
+      cancelAnimation(position);
+      settleTo(Math.round(position.value) + direction);
+    },
+    [position, settleTo, releaseExternal]
   );
 
-  const getItemLayout = useCallback(
-    (_data: ArrayLike<number> | null | undefined, index: number) => ({
-      length: ITEM_HEIGHT,
-      offset: PADDING + ITEM_HEIGHT * index,
-      index,
-    }),
-    []
-  );
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .activeOffsetY([-4, 4])
+      .failOffsetX([-14, 14])
+      .onBegin(() => {
+        cancelAnimation(position);
+        runOnJS(releaseExternal)();
+      })
+      .onStart(() => {
+        dragStart.value = position.value;
+      })
+      .onUpdate((event) => {
+        // Dragging up brings the next values into the window, as on a physical dial.
+        position.value = dragStart.value - event.translationY / ROW_HEIGHT;
+      })
+      .onEnd((event) => {
+        const carried = position.value - (event.velocityY / ROW_HEIGHT) * FLICK_CARRY_S;
+        settleTo(Math.round(carried));
+      })
+      .onFinalize((_event, success) => {
+        // A touch that never became a drag must still leave the dial resting on a detent.
+        if (!success) settleTo(Math.round(position.value));
+      });
+
+    // A tap above or below the window steps once, for anyone who would rather not drag.
+    const tap = Gesture.Tap()
+      .maxDuration(250)
+      .onEnd((event, success) => {
+        if (!success) return;
+        const rows = (event.y - CENTER_OFFSET - ROW_HEIGHT / 2) / ROW_HEIGHT;
+        if (Math.abs(rows) < 0.5) return;
+        runOnJS(step)(rows > 0 ? 1 : -1);
+      });
+
+    return Gesture.Race(pan, tap);
+  }, [dragStart, position, settleTo, step, releaseExternal]);
 
   return (
-    <View
-      style={[styles.frame, { width }]}
-      onLayout={handleLayout}
-      accessible
-      accessibilityRole="adjustable"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityValue={{ text: formatValue(value) }}
-      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-      onAccessibilityAction={(event) => {
-        const step = event.nativeEvent.actionName === 'increment' ? 1 : -1;
-        const next = (value + step + count) % count;
-        reportedRef.current = next;
-        onChange(next);
-        scrollToIndex(indexForValue(next, Math.round(scrollY.value / ITEM_HEIGHT)), true);
-      }}
-    >
-      <View pointerEvents="none" style={styles.selectionBand} />
-      <Animated.FlatList
-        ref={listRef}
-        data={rows}
-        keyExtractor={(item) => String(item)}
-        renderItem={renderItem}
-        getItemLayout={getItemLayout}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        snapToInterval={ITEM_HEIGHT}
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingVertical: PADDING }}
-        onMomentumScrollEnd={(event) => handleSettle(event.nativeEvent.contentOffset.y)}
-        initialNumToRender={VISIBLE_ITEMS * 2}
-        windowSize={5}
-        maxToRenderPerBatch={VISIBLE_ITEMS * 2}
-        style={{ opacity: ready ? 1 : 0 }}
-        nestedScrollEnabled
-      />
-    </View>
+    <GestureDetector gesture={gesture}>
+      <View
+        style={[styles.well, { width }]}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityValue={{ text: formatValue(value) }}
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        onAccessibilityAction={(event) =>
+          step(event.nativeEvent.actionName === 'increment' ? 1 : -1)
+        }
+      >
+        <Strip
+          labels={labels.dim}
+          firstIndex={labels.dimFirst}
+          count={count}
+          position={position}
+          offset={CENTER_OFFSET}
+          textStyle={styles.dimText}
+          tickStyle={styles.dimTick}
+        />
+
+        {/* The dial fades into the well above and below the window. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={[WELL_COLOR, WELL_COLOR_CLEAR]}
+          style={[styles.fade, styles.fadeTop]}
+        />
+        <LinearGradient
+          pointerEvents="none"
+          colors={[WELL_COLOR_CLEAR, WELL_COLOR]}
+          style={[styles.fade, styles.fadeBottom]}
+        />
+
+        {/* The lens: the same dial, larger and brighter, seen through the centre window. */}
+        <View pointerEvents="none" style={styles.lens}>
+          <Strip
+            labels={labels.lens}
+            firstIndex={labels.lensFirst}
+            count={count}
+            position={position}
+            offset={0}
+            textStyle={styles.lensText}
+            tickStyle={styles.lensTick}
+          />
+        </View>
+      </View>
+    </GestureDetector>
   );
 }
 
-export const WHEEL_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
-
 const styles = StyleSheet.create({
-  frame: {
-    height: ITEM_HEIGHT * VISIBLE_ITEMS,
+  well: {
+    height: WINDOW_HEIGHT,
     overflow: 'hidden',
+    borderRadius: 16,
+    backgroundColor: WELL_COLOR,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  selectionBand: {
+  row: {
+    height: ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+  },
+  dimText: {
+    fontSize: 20,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.38)',
+    fontVariant: ['tabular-nums'],
+  },
+  dimTick: {
+    width: 5,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  lens: {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: PADDING,
-    height: ITEM_HEIGHT,
-    borderRadius: 12,
-    backgroundColor: 'rgba(139, 92, 246, 0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.35)',
+    top: CENTER_OFFSET,
+    height: ROW_HEIGHT,
+    overflow: 'hidden',
+    backgroundColor: '#1D1B30',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(196, 181, 253, 0.55)',
   },
-  row: {
-    height: ITEM_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowText: {
-    fontSize: 26,
+  lensText: {
+    fontSize: 27,
     fontWeight: '600',
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
+  },
+  lensTick: {
+    width: 7,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: '#A78BFA',
+  },
+  fade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: ROW_HEIGHT * 1.6,
+  },
+  fadeTop: {
+    top: 0,
+  },
+  fadeBottom: {
+    bottom: 0,
   },
 });

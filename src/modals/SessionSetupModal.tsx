@@ -1,14 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
+// The gesture-aware ScrollView lets a dial's drag win over the sheet's own scrolling.
+import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Clock, Music, Target, VolumeX, X } from 'lucide-react-native';
 import Animated, {
@@ -160,110 +154,113 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
       statusBarTranslucent
       onRequestClose={handleClose}
     >
-      <Animated.View entering={FadeIn.duration(200)} style={styles.overlay}>
-        <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+      {/* On Android a Modal is its own window, outside the app's gesture root. */}
+      <GestureHandlerRootView style={styles.gestureRoot}>
+        <Animated.View entering={FadeIn.duration(200)} style={styles.overlay}>
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
 
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <Animated.View
-              entering={FadeInDown.delay(100).springify()}
-              style={[styles.card, { maxWidth: Math.min(width - 32, 520) }]}
+          <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
             >
-              {/* Header */}
-              <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                  <Target size={20} color="#8B5CF6" />
-                  <Text style={styles.headerLabel}>{t('session.focusSession')}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={handleClose}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('common.close')}
-                >
-                  <X size={24} color="rgba(255,255,255,0.5)" />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.taskTitle} numberOfLines={2}>
-                {taskTitle}
-              </Text>
-
-              {/* Duration */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Clock size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.sectionTitle}>{t('session.duration')}</Text>
+              <Animated.View
+                entering={FadeInDown.delay(100).springify()}
+                style={[styles.card, { maxWidth: Math.min(width - 32, 520) }]}
+              >
+                {/* Header */}
+                <View style={styles.header}>
+                  <View style={styles.headerLeft}>
+                    <Target size={20} color="#8B5CF6" />
+                    <Text style={styles.headerLabel}>{t('session.focusSession')}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleClose}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.close')}
+                  >
+                    <X size={24} color="rgba(255,255,255,0.5)" />
+                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.presetRow}>
-                  {PRESET_MINUTES.map((minutes) => {
-                    const isActive = durationSec === minutes * 60;
-                    return (
-                      <TouchableOpacity
-                        key={minutes}
-                        style={[styles.preset, isActive && styles.presetActive]}
-                        onPress={() => handlePreset(minutes)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isActive }}
-                      >
-                        <Text style={[styles.presetText, isActive && styles.presetTextActive]}>
-                          {t('session.durationOption', { count: minutes })}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <Text style={styles.taskTitle} numberOfLines={2}>
+                  {taskTitle}
+                </Text>
 
-                <View style={styles.wheels}>
-                  <DurationWheels
-                    value={durationSec}
-                    onChange={setDurationSec}
-                    maxHours={MAX_HOURS}
-                  />
-                </View>
-                {!isValid ? <Text style={styles.hint}>{t('session.minDuration')}</Text> : null}
-              </View>
+                {/* Duration */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Clock size={18} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.sectionTitle}>{t('session.duration')}</Text>
+                  </View>
 
-              {/* Ambience */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Music size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.sectionTitle}>{t('session.ambience')}</Text>
-                </View>
+                  <View style={styles.presetRow}>
+                    {PRESET_MINUTES.map((minutes) => {
+                      const isActive = durationSec === minutes * 60;
+                      return (
+                        <TouchableOpacity
+                          key={minutes}
+                          style={[styles.preset, isActive && styles.presetActive]}
+                          onPress={() => handlePreset(minutes)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: isActive }}
+                        >
+                          <Text style={[styles.presetText, isActive && styles.presetTextActive]}>
+                            {t('session.durationOption', { count: minutes })}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trackRow}
-                >
-                  <TrackChip
-                    label={t('session.mute')}
-                    active={trackId === null}
-                    onPress={() => handleTrackSelect(null)}
-                    icon={<VolumeX size={16} color="rgba(255,255,255,0.8)" />}
-                  />
-                  {AUDIO_TRACKS.map((track) => (
-                    <TrackChip
-                      key={track.id}
-                      label={t(`audio.tracks.${track.id}.name`)}
-                      active={trackId === track.id}
-                      onPress={() => handleTrackSelect(track.id)}
-                      icon={<View style={[styles.trackDot, { backgroundColor: track.color }]} />}
-                      accent={track.color}
+                  <View style={styles.wheels}>
+                    <DurationWheels
+                      value={durationSec}
+                      onChange={setDurationSec}
+                      maxHours={MAX_HOURS}
                     />
-                  ))}
-                </ScrollView>
-              </View>
+                  </View>
+                  {!isValid ? <Text style={styles.hint}>{t('session.minDuration')}</Text> : null}
+                </View>
 
-              <StartButton onPress={handleStart} disabled={!isValid} />
-            </Animated.View>
-          </ScrollView>
-        </SafeAreaView>
-      </Animated.View>
+                {/* Ambience */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Music size={18} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.sectionTitle}>{t('session.ambience')}</Text>
+                  </View>
+
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.trackRow}
+                  >
+                    <TrackChip
+                      label={t('session.mute')}
+                      active={trackId === null}
+                      onPress={() => handleTrackSelect(null)}
+                      icon={<VolumeX size={16} color="rgba(255,255,255,0.8)" />}
+                    />
+                    {AUDIO_TRACKS.map((track) => (
+                      <TrackChip
+                        key={track.id}
+                        label={t(`audio.tracks.${track.id}.name`)}
+                        active={trackId === track.id}
+                        onPress={() => handleTrackSelect(track.id)}
+                        icon={<View style={[styles.trackDot, { backgroundColor: track.color }]} />}
+                        accent={track.color}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <StartButton onPress={handleStart} disabled={!isValid} />
+              </Animated.View>
+            </ScrollView>
+          </SafeAreaView>
+        </Animated.View>
+      </GestureHandlerRootView>
     </Modal>
   );
 };
@@ -298,6 +295,9 @@ function TrackChip({ label, active, onPress, icon, accent = '#8B5CF6' }: TrackCh
 // ============================================================================
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
