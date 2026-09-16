@@ -173,6 +173,7 @@ describe('taskRepository.breakDown', () => {
       empathyBridge: 'Kitchens feel endless, I know.',
       firstStepHook: 'Stand up.',
       stoppingPoint: 'You can stop here.',
+      requestId: 'req-1',
       source: 'model',
     });
     const query = mockQuery({ data: row, error: null });
@@ -182,6 +183,8 @@ describe('taskRepository.breakDown', () => {
     expect(outcome).toMatchObject({
       status: 'ready',
       isOffline: false,
+      // Carried through so the finished session can be scored against this exact request.
+      requestId: 'req-1',
       content: { title: 'Clean the kitchen', stoppingPoint: 'You can stop here.' },
       saved: { id: 'task-1' },
     });

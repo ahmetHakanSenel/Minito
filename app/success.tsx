@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated, { ZoomIn, FadeIn } from 'react-native-reanimated';
 import { SuccessIcon } from '../src/components';
+import { BreakdownFeedback } from '../src/features/tasks/ui/BreakdownFeedback';
 import { getRandomSuccessMessage } from '../src/lib/SuccessMessages';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -14,7 +15,11 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 export default function SuccessScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
-  const params = useLocalSearchParams<{ totalSteps: string; input: string }>();
+  const params = useLocalSearchParams<{
+    totalSteps: string;
+    input: string;
+    requestId?: string;
+  }>();
   const totalSteps = parseInt(params.totalSteps || '0', 10);
 
   // Get random success message based on current language (creates novelty for ADHD engagement)
@@ -87,6 +92,9 @@ export default function SuccessScreen() {
                 </Text>
               </TouchableOpacity>
             </AnimatedView>
+
+            {/* The quietest possible moment to ask whether the plan actually fit. */}
+            <BreakdownFeedback requestId={params.requestId} />
           </View>
         </ScrollView>
       </View>

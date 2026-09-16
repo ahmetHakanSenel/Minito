@@ -2,7 +2,10 @@ import { breakTask } from '../breakTask';
 import { tracedAxios } from '../../requestTracing';
 import { FallbackReason } from '../../../safety';
 
-jest.mock('../../requestTracing', () => ({ tracedAxios: { post: jest.fn() } }));
+jest.mock('../../requestTracing', () => ({
+  tracedAxios: { post: jest.fn() },
+  newRequestId: jest.fn(() => 'req-test'),
+}));
 jest.mock('../../../data/supabase/client', () => {
   const client = {
     auth: { getSession: jest.fn(async () => ({ data: { session: { access_token: 'jwt' } } })) },
@@ -72,11 +75,18 @@ describe('breakTask', () => {
           difficulty: 'easy',
         },
       ],
+      requestId: 'req-test',
       source: 'repaired',
       promptVersion: 'task-breakdown-v1',
       tokenUsage: 420,
       latencyMs: 2300,
     });
+    // The id travels in the body, not just the tracing header, so feedback can find this row.
+    expect(mockedPost).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ request_id: 'req-test' }),
+      expect.any(Object)
+    );
   });
 
   it('still reads the flat string steps of a pre-v1 deployment', async () => {

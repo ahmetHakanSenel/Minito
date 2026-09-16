@@ -40,6 +40,7 @@ import {
 type FocusLaunchOptions = {
   taskId?: string;
   resumeStepIndex?: number;
+  requestId?: string;
 };
 
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
@@ -123,7 +124,7 @@ export default function HomeScreen() {
 
   const openFocus = (
     content: BreakdownContent,
-    { taskId, resumeStepIndex }: FocusLaunchOptions = {}
+    { taskId, resumeStepIndex, requestId }: FocusLaunchOptions = {}
   ) => {
     router.push({
       pathname: '/focus',
@@ -133,6 +134,7 @@ export default function HomeScreen() {
         empathyBridge: content.empathyBridge ?? '',
         firstStepHook: content.firstStepHook ?? '',
         ...(content.stoppingPoint ? { stoppingPoint: content.stoppingPoint } : {}),
+        ...(requestId ? { requestId } : {}),
         ...(taskId ? { taskId } : {}),
         ...(resumeStepIndex !== undefined ? { resumeStepIndex: String(resumeStepIndex) } : {}),
       },
@@ -150,7 +152,11 @@ export default function HomeScreen() {
         firstStepHook: resumableSession.firstStepHook,
         stoppingPoint: resumableSession.stoppingPoint ?? null,
       },
-      { taskId: resumableSession.taskId, resumeStepIndex: resumableSession.currentStepIndex }
+      {
+        taskId: resumableSession.taskId,
+        resumeStepIndex: resumableSession.currentStepIndex,
+        requestId: resumableSession.requestId,
+      }
     );
   };
 
@@ -211,7 +217,10 @@ export default function HomeScreen() {
       haptics.success();
       setIsOffline(outcome.isOffline);
       setInput('');
-      openFocus(outcome.content, { taskId: outcome.saved?.id });
+      openFocus(outcome.content, {
+        taskId: outcome.saved?.id,
+        requestId: outcome.requestId ?? undefined,
+      });
     } catch (error) {
       console.error('Error breaking task:', error);
       setIsOffline(true);

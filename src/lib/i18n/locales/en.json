@@ -115,6 +115,14 @@
       }
     }
   },
+  "feedback": {
+    "question": "Was this breakdown the right size?",
+    "helpful": "Just right",
+    "tooLarge": "Steps too big",
+    "tooSmall": "Steps too small",
+    "wrongTone": "Tone was off",
+    "thanks": "Noted. Thank you."
+  },
   "offline": {
     "banner": "You're offline. Using fallback content.",
     "title": "Offline Mode"
