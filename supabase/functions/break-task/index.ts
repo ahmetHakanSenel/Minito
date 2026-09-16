@@ -1,99 +1,28 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.89.0';
+import { corsHeaders, describeError, jsonResponse, requireEnv } from '../_shared/http.ts';
+import { createAdminClient, resolveUser } from '../_shared/supabase.ts';
 import {
-  createClient,
-  type SupabaseClient,
-  type User,
-} from 'https://esm.sh/@supabase/supabase-js@2';
-import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
-import {
-  detectLanguage,
-  PROMPT_VERSION,
-  runBreakdownPipeline,
-  TaskBreakdownSchema,
-} from './pipeline.ts';
-import {
-  createMeter,
-  DEFAULT_OPENAI_MODEL,
-  REQUEST_BUDGET_MS,
-  resolveProvider,
-  withBudget,
-} from './providers.ts';
+  type BreakTaskDeps,
+  createBreakTaskHandler,
+  type LogLevel,
+  type TaskRecord,
+} from './handler.ts';
+import { openAiModerator } from './moderation.ts';
+import { PROMPT_VERSION } from './pipeline.ts';
+import { DEFAULT_OPENAI_MODEL, resolveProvider } from './providers.ts';
 
 /**
  * Edge Function: break-task
  *
- * Turns one overwhelming task into a validated, structured micro-step plan with OpenAI or Gemini.
- * The AI pipeline itself (prompt, validation, repair, fallback) lives in ./pipeline.ts, and the
- * provider adapters with their timeout and retry budget live in ./providers.ts.
- *
- * Steps:
- * 0. Authenticate the caller (a signed-in user JWT is required)
- * 1. Sanitize input & HMAC-SHA256 hash for privacy
- * 2. Moderation (Fail-Safe) → if flagged, return CONTENT_FLAGGED
- * 3. Per-user and per-IP rate limits (enforced; fail open only if a check itself errors)
- * 4. AI pipeline → generate, validate, one repair, deterministic fallback, all inside a time budget
- * 5. Persistence → one telemetry row per request (retry 3x), which the user's feedback later scores
+ * Wiring only. The request path lives in ./handler.ts, the AI pipeline (prompt, validation,
+ * repair, fallback) in ./pipeline.ts, and the provider adapters with their time budget in
+ * ./providers.ts. This file turns secrets and the service-role client into those dependencies.
  */
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, x-request-id, x-guest-id',
-};
-
-// Zod schemas for validation
-const RequestBodySchema = z.object({
-  input: z.string().min(1).max(1000).trim(),
-  guest_id: z.string().uuid().optional(),
-  request_id: z.string().uuid().optional(),
-});
-
-const ResponseBodySchema = z.object({
-  success: z.boolean(),
-  breakdown: TaskBreakdownSchema.optional(),
-  meta: z
-    .object({
-      prompt_version: z.string(),
-      source: z.enum(['model', 'repaired', 'fallback']),
-    })
-    .optional(),
-  fallback_reason: z.string().optional(),
-  error: z.string().optional(),
-  token_usage: z.number().int().nonnegative().optional(),
-  latency_ms: z.number().int().nonnegative().optional(),
-});
-
-type RequestBody = z.infer<typeof RequestBodySchema>;
-type ResponseBody = z.infer<typeof ResponseBodySchema>;
-
-function jsonResponse(body: ResponseBody, status: number): Response {
-  // Validate response (fail-soft: log but never block the reply)
-  try {
-    ResponseBodySchema.parse(body);
-  } catch (validationError) {
-    console.warn('Response validation warning:', validationError);
-  }
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
-function requireEnv(name: string): string {
-  const value = Deno.env.get(name);
-  if (!value) {
-    throw new Error(`Missing required secret: ${name}`);
-  }
-  return value;
-}
-
-/**
- * Structured log line tagged with the prompt version. Never pass the task text or the model's
- * reply: both can carry personal data.
- */
-function logEvent(level: 'info' | 'warn', event: string, fields: Record<string, unknown>): void {
-  const write = level === 'warn' ? console.warn : console.log;
-  write(JSON.stringify({ event, prompt_version: PROMPT_VERSION, ...fields }));
+/** One JSON object per line, tagged with the prompt version, so logs can be queried as data. */
+function logEvent(level: LogLevel, event: string, fields: Record<string, unknown>): void {
+  const write = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+  write(JSON.stringify({ level, event, prompt_version: PROMPT_VERSION, ...fields }));
 }
 
 /**
@@ -111,64 +40,55 @@ function runInBackground(work: Promise<unknown>): void {
 }
 
 const PERSIST_ATTEMPTS = 3;
+const UNIQUE_VIOLATION = '23505';
 
 /**
- * Writes one analytics row, retrying briefly. Never awaited on the user's path: telemetry is
- * best-effort, and its retries used to push the reply past the client's own timeout.
+ * Telemetry is best-effort: a few short retries, then one log line that says it was lost.
+ * request_id is unique, which makes the retry idempotent: when an insert succeeded but its
+ * acknowledgement was lost, the retry hits the constraint, and that means the row is there.
  */
-async function persistTask(
-  supabase: SupabaseClient,
-  record: Record<string, unknown>
-): Promise<void> {
+async function persistWithRetry(admin: SupabaseClient, record: TaskRecord): Promise<void> {
   for (let attempt = 1; attempt <= PERSIST_ATTEMPTS; attempt++) {
     try {
-      const { error } = await supabase.from('tasks').insert(record);
-      if (!error) return;
-      console.warn(`Persistence attempt ${attempt} failed:`, error);
+      const { error } = await admin.from('tasks').insert(record);
+      if (!error || error.code === UNIQUE_VIOLATION) return;
+      logEvent('warn', 'break_task.telemetry_retry', {
+        request_id: record.request_id,
+        attempt,
+        error: `${error.code}: ${error.message}`,
+      });
     } catch (error) {
-      console.warn(`Persistence attempt ${attempt} failed:`, error);
+      logEvent('warn', 'break_task.telemetry_retry', {
+        request_id: record.request_id,
+        attempt,
+        error: describeError(error),
+      });
     }
     if (attempt < PERSIST_ATTEMPTS) {
       await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
     }
   }
-  logEvent('warn', 'break_task.telemetry_lost', { attempts: PERSIST_ATTEMPTS });
+  logEvent('error', 'break_task.telemetry_lost', {
+    request_id: record.request_id,
+    attempts: PERSIST_ATTEMPTS,
+  });
 }
 
-/**
- * Resolve the signed-in user behind the request's bearer token.
- * Anon-key and expired tokens resolve to null and are rejected by the caller.
- */
-async function authenticate(req: Request, supabase: SupabaseClient): Promise<User | null> {
-  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) return null;
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
-
-let hmacKeyPromise: Promise<CryptoKey> | null = null;
-
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  hmacKeyPromise ??= crypto.subtle.importKey(
+/** HMAC-SHA256 via Web Crypto; the key is imported once per isolate. */
+function createHmacHasher(secret: string): (value: string) => Promise<string> {
+  const key = crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
   );
-  return hmacKeyPromise;
-}
-
-/**
- * HMAC-SHA256 of the sanitized input, so analytics can dedupe without storing the text.
- */
-async function hashInput(sanitizedInput: string, secret: string): Promise<string> {
-  const key = await getHmacKey(secret);
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(sanitizedInput));
-  return Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  return async (value) => {
+    const signature = await crypto.subtle.sign('HMAC', await key, new TextEncoder().encode(value));
+    return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join(
+      ''
+    );
+  };
 }
 
 /**
@@ -182,393 +102,64 @@ function clientIp(req: Request): string | null {
   );
 }
 
-// The header is caller-controlled and lands in an analytics column, so it is kept opaque and short.
-const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,64}$/;
-
-/**
- * The tracing id this request is logged under. The client sends it in the body so it can attach
- * feedback to the row later; the header is the fallback for clients that only trace by header.
- */
-function traceId(req: Request, bodyRequestId: string | undefined): string | null {
-  if (bodyRequestId) return bodyRequestId;
-  const header = req.headers.get('x-request-id');
-  return header && SAFE_REQUEST_ID.test(header) ? header : null;
-}
-
-/**
- * Check moderation (Fail-Safe)
- * If content is flagged, return fallback panic kit
- */
-async function checkModeration(
-  input: string,
-  openaiKey: string
-): Promise<{ flagged: boolean; reason?: string }> {
-  // The moderation endpoint is OpenAI-only; without a key there is nothing to call.
-  if (!openaiKey) {
-    console.warn('OPENAI_API_KEY not set, skipping moderation');
-    return { flagged: false };
+function buildDeps(): BreakTaskDeps {
+  // Missing secrets are a deployment error: fail loudly instead of degrading to defaults.
+  const admin = createAdminClient();
+  const hmacSecret = requireEnv('HMAC_SECRET');
+  const openaiKey = Deno.env.get('OPENAI_API_KEY') || '';
+  const providerName = (Deno.env.get('AI_PROVIDER') || 'openai').toLowerCase();
+  // Moving to the Gemini 2.5 family means capping its thinking budget, or latency and cost jump.
+  const provider = resolveProvider(providerName, {
+    openaiKey,
+    openaiModel: Deno.env.get('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
+    geminiKey: Deno.env.get('GEMINI_API_KEY') || '',
+    geminiModel: Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash',
+  });
+  // Moderation runs on OpenAI's endpoint whichever model writes the plan. Without a key it is
+  // skipped only when the deployment says so out loud.
+  const allowUnmoderated = Deno.env.get('ALLOW_UNMODERATED') === 'true';
+  if (!openaiKey && allowUnmoderated) {
+    logEvent('warn', 'break_task.running_unmoderated', { provider: providerName });
   }
 
-  try {
-    const response = await fetch('https://api.openai.com/v1/moderations', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ input }),
-    });
-
-    if (!response.ok) {
-      // Fail-safe: if moderation fails, assume safe (don't block user)
-      console.warn('Moderation API failed, assuming safe:', response.statusText);
-      return { flagged: false };
-    }
-
-    const data = await response.json();
-    const flagged = data.results?.[0]?.flagged === true;
-
-    return {
-      flagged,
-      reason: flagged ? 'CONTENT_FLAGGED' : undefined,
-    };
-  } catch (error) {
-    // Fail-safe: if moderation fails, assume safe
-    console.error('Moderation check error:', error);
-    return { flagged: false };
-  }
-}
-
-// Per-hour ceilings. The user quota is keyed by the verified user id, so it cannot be dodged by
-// rotating client-supplied identifiers; the IP quota stops one address from farming free accounts.
-const RATE_LIMIT_PER_USER = 20;
-const RATE_LIMIT_PER_IP = 40;
-
-type RateLimitScope = {
-  column: 'user_id' | 'client_ip_hash';
-  value: string;
-  limit: number;
-};
-
-async function exceedsLimit(
-  supabase: SupabaseClient,
-  scope: RateLimitScope,
-  since: string
-): Promise<boolean> {
-  try {
-    const { count, error } = await supabase
-      .from('tasks')
-      .select('id', { count: 'exact', head: true })
-      .eq(scope.column, scope.value)
-      .gte('created_at', since);
-
-    if (error) {
-      console.error(`Rate limit check on ${scope.column} failed, allowing request:`, error);
-      return false;
-    }
-    if ((count ?? 0) >= scope.limit) {
-      console.warn(
-        `Rate limit exceeded on ${scope.column}: ${count} in last hour (limit ${scope.limit})`
-      );
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error(`Rate limit check on ${scope.column} errored, allowing request:`, error);
-    return false;
-  }
-}
-
-/**
- * Check rate limits (enforced).
- * Fail-soft only on infrastructure errors: if a check itself cannot run,
- * the request is allowed rather than blocking a legitimate user.
- */
-async function checkRateLimit(
-  userId: string,
-  ipHash: string | null,
-  supabase: SupabaseClient
-): Promise<{ limited: boolean }> {
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const scopes: RateLimitScope[] = [
-    { column: 'user_id', value: userId, limit: RATE_LIMIT_PER_USER },
-  ];
-  if (ipHash) {
-    scopes.push({ column: 'client_ip_hash', value: ipHash, limit: RATE_LIMIT_PER_IP });
-  }
-
-  const results = await Promise.all(
-    scopes.map((scope) => exceedsLimit(supabase, scope, oneHourAgo))
-  );
-  return { limited: results.some(Boolean) };
-}
-
-const MAX_DISPLAY_NAME_LENGTH = 30;
-
-// The name is user-controlled text headed into a prompt: keep it short, single-line and inert.
-function sanitizeDisplayName(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const cleaned = raw
-    .replace(/\p{Cc}/gu, '')
-    .replace(/["`\\{}<>]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_DISPLAY_NAME_LENGTH);
-  return cleaned.length > 0 ? cleaned : null;
-}
-
-function displayNameOf(user: User): string | null {
-  const metadata = user.user_metadata ?? {};
-  return sanitizeDisplayName(metadata.display_name ?? metadata.full_name ?? metadata.name);
-}
-
-/**
- * Main handler
- */
-serve(async (req: Request) => {
-  const startTime = Date.now();
-
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  try {
-    // Missing secrets are a deployment error: fail loudly instead of degrading to defaults.
-    const supabaseUrl = requireEnv('SUPABASE_URL');
-    const supabaseServiceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-    const hmacSecret = requireEnv('HMAC_SECRET');
-    const openaiKey = Deno.env.get('OPENAI_API_KEY') || '';
-    const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
-    const aiProvider = (Deno.env.get('AI_PROVIDER') || 'openai').toLowerCase();
-    const openaiModel = Deno.env.get('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL;
-    // Available models: gemini-2.0-flash, gemini-2.0-flash-001, gemini-2.5-flash, gemini-2.5-pro.
-    // Moving to the 2.5 family means capping its thinking budget, or latency and cost jump.
-    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
-    // Moderation is only skipped when a deployment says so out loud.
-    const allowUnmoderated = Deno.env.get('ALLOW_UNMODERATED') === 'true';
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    // Step 0: Only signed-in users may spend the AI budget.
-    const user = await authenticate(req, supabase);
-    if (!user) {
-      return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
-    }
-
-    // An unknown provider or a missing key is a deployment problem: let the client fall back.
-    const provider = resolveProvider(aiProvider, {
-      openaiKey,
-      openaiModel,
-      geminiKey,
-      geminiModel,
-    });
-    if (!provider) {
-      console.warn(`AI provider "${aiProvider}" is unknown or has no API key. Skipping AI call.`);
-      return jsonResponse(
-        { success: false, fallback_reason: 'AI_DOWN', error: 'AI provider not configured' },
-        503
-      );
-    }
-
-    // Moderation runs on OpenAI's endpoint, so a Gemini-only deployment could previously drop it
-    // without anyone noticing. Safety does not depend on which model writes the plan: either the
-    // key is there, or the deployment has explicitly accepted running unmoderated.
-    if (!openaiKey && !allowUnmoderated) {
-      logEvent('warn', 'break_task.moderation_unavailable', { provider: aiProvider });
-      return jsonResponse(
-        {
-          success: false,
-          fallback_reason: 'MOD_DOWN',
-          error: 'Content moderation is not configured',
-        },
-        503
-      );
-    }
-
-    // Parse and validate request body with Zod
-    let body: RequestBody;
-    try {
-      body = RequestBodySchema.parse(await req.json());
-    } catch (validationError) {
-      return jsonResponse(
-        {
-          success: false,
-          fallback_reason: 'VALIDATION',
-          error:
-            validationError instanceof z.ZodError
-              ? `Validation error: ${validationError.errors
-                  .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-                  .join(', ')}`
-              : 'Invalid request body',
-        },
-        400
-      );
-    }
-
-    const { input, guest_id, request_id } = body;
-    const requestId = traceId(req, request_id);
-    const ipAddress = clientIp(req);
-    // The domain prefix keeps IP hashes from ever colliding with input hashes.
-    const ipHash = ipAddress ? await hashInput(`ip:${ipAddress}`, hmacSecret) : null;
-    const taskRecordBase = {
-      user_id: user.id,
-      client_ip_hash: ipHash,
-      guest_id: guest_id || null,
-      request_id: requestId,
-    };
-
-    // Step 1: Sanitize input & HMAC-SHA256 hash
-    const sanitizedInput = input.trim().replace(/\s+/g, ' ');
-    const inputHash = await hashInput(sanitizedInput, hmacSecret);
-
-    // Steps 2 and 3: Moderation and rate limits are independent gates, so they run together.
-    // The server sends only the reason code — the client renders panic-kit
-    // content in the user's own locale. Never ship crisis copy from here.
-    const [moderationResult, { limited }] = await Promise.all([
-      checkModeration(sanitizedInput, openaiKey),
-      checkRateLimit(user.id, ipHash, supabase),
-    ]);
-
-    // Safety wins over quota: telling someone in crisis that they are out of requests is the
-    // wrong answer, whichever gate tripped first.
-    if (moderationResult.flagged) {
-      runInBackground(
-        persistTask(supabase, {
-          ...taskRecordBase,
-          input_hash: inputHash,
-          token_usage: null,
-          latency_ms: Date.now() - startTime,
-          fallback_reason: 'CONTENT_FLAGGED',
-        })
-      );
-
-      return jsonResponse({ success: false, fallback_reason: 'CONTENT_FLAGGED' }, 200);
-    }
-
-    // Rate-limited attempts are NOT persisted to `tasks`, so a blocked
-    // user's retries never extend their own block window.
-    if (limited) {
-      return jsonResponse(
-        {
-          success: false,
-          fallback_reason: 'RATE_DOWN',
-          error: 'Too many requests. Please try again later.',
-        },
-        429
-      );
-    }
-
-    // Step 4: AI pipeline (generate → validate → one repair → deterministic fallback)
-    const meter = createMeter();
-    const result = await runBreakdownPipeline(
-      withBudget(provider, startTime + REQUEST_BUDGET_MS, meter),
-      { task: sanitizedInput, displayName: displayNameOf(user) }
-    );
-
-    // Telemetry that makes a quality change traceable to the model and prompt that produced it.
-    // ai_latency_ms is model time only; latency_ms stays end-to-end, and the gap is our overhead.
-    const telemetry = {
-      ai_model: provider.model,
-      prompt_version: PROMPT_VERSION,
-      ai_latency_ms: meter.aiLatencyMs,
-    };
-
-    if (!result) {
-      logEvent('warn', 'break_task.ai_down', {
-        provider: aiProvider,
-        ai_model: provider.model,
-        request_id: requestId,
-        ai_latency_ms: meter.aiLatencyMs,
-        latency_ms: Date.now() - startTime,
+  return {
+    provider,
+    moderator: openaiKey ? openAiModerator(openaiKey) : null,
+    allowUnmoderated,
+    authenticate: async (token) => {
+      const user = await resolveUser(admin, token);
+      return user ? { id: user.id, metadata: user.user_metadata ?? {} } : null;
+    },
+    consumeQuota: async (identifier, maxRequests, windowSeconds) => {
+      const { data, error } = await admin.rpc('check_and_consume_quota', {
+        p_identifier: identifier,
+        p_max_requests: maxRequests,
+        p_window_interval: `${windowSeconds} seconds`,
       });
-      runInBackground(
-        persistTask(supabase, {
-          ...taskRecordBase,
-          ...telemetry,
-          input_hash: inputHash,
-          token_usage: null,
-          latency_ms: Date.now() - startTime,
-          fallback_reason: 'AI_DOWN',
-        })
-      );
+      if (error) throw new Error(`${error.code}: ${error.message}`);
+      return data === true;
+    },
+    hash: createHmacHasher(hmacSecret),
+    persistTask: (record) => persistWithRetry(admin, record),
+    runInBackground,
+    clientIp,
+    log: logEvent,
+  };
+}
 
-      return jsonResponse(
-        {
-          success: false,
-          fallback_reason: 'AI_DOWN',
-          error: 'AI service is temporarily unavailable. Please try again later.',
-        },
-        503
-      );
-    }
+let handler: ((req: Request) => Promise<Response>) | null = null;
 
-    const { breakdown, source, tokens, finishReason, issues } = result;
-    const latencyMs = Date.now() - startTime;
-    // A fallback plan's language comes from our own heuristic, so comparing it with that same
-    // heuristic would always agree. Only the model's own choice is worth scoring.
-    const responseLanguage = source === 'fallback' ? null : breakdown.language;
-    const languageMatch =
-      responseLanguage === null ? null : responseLanguage === detectLanguage(sanitizedInput);
-
-    logEvent(source === 'model' ? 'info' : 'warn', 'break_task.completed', {
-      provider: aiProvider,
-      ai_model: provider.model,
-      source,
-      request_id: requestId,
-      token_usage: tokens.total,
-      prompt_tokens: tokens.prompt,
-      completion_tokens: tokens.completion,
-      cached_tokens: tokens.cached,
-      finish_reason: finishReason,
-      response_language: responseLanguage,
-      language_match: languageMatch,
-      ai_latency_ms: meter.aiLatencyMs,
-      latency_ms: latencyMs,
-      ...(issues.length > 0 ? { validation_issues: issues } : {}),
-    });
-
-    // Step 5: Persistence, off the reply path. Its retries used to run before the response and
-    // could push a finished plan past the client's 20s ceiling, so the user saw offline steps
-    // for a breakdown we had already paid for.
-    runInBackground(
-      persistTask(supabase, {
-        ...taskRecordBase,
-        ...telemetry,
-        input_hash: inputHash,
-        token_usage: tokens.total,
-        prompt_token_usage: tokens.prompt,
-        completion_token_usage: tokens.completion,
-        cached_token_usage: tokens.cached,
-        finish_reason: finishReason ?? null,
-        response_language: responseLanguage,
-        language_match: languageMatch,
-        // Which rule the first reply broke, so a prompt can be fixed by evidence rather than guess.
-        validation_issues: issues.length > 0 ? issues : null,
-        latency_ms: latencyMs,
-        breakdown_source: source,
-        fallback_reason: null,
-        steps: breakdown.steps,
-      })
-    );
-
-    return jsonResponse(
-      {
-        success: true,
-        breakdown,
-        meta: { prompt_version: PROMPT_VERSION, source },
-        token_usage: tokens.total,
-        latency_ms: latencyMs,
-      },
-      200
-    );
+Deno.serve(async (req) => {
+  try {
+    // Built on first use, and rebuilt on the next request if the configuration was broken.
+    handler ??= createBreakTaskHandler(buildDeps());
   } catch (error) {
-    // Details stay in the logs; the client only learns that the server failed.
-    console.error('Edge function error:', error);
+    logEvent('error', 'break_task.misconfigured', { error: describeError(error) });
     return jsonResponse(
-      { success: false, error: 'Internal server error', fallback_reason: 'DB_DOWN' },
-      500
+      { success: false, error: 'Internal server error' },
+      500,
+      corsHeaders(['POST'])
     );
   }
+  return handler(req);
 });

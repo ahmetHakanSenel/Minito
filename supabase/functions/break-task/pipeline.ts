@@ -116,13 +116,22 @@ export const SYSTEM_PROMPT = [
   PROMPT_LAYERS.outputContract,
 ].join('\n\n');
 
-// A tag inside the task would let it close the fence early and speak from outside it.
-const FENCE_TAG = /<\s*\/?\s*(?:task_input|user_name)\s*>/gi;
+/**
+ * A tag inside the task would let it close the fence early and speak from outside it.
+ *
+ * Stripping known tag names is not enough: removal can itself assemble a tag, as in
+ * `</task_</task_input>input>`. So no angle bracket reaches the prompt at all. The look-alike
+ * characters keep the text readable for the model ("x ‹ y" still reads as a comparison), while
+ * making it impossible to write any tag, whatever its name, spacing or nesting.
+ */
+export function neutralizeTags(text: string): string {
+  return text.replace(/</g, '‹').replace(/>/g, '›');
+}
 
 export function buildUserPrompt(task: string, displayName: string | null): string {
-  const parts = [`<task_input>\n${task.replace(FENCE_TAG, '')}\n</task_input>`];
+  const parts = [`<task_input>\n${neutralizeTags(task)}\n</task_input>`];
   if (displayName) {
-    parts.push(`<user_name>${displayName.replace(FENCE_TAG, '')}</user_name>`);
+    parts.push(`<user_name>${neutralizeTags(displayName)}</user_name>`);
   }
   parts.push('Return the JSON object for this task, following the output contract.');
   return parts.join('\n\n');
@@ -151,6 +160,19 @@ function stripCodeFence(text: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
+/**
+ * One validation issue as a log-safe line. Issues end up in logs and in `validation_issues`, and
+ * some zod messages quote the offending value, which is model output that may echo the task.
+ */
+export function describeIssue(issue: z.ZodIssue): string {
+  const path = issue.path.join('.') || '(root)';
+  const message =
+    issue.code === z.ZodIssueCode.invalid_enum_value
+      ? `expected one of ${issue.options.map((option) => JSON.stringify(option)).join(', ')}`
+      : issue.message;
+  return `${path}: ${message}`;
+}
+
 export function validateBreakdown(raw: string): ValidationResult {
   let parsed: unknown;
   try {
@@ -165,9 +187,7 @@ export function validateBreakdown(raw: string): ValidationResult {
   }
   return {
     ok: false,
-    issues: result.error.issues
-      .slice(0, MAX_REPORTED_ISSUES)
-      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`),
+    issues: result.error.issues.slice(0, MAX_REPORTED_ISSUES).map(describeIssue),
   };
 }
 
@@ -251,10 +271,27 @@ const FALLBACK_BREAKDOWNS: Record<BreakdownLanguage, TaskBreakdown> = {
   }),
 };
 
-const TURKISH_HINT = /[çğıİöşüÇĞÖŞÜ]|\b(?:ve|bir|lazım|gerek|yapmam|bugün|yarın)\b/i;
+// Only letters no other common Latin-script language uses: ç, ö and ü alone would turn German
+// or French input Turkish. The words catch Turkish typed without Turkish characters. `\b` only
+// sees ASCII word characters, which is why no listed word contains a Turkish letter.
+const TURKISH_HINT = /[ğıİşĞŞ]|\b(?:ve|bir|icin|lazim|gerek|yapmam|bugun|yarin|nasil|cok)\b/i;
 
+const ENGLISH_HINT =
+  /\b(?:i|my|me|the|a|an|and|to|of|for|with|is|it|this|that|have|need|should|keep|can|do|how|what|before|too|much|today|like|feels?|everything)\b/i;
+
+/**
+ * The language the text gives evidence for, or null when it gives none, as with a single word
+ * like "kargo". Quality metrics use this, so a guess is never scored as a mismatch.
+ */
+export function languageEvidence(text: string): BreakdownLanguage | null {
+  if (TURKISH_HINT.test(text)) return 'tr';
+  if (ENGLISH_HINT.test(text)) return 'en';
+  return null;
+}
+
+/** The language to answer in when one must be chosen; English is the default. */
 export function detectLanguage(text: string): BreakdownLanguage {
-  return TURKISH_HINT.test(text) ? 'tr' : 'en';
+  return languageEvidence(text) ?? 'en';
 }
 
 export function buildFallbackBreakdown(language: BreakdownLanguage): TaskBreakdown {
