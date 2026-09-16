@@ -335,11 +335,17 @@ export default function FocusModeScreen() {
                 </Text>
               </View>
 
-              <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.readyButtonWrap}>
+              <Animated.View
+                entering={FadeInDown.delay(300).springify()}
+                style={styles.readyButtonWrap}
+              >
                 <Pressable
                   onPress={handleNext}
                   accessibilityRole="button"
-                  style={({ pressed }) => [styles.readyButton, pressed && styles.readyButtonPressed]}
+                  style={({ pressed }) => [
+                    styles.readyButton,
+                    pressed && styles.readyButtonPressed,
+                  ]}
                 >
                   <Text style={styles.readyButtonText}>{t('focus.ready')}</Text>
                   <ArrowRight size={19} color="#FFFFFF" strokeWidth={2.5} />
@@ -363,26 +369,26 @@ export default function FocusModeScreen() {
           >
             <View style={styles.stepWrapper}>
               <FocusCard
-              step={currentStep}
-              stoppingPoint={isFinalStep ? stoppingPoint : undefined}
-              stepNumber={currentStepIndex + 1}
-              totalSteps={totalSteps}
-              onNext={handleNext}
-              onPrevious={currentStepIndex > 0 ? handlePrevious : undefined}
-              onComplete={currentStepIndex === totalSteps - 1 ? handleComplete : undefined}
-              isCompleted={isCompleted}
-              isFinalStep={isFinalStep}
-              disabled={isAnimating}
-              timerCompletionLoop={timerCompletionLoop}
-              timerSlot={
-                currentDuration ? (
-                  <InlineTimer
-                    initialMinutes={currentDuration.minutes}
-                    initialSeconds={currentDuration.seconds}
-                    onCompletionStateChange={setTimerCompletionLoop}
-                  />
-                ) : undefined
-              }
+                step={currentStep}
+                stoppingPoint={isFinalStep ? stoppingPoint : undefined}
+                stepNumber={currentStepIndex + 1}
+                totalSteps={totalSteps}
+                onNext={handleNext}
+                onPrevious={currentStepIndex > 0 ? handlePrevious : undefined}
+                onComplete={currentStepIndex === totalSteps - 1 ? handleComplete : undefined}
+                isCompleted={isCompleted}
+                isFinalStep={isFinalStep}
+                disabled={isAnimating}
+                timerCompletionLoop={timerCompletionLoop}
+                timerSlot={
+                  currentDuration ? (
+                    <InlineTimer
+                      initialMinutes={currentDuration.minutes}
+                      initialSeconds={currentDuration.seconds}
+                      onCompletionStateChange={setTimerCompletionLoop}
+                    />
+                  ) : undefined
+                }
               />
             </View>
           </ScrollView>
