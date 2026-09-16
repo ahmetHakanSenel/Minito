@@ -203,6 +203,9 @@
     "version": "Minito v{{version}}"
   },
   "planner": {
+    "deleteTitle": "Bu proje silinsin mi?",
+    "deleteMessage": "“{{title}}” ve adımları tüm cihazlarından silinsin mi?",
+    "deleteHint": "Silmek için basılı tut",
     "emptyTitle": "Henüz proje yok",
     "emptyText": "Büyük hedeflerini projelere ayır; Minito sıradaki adımı hep önünde tutsun.",
     "emptyAction": "Proje ekle",

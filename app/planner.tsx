@@ -507,16 +507,7 @@ export default function PlannerScreen() {
       // Only tasks the user typed or picked from the samples; nothing is silently invented.
       const tasks = manualTasks;
 
-      addProject({
-        title,
-        color,
-        dueDate: undefined,
-        tasks: tasks.map((taskTitle, index) => ({
-          id: `new-${Date.now()}-${index}`,
-          title: taskTitle,
-          isCompleted: false,
-        })),
-      });
+      addProject({ title, color, taskTitles: tasks });
     },
     [addProject]
   );

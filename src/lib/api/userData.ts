@@ -7,6 +7,7 @@ export type UserDataExport = {
   user: { id: string; email?: string; created_at: string; last_sign_in_at?: string };
   task_breakdowns: Record<string, unknown>[];
   ai_requests: Record<string, unknown>[];
+  planner: { projects: Record<string, unknown>[]; tasks: Record<string, unknown>[] };
   metadata: { export_date: string; note: string };
 };
 

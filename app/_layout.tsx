@@ -78,18 +78,19 @@ export default function RootLayout() {
       <SafeAreaProvider style={styles.safeArea}>
         <AudioProvider>
           <AuroraProvider>
-            <ProjectProvider>
-              <View style={styles.container}>
-                <AuroraBackground />
+            <View style={styles.container}>
+              <AuroraBackground />
 
-                <I18nProvider>
-                  <AuthProvider>
+              <I18nProvider>
+                <AuthProvider>
+                  {/* Inside auth: the planner belongs to the signed-in account. */}
+                  <ProjectProvider>
                     <RootNavigator />
-                  </AuthProvider>
-                  <FloatingAudioButton />
-                </I18nProvider>
-              </View>
-            </ProjectProvider>
+                  </ProjectProvider>
+                </AuthProvider>
+                <FloatingAudioButton />
+              </I18nProvider>
+            </View>
           </AuroraProvider>
         </AudioProvider>
       </SafeAreaProvider>

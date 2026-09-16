@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Alert, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronDown, Circle, CheckCircle2, Play } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
@@ -196,7 +196,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   totalProjects,
 }) => {
   const { t } = useTranslation();
-  const { toggleTask, getNextStep, completeTaskById } = useProjects();
+  const { toggleTask, getNextStep, completeTaskById, deleteProject } = useProjects();
   const scale = useSharedValue(1);
   const chevronRotation = useSharedValue(0);
 
@@ -228,6 +228,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   const handlePressOut = () => {
     scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  };
+
+  const handleLongPress = () => {
+    haptics.warning();
+    Alert.alert(t('planner.deleteTitle'), t('planner.deleteMessage', { title: project.title }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => deleteProject(project.id) },
+    ]);
   };
 
   const handlePress = () => {
@@ -353,6 +361,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         <AnimatedTouchableOpacity
           style={[styles.projectCard, cardAnimatedStyle]}
           onPress={handlePress}
+          onLongPress={handleLongPress}
+          accessibilityHint={t('planner.deleteHint')}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           activeOpacity={1}
