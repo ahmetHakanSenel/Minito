@@ -3,7 +3,6 @@ import { getSupabase } from '../data/supabase/client';
 import type { Tables } from '../data/supabase/database.types';
 import { breakTask } from '../lib/api/breakTask';
 import { normalizeSteps, type BreakdownStep } from '../lib/breakdownSteps';
-import { getOrCreateGuestId } from '../lib/guestIdentity';
 import { FallbackReason } from '../safety';
 
 export type TaskBreakdown = {
@@ -152,7 +151,7 @@ async function save(content: BreakdownContent): Promise<TaskBreakdown> {
 
 async function breakDown(input: string): Promise<BreakdownOutcome> {
   const title = input.trim();
-  const result = await breakTask(title, await getOrCreateGuestId());
+  const result = await breakTask(title);
 
   if (!result.success) {
     return result.fallbackReason === FallbackReason.CONTENT_FLAGGED

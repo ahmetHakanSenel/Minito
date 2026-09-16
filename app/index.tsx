@@ -158,7 +158,7 @@ export default function HomeScreen() {
       setIsDashboardVisible(true);
       router.setParams({ openDashboard: undefined });
     }
-  }, [params.openDashboard]);
+  }, [params.openDashboard, router]);
 
   // Selection haptic on scroll, debounced to avoid spam
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -177,6 +177,13 @@ export default function HomeScreen() {
       return;
     }
     haptics.error();
+    if (reason === FallbackReason.AUTH_EXPIRED) {
+      // The root guard sends a signed-out user to the login screen.
+      Alert.alert(t('common.error'), t('errors.sessionExpired'), [
+        { text: t('common.ok'), onPress: () => void signOut().catch(() => {}) },
+      ]);
+      return;
+    }
     Alert.alert(
       t('common.error'),
       reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown')
