@@ -23,12 +23,26 @@
       "package": "com.hsenelsorganization.minito"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-localization", "expo-secure-store", "expo-router"],
+    "plugins": [
+      "expo-localization",
+      "expo-secure-store",
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "8b24b394-3e75-471c-937c-7622eced1e56"
