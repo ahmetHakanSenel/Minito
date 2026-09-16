@@ -133,6 +133,47 @@ Deno.test('the provider is resolved by name, and only with a key', () => {
   assertEquals(resolveProvider('mystery-model', keys), null);
 });
 
+Deno.test('the OpenAI model can be overridden by deployment', () => {
+  const keys = {
+    openaiKey: 'sk-test',
+    openaiModel: 'gpt-4.1-mini',
+    geminiKey: '',
+    geminiModel: '',
+  };
+
+  assertEquals(resolveProvider('openai', keys)?.model, 'gpt-4.1-mini');
+  // An empty override falls back rather than sending an empty model id.
+  assertEquals(resolveProvider('openai', { ...keys, openaiModel: '' })?.model, 'gpt-4o-mini');
+});
+
+Deno.test('a timed-out attempt gives up and still counts as model time', async () => {
+  let calls = 0;
+  // Never resolves on its own; only the abort signal ends it.
+  const adapter: ProviderAdapter = {
+    model: 'slow-model',
+    send: (_messages, signal) => {
+      calls += 1;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason));
+      });
+    },
+  };
+  const meter = createMeter();
+
+  // A 2.6s deadline caps the per-call timeout below the usual 9s, keeping the test short.
+  const completion = await withBudget(
+    adapter,
+    Date.now() + 2_600,
+    meter
+  )(messages, {
+    attempts: 1,
+  });
+
+  assertEquals(completion, null);
+  assertEquals(calls, 1);
+  assert(meter.aiLatencyMs >= 2_000, `timed-out attempt was not measured: ${meter.aiLatencyMs}`);
+});
+
 // Replaces fetch for one call, so the adapter's parsing can be tested without a network.
 async function withStubbedFetch(response: Response, run: () => Promise<void>): Promise<void> {
   const original = globalThis.fetch;

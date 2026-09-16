@@ -6,7 +6,13 @@ import {
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
 import { PROMPT_VERSION, runBreakdownPipeline, TaskBreakdownSchema } from './pipeline.ts';
-import { createMeter, REQUEST_BUDGET_MS, resolveProvider, withBudget } from './providers.ts';
+import {
+  createMeter,
+  DEFAULT_OPENAI_MODEL,
+  REQUEST_BUDGET_MS,
+  resolveProvider,
+  withBudget,
+} from './providers.ts';
 
 /**
  * Edge Function: break-task
@@ -83,6 +89,45 @@ function requireEnv(name: string): string {
 function logEvent(level: 'info' | 'warn', event: string, fields: Record<string, unknown>): void {
   const write = level === 'warn' ? console.warn : console.log;
   write(JSON.stringify({ event, prompt_version: PROMPT_VERSION, ...fields }));
+}
+
+/**
+ * Keeps the isolate alive for work that must finish but must not delay the reply.
+ * Falls back to a detached promise where the runtime has no waitUntil (local `deno run`).
+ */
+function runInBackground(work: Promise<unknown>): void {
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
+    .EdgeRuntime;
+  if (typeof runtime?.waitUntil === 'function') {
+    runtime.waitUntil(work);
+    return;
+  }
+  work.catch(() => {});
+}
+
+const PERSIST_ATTEMPTS = 3;
+
+/**
+ * Writes one analytics row, retrying briefly. Never awaited on the user's path: telemetry is
+ * best-effort, and its retries used to push the reply past the client's own timeout.
+ */
+async function persistTask(
+  supabase: SupabaseClient,
+  record: Record<string, unknown>
+): Promise<void> {
+  for (let attempt = 1; attempt <= PERSIST_ATTEMPTS; attempt++) {
+    try {
+      const { error } = await supabase.from('tasks').insert(record);
+      if (!error) return;
+      console.warn(`Persistence attempt ${attempt} failed:`, error);
+    } catch (error) {
+      console.warn(`Persistence attempt ${attempt} failed:`, error);
+    }
+    if (attempt < PERSIST_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  logEvent('warn', 'break_task.telemetry_lost', { attempts: PERSIST_ATTEMPTS });
 }
 
 /**
@@ -290,8 +335,12 @@ serve(async (req: Request) => {
     const openaiKey = Deno.env.get('OPENAI_API_KEY') || '';
     const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
     const aiProvider = (Deno.env.get('AI_PROVIDER') || 'openai').toLowerCase();
-    // Available models: gemini-2.0-flash, gemini-2.0-flash-001, gemini-2.5-flash, gemini-2.5-pro
+    const openaiModel = Deno.env.get('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL;
+    // Available models: gemini-2.0-flash, gemini-2.0-flash-001, gemini-2.5-flash, gemini-2.5-pro.
+    // Moving to the 2.5 family means capping its thinking budget, or latency and cost jump.
     const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash';
+    // Moderation is only skipped when a deployment says so out loud.
+    const allowUnmoderated = Deno.env.get('ALLOW_UNMODERATED') === 'true';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -304,11 +353,31 @@ serve(async (req: Request) => {
     }
 
     // An unknown provider or a missing key is a deployment problem: let the client fall back.
-    const provider = resolveProvider(aiProvider, { openaiKey, geminiKey, geminiModel });
+    const provider = resolveProvider(aiProvider, {
+      openaiKey,
+      openaiModel,
+      geminiKey,
+      geminiModel,
+    });
     if (!provider) {
       console.warn(`AI provider "${aiProvider}" is unknown or has no API key. Skipping AI call.`);
       return jsonResponse(
         { success: false, fallback_reason: 'AI_DOWN', error: 'AI provider not configured' },
+        503
+      );
+    }
+
+    // Moderation runs on OpenAI's endpoint, so a Gemini-only deployment could previously drop it
+    // without anyone noticing. Safety does not depend on which model writes the plan: either the
+    // key is there, or the deployment has explicitly accepted running unmoderated.
+    if (!openaiKey && !allowUnmoderated) {
+      logEvent('warn', 'break_task.moderation_unavailable', { provider: aiProvider });
+      return jsonResponse(
+        {
+          success: false,
+          fallback_reason: 'MOD_DOWN',
+          error: 'Content moderation is not configured',
+        },
         503
       );
     }
@@ -349,32 +418,32 @@ serve(async (req: Request) => {
     const sanitizedInput = input.trim().replace(/\s+/g, ' ');
     const inputHash = await hashInput(sanitizedInput, hmacSecret);
 
-    // Step 2: Moderation (Fail-Safe)
+    // Steps 2 and 3: Moderation and rate limits are independent gates, so they run together.
     // The server sends only the reason code — the client renders panic-kit
     // content in the user's own locale. Never ship crisis copy from here.
-    const moderationResult = await checkModeration(sanitizedInput, openaiKey);
+    const [moderationResult, { limited }] = await Promise.all([
+      checkModeration(sanitizedInput, openaiKey),
+      checkRateLimit(user.id, ipHash, supabase),
+    ]);
+
+    // Safety wins over quota: telling someone in crisis that they are out of requests is the
+    // wrong answer, whichever gate tripped first.
     if (moderationResult.flagged) {
-      supabase
-        .from('tasks')
-        .insert({
+      runInBackground(
+        persistTask(supabase, {
           ...taskRecordBase,
           input_hash: inputHash,
           token_usage: null,
           latency_ms: Date.now() - startTime,
           fallback_reason: 'CONTENT_FLAGGED',
         })
-        .then(
-          () => {},
-          (err: unknown) => console.warn('Failed to persist task:', err)
-        );
+      );
 
       return jsonResponse({ success: false, fallback_reason: 'CONTENT_FLAGGED' }, 200);
     }
 
-    // Step 3: Rate Limit check (enforced)
     // Rate-limited attempts are NOT persisted to `tasks`, so a blocked
     // user's retries never extend their own block window.
-    const { limited } = await checkRateLimit(user.id, ipHash, supabase);
     if (limited) {
       return jsonResponse(
         {
@@ -409,9 +478,8 @@ serve(async (req: Request) => {
         ai_latency_ms: meter.aiLatencyMs,
         latency_ms: Date.now() - startTime,
       });
-      supabase
-        .from('tasks')
-        .insert({
+      runInBackground(
+        persistTask(supabase, {
           ...taskRecordBase,
           ...telemetry,
           input_hash: inputHash,
@@ -419,10 +487,7 @@ serve(async (req: Request) => {
           latency_ms: Date.now() - startTime,
           fallback_reason: 'AI_DOWN',
         })
-        .then(
-          () => {},
-          (err: unknown) => console.warn('Failed to persist task:', err)
-        );
+      );
 
       return jsonResponse(
         {
@@ -447,28 +512,21 @@ serve(async (req: Request) => {
       ...(issues.length > 0 ? { validation_issues: issues } : {}),
     });
 
-    // Step 5: Persistence (with retry, fail-soft)
-    for (let persistAttempt = 1; persistAttempt <= 3; persistAttempt++) {
-      try {
-        const { error } = await supabase.from('tasks').insert({
-          ...taskRecordBase,
-          ...telemetry,
-          input_hash: inputHash,
-          token_usage: tokenUsage,
-          latency_ms: latencyMs,
-          breakdown_source: source,
-          fallback_reason: null,
-          steps: breakdown.steps,
-        });
-        if (!error) break;
-        console.warn(`Persistence attempt ${persistAttempt} failed:`, error);
-      } catch (error) {
-        console.warn(`Persistence attempt ${persistAttempt} failed:`, error);
-      }
-      if (persistAttempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * persistAttempt));
-      }
-    }
+    // Step 5: Persistence, off the reply path. Its retries used to run before the response and
+    // could push a finished plan past the client's 20s ceiling, so the user saw offline steps
+    // for a breakdown we had already paid for.
+    runInBackground(
+      persistTask(supabase, {
+        ...taskRecordBase,
+        ...telemetry,
+        input_hash: inputHash,
+        token_usage: tokenUsage,
+        latency_ms: latencyMs,
+        breakdown_source: source,
+        fallback_reason: null,
+        steps: breakdown.steps,
+      })
+    );
 
     return jsonResponse(
       {
