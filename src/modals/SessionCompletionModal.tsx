@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -28,7 +28,6 @@ import { useTranslation } from 'react-i18next';
 import { splitDuration } from '../lib/time/duration';
 import { haptics } from '../lib/ui/haptics';
 
-const { width } = Dimensions.get('window');
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 // ============================================================================
@@ -76,7 +75,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
       setShowConfetti(false);
       celebrationScale.value = 0.5;
     }
-  }, [visible]);
+  }, [celebrationScale, visible]);
 
   const handleTaskCompleted = () => {
     haptics.success();

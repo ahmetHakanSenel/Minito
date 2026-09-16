@@ -7,8 +7,6 @@
  * Each message has English and Turkish versions, plus a Lucide icon and color.
  */
 
-import type { LucideIcon } from 'lucide-react-native';
-
 export interface SuccessMessage {
   en: string;
   tr: string;

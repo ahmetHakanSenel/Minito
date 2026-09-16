@@ -1,7 +1,6 @@
 import React, { useEffect, useState, ReactNode } from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { initI18n } from './config';
-import i18n from './config';
+import i18n, { initI18n } from './config';
 import { I18nextProvider } from 'react-i18next';
 
 interface I18nProviderProps {

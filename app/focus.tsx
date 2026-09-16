@@ -16,8 +16,6 @@ import { saveActiveSession, clearActiveSession } from '../src/lib/storage/active
 import { recordFocusSession } from '../src/lib/stats/sessionStore';
 import { useTaskProgressSync } from '../src/features/tasks/controller/useTaskProgressSync';
 import { haptics } from '../src/lib/ui/haptics';
-// Ambient audio temporarily disabled until asset is added
-// import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -71,9 +69,6 @@ export default function FocusModeScreen() {
     setTimerCompletionLoop(false);
   }, [currentStepIndex]);
 
-  // GOD MODE: Neuro-Sonic Ambience - Brown noise with fade in/out
-  // const { startAmbience, stopAmbience } = useAmbientAudio();
-
   // A malformed param must degrade to the empty state, never crash the screen
   const steps: BreakdownStep[] = (() => {
     if (!params.steps) return [];
@@ -107,6 +102,9 @@ export default function FocusModeScreen() {
     });
     // Standing on step N means steps 0..N-1 are done.
     syncProgress(Math.max(0, currentStepIndex));
+    // Saves on progress only. `steps` and the texts are parsed from route params on every render,
+    // so listing them would save on every render instead; they do not change while mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStepIndex, completedSteps, steps.length]);
 
   // Timer completion state with Aurora background pulse. The timer owns its
@@ -126,14 +124,6 @@ export default function FocusModeScreen() {
     if (!hasEmpathyScreen) {
       setCurrentStepIndex(0);
     }
-
-    // GOD MODE: Start ambient audio on Focus Mode start (disabled until asset added)
-    // startAmbience();
-
-    // Cleanup: Stop ambient audio on unmount
-    return () => {
-      // stopAmbience();
-    };
   }, [hasEmpathyScreen]);
 
   const handleNext = () => {
@@ -215,9 +205,6 @@ export default function FocusModeScreen() {
       stepsCompleted: totalSteps,
     });
 
-    // GOD MODE: Fade out ambient audio before leaving Focus Mode (disabled)
-    // await stopAmbience();
-
     try {
       router.replace({
         pathname: '/success',
@@ -233,10 +220,12 @@ export default function FocusModeScreen() {
     }
   };
 
-  // Cleanup timeouts on unmount
+  // Cleanup timeouts on unmount. These refs hold timer ids, not nodes: reading them at unmount
+  // is the point, because the latest pending timer is the one to cancel.
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         clearTimeout(timeoutRef.current);
       }
       if (nextTimeoutRef.current) {
