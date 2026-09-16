@@ -129,9 +129,9 @@ prompt version, model, latency and tokens.
 | `npm run typecheck` | TypeScript, strict |
 | `npm run lint` | ESLint, with zero warnings allowed |
 | `npm run format:check` | Prettier |
-| `npm test` | Jest: repositories, API client, session storage, locales, UI logic |
-| `npm run test:edge` | Deno: the edge function handler, AI pipeline, providers and moderation |
-| `npm run test:db` | Postgres: migrations, RLS, grants, quota concurrency, the ops queries |
+| `npm test` | Jest: planner sync, repositories, API client, session storage, locales, UI logic |
+| `npm run test:edge` | Deno: the break-task handler, AI pipeline, providers, moderation and alert rules |
+| `npm run test:db` | Postgres: migrations, RLS, grants, quota concurrency, planner sync guards, the ops SQL |
 | `npm run gen:types` | Regenerates `database.types.ts` from the migrations (run `test:db` first) |
 | `npm run eval:ai -- --dry-run` | The offline evaluation harness, without a provider |
 
