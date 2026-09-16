@@ -12,6 +12,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "eval:ai": "npx -y deno run --no-lock --allow-net --allow-env --allow-read --allow-write scripts/eval.ts",
     "gen:types": "npx supabase gen types typescript --linked --schema public > src/data/supabase/database.types.ts"
   },
   "dependencies": {

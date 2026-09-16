@@ -1,0 +1,117 @@
+[
+  {
+    "id": "tr-cleaning-1",
+    "language": "tr",
+    "category": "cleaning",
+    "text": "Evi toplamam lazım ama nereden başlayacağımı bilmiyorum"
+  },
+  {
+    "id": "tr-cleaning-2",
+    "language": "tr",
+    "category": "cleaning",
+    "text": "Bulaşıklar üç gündür lavaboda duruyor"
+  },
+  {
+    "id": "tr-work-1",
+    "language": "tr",
+    "category": "work",
+    "text": "Yarına kadar sunum hazırlamam gerek, hiç başlamadım"
+  },
+  {
+    "id": "tr-work-2",
+    "language": "tr",
+    "category": "work",
+    "text": "Patronuma kötü haber veren bir e-posta yazmam lazım"
+  },
+  {
+    "id": "tr-study-1",
+    "language": "tr",
+    "category": "study",
+    "text": "Sınava iki gün kaldı ve 200 sayfa ders notu var"
+  },
+  {
+    "id": "tr-finance-1",
+    "language": "tr",
+    "category": "financial",
+    "text": "Vergi beyannamemi hazırlamam lazım"
+  },
+  {
+    "id": "tr-health-1",
+    "language": "tr",
+    "category": "health",
+    "text": "Aylardır spora başlamak istiyorum ama olmuyor"
+  },
+  {
+    "id": "tr-social-1",
+    "language": "tr",
+    "category": "social",
+    "text": "Arkadaşıma iki haftadır dönmediğim bir mesaj var"
+  },
+  {
+    "id": "tr-vague-1",
+    "language": "tr",
+    "category": "general",
+    "text": "Her şey üst üste geldi, kafam çok dağınık"
+  },
+  { "id": "tr-short-1", "language": "tr", "category": "general", "text": "kargo" },
+  {
+    "id": "en-cleaning-1",
+    "language": "en",
+    "category": "cleaning",
+    "text": "My kitchen is a disaster and I keep avoiding it"
+  },
+  {
+    "id": "en-work-1",
+    "language": "en",
+    "category": "work",
+    "text": "I need to write a project proposal by Friday and I have nothing"
+  },
+  {
+    "id": "en-work-2",
+    "language": "en",
+    "category": "work",
+    "text": "I have 200 unread work emails and I can't look at them"
+  },
+  {
+    "id": "en-study-1",
+    "language": "en",
+    "category": "study",
+    "text": "I need to start my thesis literature review"
+  },
+  {
+    "id": "en-finance-1",
+    "language": "en",
+    "category": "financial",
+    "text": "I have to sort out three months of receipts for my accountant"
+  },
+  {
+    "id": "en-health-1",
+    "language": "en",
+    "category": "health",
+    "text": "I keep putting off booking a dentist appointment"
+  },
+  {
+    "id": "en-social-1",
+    "language": "en",
+    "category": "social",
+    "text": "I should call my mother back, it has been weeks"
+  },
+  {
+    "id": "en-admin-1",
+    "language": "en",
+    "category": "general",
+    "text": "Renew my passport before it expires next month"
+  },
+  {
+    "id": "en-vague-1",
+    "language": "en",
+    "category": "general",
+    "text": "everything feels like too much today"
+  },
+  {
+    "id": "en-question-1",
+    "language": "en",
+    "category": "general",
+    "text": "how do I stop procrastinating on my side project"
+  }
+]

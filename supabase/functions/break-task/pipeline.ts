@@ -253,7 +253,33 @@ export function buildFallbackBreakdown(language: BreakdownLanguage): TaskBreakdo
 // ─── Orchestration ───────────────────────────────────────────────────────────────────────────────
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
-export type Completion = { content: string; tokenUsage: number };
+
+export type Completion = {
+  content: string;
+  /** Prompt + completion tokens, as the provider reports them. */
+  tokenUsage: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  /** Tokens served from the provider's own prompt cache, where it reports them. */
+  cachedTokens?: number;
+  /** Why the provider stopped: 'stop', 'length', a safety code. A truncated reply looks like
+   * broken JSON, and without this there is no way to tell those two apart afterwards. */
+  finishReason?: string;
+};
+
+export type TokenTotals = { total: number; prompt: number; completion: number; cached: number };
+
+const NO_TOKENS: TokenTotals = { total: 0, prompt: 0, completion: 0, cached: 0 };
+
+function addTokens(totals: TokenTotals, completion: Completion | null): TokenTotals {
+  if (!completion) return totals;
+  return {
+    total: totals.total + completion.tokenUsage,
+    prompt: totals.prompt + (completion.promptTokens ?? 0),
+    completion: totals.completion + (completion.completionTokens ?? 0),
+    cached: totals.cached + (completion.cachedTokens ?? 0),
+  };
+}
 
 /**
  * One logical provider request. `attempts` bounds transport retries (network errors, 5xx);
@@ -267,7 +293,9 @@ export type Complete = (
 export type PipelineResult = {
   breakdown: TaskBreakdown;
   source: BreakdownSource;
-  tokenUsage: number;
+  tokens: TokenTotals;
+  /** Why the FIRST reply ended. That is the one that explains why a repair was needed. */
+  finishReason?: string;
   /** Validation issues met on the way, for logs. Never contains user text. */
   issues: string[];
 };
@@ -292,12 +320,14 @@ export async function runBreakdownPipeline(
   const first = await complete(messages, { attempts: GENERATION_ATTEMPTS });
   if (!first) return null;
 
+  const finishReason = first.finishReason;
   const initial = validateBreakdown(first.content);
   if (initial.ok) {
     return {
       breakdown: initial.breakdown,
       source: 'model',
-      tokenUsage: first.tokenUsage,
+      tokens: addTokens(NO_TOKENS, first),
+      finishReason,
       issues: [],
     };
   }
@@ -311,14 +341,15 @@ export async function runBreakdownPipeline(
     ],
     { attempts: 1 }
   );
-  const tokenUsage = first.tokenUsage + (repair?.tokenUsage ?? 0);
+  const tokens = addTokens(addTokens(NO_TOKENS, first), repair);
   const repaired = repair ? validateBreakdown(repair.content) : null;
 
   if (repaired && repaired.ok) {
     return {
       breakdown: repaired.breakdown,
       source: 'repaired',
-      tokenUsage,
+      tokens,
+      finishReason,
       issues: initial.issues,
     };
   }
@@ -326,7 +357,8 @@ export async function runBreakdownPipeline(
   return {
     breakdown: buildFallbackBreakdown(detectLanguage(input.task)),
     source: 'fallback',
-    tokenUsage,
+    tokens,
+    finishReason,
     issues: [...initial.issues, ...(repaired ? repaired.issues : ['repair request failed'])],
   };
 }
