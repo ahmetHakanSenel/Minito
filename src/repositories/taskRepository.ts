@@ -110,15 +110,27 @@ function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {
   };
 }
 
-async function listRecent(limit: number): Promise<TaskBreakdown[]> {
+/** Newest first. `id` breaks ties, so a page boundary never splits the order differently twice. */
+async function listPage({
+  offset,
+  limit,
+}: {
+  offset: number;
+  limit: number;
+}): Promise<TaskBreakdown[]> {
   const { data, error } = await table()
     .select(COLUMNS)
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1);
   if (error) {
     throw toRepositoryError(error);
   }
   return (data ?? []).map(toTaskBreakdown);
+}
+
+async function listRecent(limit: number): Promise<TaskBreakdown[]> {
+  return listPage({ offset: 0, limit });
 }
 
 async function save(content: BreakdownContent): Promise<TaskBreakdown> {
@@ -198,6 +210,7 @@ async function remove(id: string): Promise<void> {
 
 export const taskRepository = {
   listRecent,
+  listPage,
   breakDown,
   recordProgress,
   markCompleted,

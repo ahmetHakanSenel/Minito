@@ -283,7 +283,11 @@
       "minutesAgo": "{{count}}m ago",
       "hoursAgo": "{{count}}h ago",
       "daysAgo": "{{count}}d ago"
-    }
+    },
+    "seeAll": "See all",
+    "historyTitle": "Task history",
+    "historyUnavailable": "Your history could not be loaded right now. Your tasks are safe; try again in a moment.",
+    "loadMoreFailed": "Could not load older tasks."
   },
   "audio": {
     "title": "Focus Sounds",

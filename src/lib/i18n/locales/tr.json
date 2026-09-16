@@ -283,7 +283,11 @@
       "minutesAgo": "{{count}} dk önce",
       "hoursAgo": "{{count}} sa önce",
       "daysAgo": "{{count}} gün önce"
-    }
+    },
+    "seeAll": "Tümünü gör",
+    "historyTitle": "Görev geçmişi",
+    "historyUnavailable": "Geçmişin şu an yüklenemedi. Görevlerin güvende; birazdan tekrar dene.",
+    "loadMoreFailed": "Eski görevler yüklenemedi."
   },
   "audio": {
     "title": "Odak Sesleri",

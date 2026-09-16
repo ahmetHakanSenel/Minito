@@ -28,6 +28,12 @@ import { useTaskBreakdowns } from '../src/features/tasks/controller/useTaskBreak
 import { BreakdownProgress } from '../src/features/tasks/ui/BreakdownProgress';
 import { TaskHistoryList } from '../src/features/tasks/ui/TaskHistoryList';
 import type { BreakdownContent, TaskBreakdown } from '../src/repositories/taskRepository';
+import {
+  focusRoute,
+  historyRoute,
+  type FocusLaunchOptions,
+} from '../src/features/tasks/focusLaunch';
+import { confirmDeleteBreakdown } from '../src/features/tasks/ui/confirmDeleteBreakdown';
 import { haptics } from '../src/lib/ui/haptics';
 import { useKeepAboveKeyboard } from '../src/lib/ui/useKeepAboveKeyboard';
 import { FallbackReason } from '../src/safety';
@@ -37,18 +43,13 @@ import {
   type ActiveSession,
 } from '../src/lib/storage/activeSessionStore';
 
-type FocusLaunchOptions = {
-  taskId?: string;
-  resumeStepIndex?: number;
-  requestId?: string;
-};
-
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { user, displayName, signOut, updateDisplayName } = useAuth();
-  const { items, historyStatus, isBreakingDown, refresh, breakDown, remove } = useTaskBreakdowns();
+  const { items, hasMore, historyStatus, isBreakingDown, refresh, breakDown, remove } =
+    useTaskBreakdowns();
   const {
     snapshot: healthSnapshot,
     isChecking: isCheckingHealth,
@@ -122,23 +123,8 @@ export default function HomeScreen() {
     setIsNamePromptDismissed(true);
   };
 
-  const openFocus = (
-    content: BreakdownContent,
-    { taskId, resumeStepIndex, requestId }: FocusLaunchOptions = {}
-  ) => {
-    router.push({
-      pathname: '/focus',
-      params: {
-        steps: JSON.stringify(content.steps),
-        input: content.title,
-        empathyBridge: content.empathyBridge ?? '',
-        firstStepHook: content.firstStepHook ?? '',
-        ...(content.stoppingPoint ? { stoppingPoint: content.stoppingPoint } : {}),
-        ...(requestId ? { requestId } : {}),
-        ...(taskId ? { taskId } : {}),
-        ...(resumeStepIndex !== undefined ? { resumeStepIndex: String(resumeStepIndex) } : {}),
-      },
-    });
+  const openFocus = (content: BreakdownContent, options?: FocusLaunchOptions) => {
+    router.push(focusRoute(content, options));
   };
 
   const handleResumeSession = () => {
@@ -229,33 +215,16 @@ export default function HomeScreen() {
 
   const handleOpenBreakdown = (item: TaskBreakdown) => {
     haptics.selection();
-    // Completed tasks replay from the start without touching their saved progress.
-    if (item.completedAt !== null) {
-      openFocus(item);
-      return;
-    }
-    const resumeStepIndex =
-      item.completedStepCount > 0
-        ? Math.min(item.completedStepCount, item.steps.length - 1)
-        : undefined;
-    openFocus(item, { taskId: item.id, resumeStepIndex });
+    router.push(historyRoute(item));
   };
 
   const handleDeleteBreakdown = (item: TaskBreakdown) => {
-    haptics.warning();
-    Alert.alert(t('tasks.deleteTitle'), t('tasks.deleteMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: () => {
-          remove(item.id).catch(() => {
-            haptics.error();
-            Alert.alert(t('common.error'), t('tasks.deleteFailed'));
-          });
-        },
-      },
-    ]);
+    confirmDeleteBreakdown(t, () => remove(item.id));
+  };
+
+  const handleSeeAllHistory = () => {
+    haptics.tap();
+    router.push('/history');
   };
 
   const handleDashboardNavigate = (screen: string) => {
@@ -428,9 +397,11 @@ export default function HomeScreen() {
                 <TaskHistoryList
                   items={items}
                   status={historyStatus}
+                  hasMore={hasMore}
                   onOpen={handleOpenBreakdown}
                   onDelete={handleDeleteBreakdown}
                   onRetry={refresh}
+                  onSeeAll={handleSeeAllHistory}
                 />
               )}
             </View>

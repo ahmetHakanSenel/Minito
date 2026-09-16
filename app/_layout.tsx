@@ -49,6 +49,7 @@ function RootNavigator() {
         <Stack.Screen name="stats" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="privacy" />
+        <Stack.Screen name="history" />
       </Stack.Protected>
       <Stack.Protected guard={!isSignedIn}>
         <Stack.Screen name="login" />
