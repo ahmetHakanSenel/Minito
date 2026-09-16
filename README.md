@@ -21,6 +21,9 @@ This README focuses on the engineering: architecture, security posture and the t
   - Zod-validated JSON steps.
   - Exactly one repair round-trip, then a deterministic fallback.
   - Deno tests in CI.
+- **Day-2 AI operations:**
+  - Per-request telemetry: model, prompt version, model latency, end-to-end latency, tokens and outcome.
+  - A closed feedback loop that scores a prompt version by the people using it.
 - **Encrypted session storage:** AES-256 session encryption with the key held in the iOS Keychain or Android Keystore.
 - **Graceful degradation everywhere:**
   - The app boots even without backend config.
@@ -31,7 +34,7 @@ This README focuses on the engineering: architecture, security posture and the t
   - Strict TypeScript, generated database types, ESLint and Prettier.
   - Jest tests, route-level error boundaries and Sentry.
   - A CI pipeline that type-checks the Deno functions and scans the full git history for secrets.
-- **Complete EN/TR localization:** 247 keys at parity, no hardcoded UI strings, locale-aware dates.
+- **Complete EN/TR localization:** 253 keys at parity, no hardcoded UI strings, locale-aware dates.
 
 ---
 
@@ -124,6 +127,42 @@ What the client does with it:
 - **Focus screen:** It shows each step's title, instruction and difficulty, uses the estimate to timebox the step, and shows the stopping point on the last step.
 - **History:** Server fallback plans, like offline ones, are not saved.
 
+### Quality and observability, end to end
+
+```mermaid
+flowchart TB
+  IN["Task input<br/>fenced in &lt;task_input&gt;"] --> GEN["Generate<br/>JSON mode · task-breakdown-v1"]
+  GEN --> VAL{"zod<br/>TaskBreakdownSchema"}
+  VAL -- valid --> OK["source: model"]
+  VAL -- invalid --> REP["One repair request<br/>carrying the zod issues"]
+  REP --> VAL2{"zod re-check"}
+  VAL2 -- valid --> FIX["source: repaired"]
+  VAL2 -- invalid --> FB["Deterministic plan<br/>source: fallback"]
+  OK --> OUT["Typed breakdown<br/>+ meta.prompt_version"]
+  FIX --> OUT
+  FB --> OUT
+  OK -. telemetry .-> TEL[("tasks row<br/>ai_model · prompt_version<br/>ai_latency_ms · latency_ms<br/>token_usage · breakdown_source")]
+  FIX -. telemetry .-> TEL
+  FB -. telemetry .-> TEL
+  OUT --> DONE["Finished focus session"]
+  DONE -- "one tap: fits · too big · too small · tone" --> RPC["submit_breakdown_feedback()<br/>SECURITY DEFINER, owner-only"]
+  RPC -- feedback_score --> TEL
+```
+
+Each answered request attempts one telemetry row, so cost, speed and quality can be read per prompt version. The insert retries three times and then gives up: telemetry is best-effort and never blocks the reply, so a row can be missing where the database was down.
+
+| Column                          | Question it answers                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------ |
+| `prompt_version` · `ai_model`   | Which prompt and model produced this plan?                                     |
+| `breakdown_source`              | How often does the model get it right first time, need a repair, or fall back? |
+| `ai_latency_ms` · `latency_ms`  | How much of the wait is the model, and how much is us?                         |
+| `token_usage`                   | What does a breakdown cost?                                                    |
+| `feedback_score`                | Did the plan actually fit the person who asked for it?                         |
+
+- **Measured, not guessed:** `ai_latency_ms` is measured with `performance.now()` around the provider calls, failed attempts included, so a retry is visible rather than hidden inside the total.
+- **Feedback path:** `tasks` stays closed to clients. A score is written only through `submit_breakdown_feedback()`, which validates the score and matches the row by request id **and** `auth.uid()`, so nobody can score a row that isn't theirs.
+- **No content, ever:** Telemetry and logs carry ids, counts and durations. The task text lives on only as an HMAC.
+
 ---
 
 ## Security
@@ -133,7 +172,7 @@ What the client does with it:
 | Table               | Access model                                                                                                                                             |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `task_breakdowns`   | RLS with owner-only `SELECT/INSERT/UPDATE/DELETE` policies (`auth.uid() = user_id`); `user_id` defaults to `auth.uid()` and cascades on account deletion |
-| `tasks` (analytics) | RLS enabled with **no** policies: unreadable and unwritable by app clients, reachable only by the Edge Function's service role                           |
+| `tasks` (analytics) | RLS enabled with **no** policies: unreadable and unwritable by app clients, reachable only by the Edge Function's service role, plus `submit_breakdown_feedback()`, which can write only a score, only on the caller's own row                           |
 | `system_prompts`    | Same lockdown. It is no longer read at all: the prompt is versioned in code, so a table edit can't break the output contract                            |
 | `translations`      | Public read; the "any authenticated user can write" policy was dropped once sign-up became open                                                          |
 
@@ -239,7 +278,7 @@ Guest access would put the AI budget behind the public anon key, and IP-based li
 ## Product polish
 
 - **Complete localization:**
-  - English and Turkish at full key parity: 243 keys, and every static `t()` key used in code resolves.
+  - English and Turkish at full key parity: 253 keys, and every static `t()` key used in code resolves.
   - Dates use the active locale.
   - Offline fallback steps and planner sample suggestions are localized too.
 - **Haptic vocabulary (`src/lib/ui/haptics.ts`):** One tactile language across the app; unsupported platforms fail silently.

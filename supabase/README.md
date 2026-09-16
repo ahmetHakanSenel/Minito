@@ -1,5 +1,10 @@
 # Supabase Setup Guide
 
+> Apply every file in `migrations/` in order, not just `001`. Step 2 below is obsolete: the system
+> prompt is versioned in code (`functions/break-task/pipeline.ts`) and `system_prompts` is no longer
+> read. See [`functions/break-task/README.md`](./functions/break-task/README.md) for the current
+> pipeline, telemetry and feedback setup.
+
 ## 1. Database Schema Setup
 
 Run the migration SQL in your Supabase Dashboard:
