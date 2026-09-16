@@ -1,19 +1,31 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, type DimensionValue } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
-  cancelAnimation,
   Easing,
+  FadeIn,
   FadeInDown,
   FadeOutDown,
+  cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Check, Pause, Play, RotateCcw, Square } from 'lucide-react-native';
+import {
+  BellOff,
+  Check,
+  Clock3,
+  Minus,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RotateCcw,
+} from 'lucide-react-native';
 import { DurationWheels } from './time/DurationWheels';
+import { formatCountdown } from '../lib/time/duration';
 import { haptics } from '../lib/ui/haptics';
 
 interface InlineTimerProps {
@@ -23,12 +35,22 @@ interface InlineTimerProps {
   onCompletionStateChange?: (isInCompletionLoop: boolean) => void;
 }
 
-const AnimatedView = Animated.createAnimatedComponent(View);
-const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+type Phase = 'ready' | 'running' | 'paused' | 'editing' | 'done';
 
 // The dial has no hours wheel: a micro-step that needs an hour is not a micro-step.
 const MAX_TIMER_SECONDS = 59 * 60 + 59;
+const TICK_MS = 250;
+// While the alarm is up, a burst every few seconds: noticeable across a room, not a siren.
+const ALARM_REPEAT_MS = 3_000;
 
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
+/**
+ * The step timer. One surface, one primary action per state, and nothing written twice.
+ *
+ * Time is kept against an end timestamp, like the focus session, so a busy JS thread or a pause
+ * can never make it drift.
+ */
 export const InlineTimer: React.FC<InlineTimerProps> = ({
   initialMinutes,
   initialSeconds,
@@ -37,434 +59,445 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
 }) => {
   const { t } = useTranslation();
   const initialTotal = Math.max(0, initialMinutes * 60 + initialSeconds);
+
   // What the countdown runs from. Starts as the step's own estimate; setting a time replaces it,
   // so progress and reset always refer to the time the person actually chose.
   const [plannedTotal, setPlannedTotal] = useState(initialTotal);
   const [remaining, setRemaining] = useState(initialTotal);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isCompletionLoop, setIsCompletionLoop] = useState(false);
+  const [phase, setPhase] = useState<Phase>('ready');
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const completionHapticRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const completionTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const completionHandledRef = useRef(false);
+  const endAtRef = useRef(0);
+  const alarmRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const burstRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const actionScale = useSharedValue(1);
-  const completionPulse = useSharedValue(0);
+  const pressScale = useSharedValue(1);
+  const alarmPulse = useSharedValue(0);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
+  const stopAlarm = useCallback(() => {
+    if (alarmRef.current) clearInterval(alarmRef.current);
+    alarmRef.current = null;
+    burstRef.current.forEach(clearTimeout);
+    burstRef.current = [];
+    cancelAnimation(alarmPulse);
+    alarmPulse.value = withTiming(0, { duration: 200 });
+  }, [alarmPulse]);
 
-  const clearCompletionFeedback = useCallback(() => {
-    if (completionHapticRef.current) {
-      clearInterval(completionHapticRef.current);
-      completionHapticRef.current = null;
-    }
-    completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
-    completionTimeoutsRef.current = [];
-    cancelAnimation(completionPulse);
-    completionPulse.value = 0;
-  }, [completionPulse]);
-
+  // A new step brings a new estimate: start over from it.
   useEffect(() => {
-    return () => {
-      clearTimer();
-      clearCompletionFeedback();
-    };
-  }, [clearTimer, clearCompletionFeedback]);
-
-  useEffect(() => {
-    clearTimer();
-    clearCompletionFeedback();
-    completionHandledRef.current = false;
+    stopAlarm();
     setPlannedTotal(initialTotal);
     setRemaining(initialTotal);
-    setIsRunning(false);
-    setIsEditing(false);
-    setIsCompletionLoop(false);
-  }, [clearCompletionFeedback, clearTimer, initialTotal]);
+    setPhase('ready');
+  }, [initialTotal, stopAlarm]);
 
-  const tripleHapticBurst = useCallback(() => {
+  useEffect(() => stopAlarm, [stopAlarm]);
+
+  const burst = useCallback(() => {
     haptics.commit();
-    completionTimeoutsRef.current.push(
-      setTimeout(() => haptics.commit(), 180),
-      setTimeout(() => haptics.commit(), 360)
+    burstRef.current.push(
+      setTimeout(() => haptics.commit(), 170),
+      setTimeout(() => haptics.commit(), 340)
     );
   }, []);
 
-  const handleComplete = useCallback(() => {
-    if (completionHandledRef.current) return;
-    completionHandledRef.current = true;
-    clearTimer();
-    setIsRunning(false);
-    setIsCompletionLoop(true);
+  // The countdown, derived from the end timestamp on every tick.
+  useEffect(() => {
+    if (phase !== 'running') return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
+      setRemaining(left);
+      if (left === 0) {
+        setPhase('done');
+      }
+    };
+    tick();
+    const id = setInterval(tick, TICK_MS);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // Entering and leaving the alarm, reported once per change rather than from inside a tick.
+  useEffect(() => {
+    if (phase !== 'done') return;
     onCompletionStateChange?.(true);
-    tripleHapticBurst();
-    completionPulse.value = withRepeat(
-      withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
+    burst();
+    alarmRef.current = setInterval(burst, ALARM_REPEAT_MS);
+    alarmPulse.value = withRepeat(
+      withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
       -1,
       true
     );
-    completionHapticRef.current = setInterval(tripleHapticBurst, 3000);
-  }, [clearTimer, completionPulse, onCompletionStateChange, tripleHapticBurst]);
+    return () => {
+      stopAlarm();
+      onCompletionStateChange?.(false);
+    };
+  }, [phase, burst, stopAlarm, alarmPulse, onCompletionStateChange]);
 
-  useEffect(() => {
-    if (!isRunning || remaining > 0) return;
-    handleComplete();
-  }, [handleComplete, isRunning, remaining]);
-
-  const handleStart = () => {
-    if (isCompletionLoop || isRunning || plannedTotal <= 0) return;
-    setIsEditing(false);
-    if (remaining <= 0) {
-      completionHandledRef.current = false;
-      setRemaining(plannedTotal);
-    }
-    setIsRunning(true);
-    haptics.tap();
-    timerRef.current = setInterval(() => {
-      setRemaining((current) => Math.max(0, current - 1));
-    }, 1000);
+  const start = () => {
+    if (plannedTotal <= 0) return;
+    const from = remaining > 0 ? remaining : plannedTotal;
+    endAtRef.current = Date.now() + from * 1000;
+    setRemaining(from);
+    setPhase('running');
+    haptics.press();
   };
 
-  const handlePause = () => {
-    clearTimer();
-    setIsRunning(false);
+  const pause = () => {
+    setRemaining(Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000)));
+    setPhase('paused');
     haptics.selection();
   };
 
-  const handleReset = () => {
-    clearTimer();
-    clearCompletionFeedback();
-    completionHandledRef.current = false;
-    setIsRunning(false);
-    setIsCompletionLoop(false);
+  const reset = () => {
     setRemaining(plannedTotal);
-    onCompletionStateChange?.(false);
+    setPhase('ready');
     haptics.tap();
   };
 
-  const handleStopCompletion = () => {
-    clearCompletionFeedback();
-    setIsCompletionLoop(false);
-    onCompletionStateChange?.(false);
+  const dismissAlarm = () => {
     haptics.press();
+    setRemaining(plannedTotal);
+    setPhase('ready');
     onComplete?.();
   };
 
   // Setting a time is a new plan: it replaces the countdown and its total together.
   const setPlan = (seconds: number) => {
-    if (isRunning || isCompletionLoop) return;
     const next = Math.max(0, Math.min(seconds, MAX_TIMER_SECONDS));
-    completionHandledRef.current = false;
     setPlannedTotal(next);
     setRemaining(next);
   };
 
-  const adjustTime = (deltaMinutes: number) => setPlan(remaining + deltaMinutes * 60);
-
-  const toggleEditing = () => {
-    if (isRunning || isCompletionLoop) return;
+  const nudge = (deltaMinutes: number) => {
     haptics.selection();
-    setIsEditing((current) => !current);
+    setPlan(remaining + deltaMinutes * 60);
+    if (phase === 'paused') setPhase('ready');
   };
 
-  const formatTime = (totalSeconds: number) => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  const openEditor = () => {
+    haptics.selection();
+    setPhase('editing');
+  };
+
+  const closeEditor = () => {
+    haptics.tap();
+    setPhase('ready');
   };
 
   const progress =
     plannedTotal > 0 ? Math.min(1, Math.max(0, (plannedTotal - remaining) / plannedTotal)) : 0;
-  const progressWidth: DimensionValue = `${progress * 100}%`;
-  const actionStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: actionScale.value }],
-  }));
-  const completionStyle = useAnimatedStyle(() => ({
-    opacity: isCompletionLoop ? 0.12 + completionPulse.value * 0.16 : 0,
-  }));
+  const isDone = phase === 'done';
+  const canEdit = phase === 'ready' || phase === 'paused';
+
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: pressScale.value }] }));
+  const alarmStyle = useAnimatedStyle(() => ({ opacity: alarmPulse.value }));
+  const pressHandlers = {
+    onPressIn: () => {
+      pressScale.value = withSpring(0.96, { damping: 18, stiffness: 320 });
+    },
+    onPressOut: () => {
+      pressScale.value = withSpring(1, { damping: 18, stiffness: 320 });
+    },
+  };
+
+  const header = (
+    <View style={styles.header}>
+      <View style={styles.headerLabel}>
+        {isDone ? (
+          <Check size={14} color="#6EE7B7" strokeWidth={2.6} />
+        ) : (
+          <Clock3 size={14} color="rgba(255,255,255,0.5)" strokeWidth={2.2} />
+        )}
+        <Text style={[styles.label, isDone && styles.labelDone]}>
+          {isDone
+            ? t('timer.timeUp')
+            : phase === 'editing'
+              ? t('timer.editTitle')
+              : t('timer.title')}
+        </Text>
+      </View>
+      {phase === 'paused' || (phase === 'ready' && remaining !== plannedTotal) ? (
+        <TouchableOpacity
+          onPress={reset}
+          style={styles.resetButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('timer.reset')}
+        >
+          <RotateCcw size={14} color="rgba(255,255,255,0.6)" strokeWidth={2.2} />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+
+  if (phase === 'editing') {
+    return (
+      <Animated.View entering={FadeIn.duration(180)} style={styles.surface}>
+        {header}
+        <View style={styles.editor}>
+          <DurationWheels value={remaining} onChange={setPlan} />
+        </View>
+        <TouchableOpacity
+          style={[styles.primary, styles.primaryWide]}
+          onPress={closeEditor}
+          accessibilityRole="button"
+        >
+          <Check size={18} color="#FFFFFF" strokeWidth={2.6} />
+          <Text style={styles.primaryText}>{t('timer.done')}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
 
   return (
-    <AnimatedView
-      entering={FadeInDown.duration(260)}
-      exiting={FadeOutDown.duration(180)}
-      style={styles.container}
+    <Animated.View
+      entering={FadeInDown.duration(240)}
+      exiting={FadeOutDown.duration(160)}
+      style={[styles.surface, isDone && styles.surfaceDone]}
     >
-      <Animated.View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFillObject, styles.completionGlow, completionStyle]}
-      />
+      {/* The alarm breathes through the surface's own border, so nothing spills outside it. */}
+      <Animated.View pointerEvents="none" style={[styles.alarmRing, alarmStyle]} />
 
-      <View style={styles.statusRow}>
-        <Text style={styles.statusLabel}>
-          {isCompletionLoop ? t('timer.completed') : t('timer.title')}
-        </Text>
-        {isCompletionLoop ? <Check size={16} color="#6EE7B7" strokeWidth={2.5} /> : null}
-      </View>
-
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: progressWidth }]} />
-      </View>
+      {header}
 
       <TouchableOpacity
-        onPress={toggleEditing}
-        disabled={isRunning || isCompletionLoop}
+        onPress={openEditor}
+        disabled={!canEdit}
         activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityHint={t('timer.editHint')}
+        style={styles.timeBlock}
+        accessibilityRole={canEdit ? 'button' : 'timer'}
+        accessibilityHint={canEdit ? t('timer.editHint') : undefined}
       >
-        <Text style={[styles.timeText, isCompletionLoop && styles.timeTextComplete]}>
-          {formatTime(remaining)}
+        <Text
+          style={[styles.time, phase === 'paused' && styles.timePaused, isDone && styles.timeDone]}
+        >
+          {formatCountdown(remaining)}
         </Text>
-        {!isRunning && !isCompletionLoop && !isEditing ? (
-          <Text style={styles.editHint}>{t('timer.tapToSet')}</Text>
+        {canEdit ? (
+          <View style={styles.editChip}>
+            <Pencil size={11} color="rgba(255,255,255,0.55)" strokeWidth={2.2} />
+            <Text style={styles.editChipText}>{t('timer.adjust')}</Text>
+          </View>
         ) : null}
       </TouchableOpacity>
 
-      {isCompletionLoop ? (
-        <View style={styles.completionState}>
-          <Text style={styles.completionMessage}>{t('timer.tapToStop')}</Text>
-          <AnimatedTouchableOpacity
-            style={[styles.stopButton, actionStyle]}
-            onPress={handleStopCompletion}
-            onPressIn={() => {
-              actionScale.value = withSpring(0.96);
-            }}
-            onPressOut={() => {
-              actionScale.value = withSpring(1);
-            }}
-          >
-            <Square size={17} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.3} />
-            <Text style={styles.stopButtonText}>{t('timer.tapToStop')}</Text>
-          </AnimatedTouchableOpacity>
-        </View>
-      ) : isEditing ? (
-        <View style={styles.editor}>
-          <DurationWheels value={remaining} onChange={setPlan} />
+      <View style={styles.track}>
+        <View
+          style={[
+            styles.fill,
+            isDone && styles.fillDone,
+            { width: `${(isDone ? 1 : progress) * 100}%` },
+          ]}
+        />
+      </View>
+
+      {isDone ? (
+        <AnimatedTouchable
+          entering={FadeIn.duration(200)}
+          style={[styles.primary, styles.primaryWide, styles.primaryDone, pressStyle]}
+          onPress={dismissAlarm}
+          {...pressHandlers}
+          accessibilityRole="button"
+        >
+          <BellOff size={18} color="#FFFFFF" strokeWidth={2.4} />
+          <Text style={styles.primaryText}>{t('timer.stopAlarm')}</Text>
+        </AnimatedTouchable>
+      ) : (
+        <View style={styles.controls}>
           <TouchableOpacity
-            style={styles.doneButton}
-            onPress={toggleEditing}
+            style={[styles.nudge, phase === 'running' && styles.disabled]}
+            onPress={() => nudge(-1)}
+            disabled={phase === 'running' || remaining < 60}
+            accessibilityRole="button"
+            accessibilityLabel={t('timer.decrease')}
+          >
+            <Minus size={18} color="#E4E4E7" strokeWidth={2.2} />
+          </TouchableOpacity>
+
+          <AnimatedTouchable
+            style={[styles.primary, phase === 'running' && styles.primaryRunning, pressStyle]}
+            onPress={phase === 'running' ? pause : start}
+            disabled={plannedTotal <= 0}
+            {...pressHandlers}
             accessibilityRole="button"
           >
-            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.mainButtonText}>{t('timer.done')}</Text>
+            {phase === 'running' ? (
+              <Pause size={18} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.2} />
+            ) : (
+              <Play size={18} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.2} />
+            )}
+            <Text style={styles.primaryText}>
+              {phase === 'running'
+                ? t('timer.pause')
+                : phase === 'paused'
+                  ? t('timer.resume')
+                  : t('timer.start')}
+            </Text>
+          </AnimatedTouchable>
+
+          <TouchableOpacity
+            style={[styles.nudge, phase === 'running' && styles.disabled]}
+            onPress={() => nudge(1)}
+            // Adding time is always possible, even from zero.
+            disabled={phase === 'running'}
+            accessibilityRole="button"
+            accessibilityLabel={t('timer.increase')}
+          >
+            <Plus size={18} color="#E4E4E7" strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
-      ) : (
-        <>
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={[styles.iconButton, (isRunning || remaining <= 0) && styles.disabledControl]}
-              onPress={() => adjustTime(-1)}
-              disabled={isRunning || remaining <= 0}
-              accessibilityLabel={t('timer.decrease')}
-            >
-              <Text style={styles.adjustText}>−</Text>
-            </TouchableOpacity>
-
-            <AnimatedTouchableOpacity
-              style={[styles.mainButton, isRunning && styles.pauseButton, actionStyle]}
-              onPress={isRunning ? handlePause : handleStart}
-              onPressIn={() => {
-                actionScale.value = withSpring(0.95);
-              }}
-              onPressOut={() => {
-                actionScale.value = withSpring(1);
-              }}
-              disabled={plannedTotal <= 0}
-              accessibilityRole="button"
-            >
-              {isRunning ? (
-                <Pause size={20} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.4} />
-              ) : (
-                <Play size={20} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.4} />
-              )}
-              <Text style={styles.mainButtonText}>
-                {isRunning ? t('timer.pause') : t('timer.start')}
-              </Text>
-            </AnimatedTouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.iconButton, isRunning && styles.disabledControl]}
-              onPress={() => adjustTime(1)}
-              // Adding time is always possible, even from zero.
-              disabled={isRunning}
-              accessibilityLabel={t('timer.increase')}
-            >
-              <Text style={styles.adjustText}>+</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-            <RotateCcw size={14} color="rgba(255,255,255,0.48)" strokeWidth={2} />
-            <Text style={styles.resetText}>{t('timer.reset')}</Text>
-          </TouchableOpacity>
-        </>
       )}
-    </AnimatedView>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-    overflow: 'hidden',
-    alignItems: 'center',
-    paddingTop: 2,
+  surface: {
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.035)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
   },
-  completionGlow: {
-    borderRadius: 20,
-    backgroundColor: '#34D399',
+  surfaceDone: {
+    backgroundColor: 'rgba(16, 185, 129, 0.07)',
+    borderColor: 'rgba(52, 211, 153, 0.22)',
   },
-  statusRow: {
-    minHeight: 22,
+  alarmRing: {
+    position: 'absolute',
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(110, 231, 183, 0.8)',
+  },
+  header: {
+    minHeight: 28,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
+    justifyContent: 'space-between',
   },
-  statusLabel: {
-    color: 'rgba(255,255,255,0.52)',
+  headerLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  label: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
-  progressTrack: {
-    width: '100%',
+  labelDone: {
+    color: '#6EE7B7',
+  },
+  resetButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  timeBlock: {
+    alignItems: 'center',
+    paddingTop: 6,
+    paddingBottom: 14,
+  },
+  time: {
+    fontSize: 46,
+    lineHeight: 54,
+    fontWeight: '300',
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+  },
+  timePaused: {
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  timeDone: {
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  editChip: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  editChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  track: {
     height: 4,
     borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 16,
   },
-  progressFill: {
+  fill: {
     height: '100%',
     borderRadius: 2,
     backgroundColor: '#A78BFA',
   },
-  timeText: {
-    color: '#FFFFFF',
-    fontSize: 48,
-    lineHeight: 58,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-    letterSpacing: 2,
-    marginTop: 18,
-  },
-  timeTextComplete: {
-    color: '#6EE7B7',
-  },
-  editHint: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.35)',
-  },
-  editor: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 14,
-  },
-  doneButton: {
-    minHeight: 42,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#7C3AED',
+  fillDone: {
+    backgroundColor: '#34D399',
   },
   controls: {
-    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 18,
+    gap: 10,
   },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+  nudge: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255, 255, 255, 0.09)',
   },
-  disabledControl: {
-    opacity: 0.3,
+  disabled: {
+    opacity: 0.35,
   },
-  adjustText: {
-    color: '#E4E4E7',
-    fontSize: 25,
-    lineHeight: 28,
-    fontWeight: '400',
-  },
-  mainButton: {
-    minWidth: 126,
+  primary: {
+    flex: 1,
     minHeight: 46,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#7C3AED',
-  },
-  pauseButton: {
-    backgroundColor: '#6D28D9',
-  },
-  mainButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 13,
-    padding: 5,
-  },
-  resetText: {
-    color: 'rgba(255,255,255,0.48)',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  completionState: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  completionMessage: {
-    color: 'rgba(255,255,255,0.58)',
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  stopButton: {
-    minHeight: 44,
-    paddingHorizontal: 18,
     borderRadius: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    backgroundColor: '#7C3AED',
+  },
+  primaryWide: {
+    flex: 0,
+    alignSelf: 'stretch',
+  },
+  primaryRunning: {
+    backgroundColor: 'rgba(124, 58, 237, 0.55)',
+  },
+  primaryDone: {
     backgroundColor: '#059669',
   },
-  stopButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+  primaryText: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  editor: {
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 16,
   },
 });

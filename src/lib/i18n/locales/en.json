@@ -33,7 +33,8 @@
       "easy": "Easy",
       "medium": "Medium",
       "hard": "Hard"
-    }
+    },
+    "stepDone": "Step {{done}} of {{total}} done"
   },
   "success": {
     "title": "You Minitized {{count}} steps!",
@@ -138,18 +139,18 @@
   },
   "timer": {
     "title": "Timer",
-    "completed": "Completed!",
     "start": "Start",
     "pause": "Pause",
     "reset": "Reset",
-    "back": "Back",
-    "stop": "Stop",
-    "tapToStop": "Tap to stop",
     "editHint": "Opens a dial to set minutes and seconds",
-    "tapToSet": "Tap to set",
     "done": "Done",
     "increase": "Add a minute",
-    "decrease": "Remove a minute"
+    "decrease": "Remove a minute",
+    "timeUp": "Time's up",
+    "editTitle": "Set the time",
+    "adjust": "Set time",
+    "stopAlarm": "Stop the alarm",
+    "resume": "Resume"
   },
   "focusMode": {
     "gentleWarning": "Phone down, back to focus",

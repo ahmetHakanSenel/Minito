@@ -33,7 +33,8 @@
       "easy": "Kolay",
       "medium": "Orta",
       "hard": "Zor"
-    }
+    },
+    "stepDone": "Adım {{done}}/{{total}} tamam"
   },
   "success": {
     "title": "{{count}} adımı Minito'ladın!",
@@ -138,18 +139,18 @@
   },
   "timer": {
     "title": "Zamanlayıcı",
-    "completed": "Tamamlandı!",
     "start": "Başla",
     "pause": "Duraklat",
     "reset": "Sıfırla",
-    "back": "Geri",
-    "stop": "Durdur",
-    "tapToStop": "Durdurmak için dokun",
     "editHint": "Dakika ve saniye ayarlamak için çarkı açar",
-    "tapToSet": "Ayarlamak için dokun",
     "done": "Tamam",
     "increase": "Bir dakika ekle",
-    "decrease": "Bir dakika çıkar"
+    "decrease": "Bir dakika çıkar",
+    "timeUp": "Süre doldu",
+    "editTitle": "Süreyi ayarla",
+    "adjust": "Ayarla",
+    "stopAlarm": "Alarmı durdur",
+    "resume": "Devam et"
   },
   "focusMode": {
     "gentleWarning": "Telefonu bırak, odağa dön",

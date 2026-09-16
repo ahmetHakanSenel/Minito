@@ -256,11 +256,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  // The timer brings its own surface; a divider on top of it would only add a second edge.
   timerSection: {
-    paddingTop: 18,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingBottom: 2,
   },
   actions: {
     flexDirection: 'row',
