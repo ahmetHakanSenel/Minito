@@ -64,7 +64,7 @@ function EqualizerBar({ color, active, rest, peak, duration }: EqualizerBarProps
       cancelAnimation(height);
       height.value = withTiming(rest, { duration: 250 });
     }
-  }, [active]);
+  }, [active, duration, height, peak, rest]);
 
   const barStyle = useAnimatedStyle(() => ({ height: height.value }));
 
@@ -97,7 +97,7 @@ export const FloatingAudioButton: React.FC = () => {
       cancelAnimation(pulse);
       pulse.value = withTiming(1, { duration: 300 });
     }
-  }, [isPlaying]);
+  }, [isPlaying, pulse]);
 
   const glowStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 

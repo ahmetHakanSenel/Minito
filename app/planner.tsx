@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInUp, Easing } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useProjects, formatDueDate } from '../src/context/ProjectContext';
+import { useProjects } from '../src/context/ProjectContext';
 import { ProjectCard } from '../src/components/planner/ProjectCard';
 import { DashboardModal } from '../src/modals';
 import { EmptyState } from '../src/components/feedback/EmptyState';
@@ -476,7 +476,7 @@ export default function PlannerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const { projects, addProject, addTask, generateSubtasks } = useProjects();
+  const { projects, addProject, generateSubtasks } = useProjects();
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);

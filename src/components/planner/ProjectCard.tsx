@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { ChevronDown, Circle, CheckCircle2, Play } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
@@ -41,7 +40,7 @@ const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({ progress, col
       duration: 400,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-  }, [progress]);
+  }, [animatedProgress, progress]);
 
   const progressStyle = useAnimatedStyle(() => ({
     width: `${animatedProgress.value}%`,
@@ -221,7 +220,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       duration: 200,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-  }, [isExpanded]);
+  }, [chevronRotation, isExpanded]);
 
   const handlePressIn = () => {
     scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });

@@ -28,7 +28,7 @@ function ShimmerBar({ width }: { width: DimensionValue }) {
       -1,
       false
     );
-  }, []);
+  }, [progress]);
 
   const highlightStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: progress.value * barWidth }],
@@ -56,7 +56,7 @@ function ActiveDot() {
 
   useEffect(() => {
     pulse.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
-  }, []);
+  }, [pulse]);
 
   const style = useAnimatedStyle(() => ({
     opacity: pulse.value,

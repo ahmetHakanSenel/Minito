@@ -64,8 +64,6 @@ const STATE_COLORS: Record<OrbState, Palette> = {
 const MORPH_MS = 1100;
 const MORPH_EASING = Easing.inOut(Easing.cubic);
 
-const TAU = Math.PI * 2;
-
 interface LivingAuraOrbProps {
   state?: OrbState;
   size?: number;
@@ -109,7 +107,7 @@ export const LivingAuraOrb: React.FC<LivingAuraOrbProps> = ({ state = 'flow', si
     wobble.value = withTiming(motion.wobble, timing);
     breath.value = withTiming(motion.breath, timing);
     glow.value = withTiming(motion.glow, timing);
-  }, [state]);
+  }, [breath, colorProgress, fromColors, glow, speed, state, toColors, wobble]);
 
   const colorA = useDerivedValue(() =>
     interpolateColor(colorProgress.value, [0, 1], [fromColors.value[0], toColors.value[0]])

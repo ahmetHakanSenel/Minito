@@ -98,7 +98,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
         stiffness: 100,
       });
     }
-  }, [isFocused]);
+  }, [glowOpacity, isFocused]);
 
   // Border radius constant (must match rounded-2xl = 16px, but SVG uses 18 for better visual)
   const BORDER_RADIUS = 18;
@@ -129,7 +129,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
     } else {
       dashOffset.value = 0;
     }
-  }, [isLoading, perimeter]);
+  }, [dashOffset, isLoading, perimeter]);
 
   // Haptic feedback on first focus (when user starts typing)
   const handleFocus = () => {
@@ -261,7 +261,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
         </View>
       </View>
 
-      {/* Minitize It button with Sparkles icon - GOD MODE: Heavy Haptic */}
+      {/* Primary action: starts a breakdown, with the app's one heavy haptic */}
       <AnimatedTouchableOpacity
         onPressIn={() => {
           buttonPressed.value = 1;

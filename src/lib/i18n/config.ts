@@ -57,6 +57,8 @@ export async function saveLanguagePreference(language: SupportedLanguage): Promi
 export async function initI18n(): Promise<void> {
   const initialLanguage = await getInitialLanguage();
 
+  // The instance method on purpose: i18next's named `use` export is unbound and loses `this`.
+  // eslint-disable-next-line import/no-named-as-default-member
   await i18n.use(initReactI18next).init({
     resources: {
       en: { translation: en },
