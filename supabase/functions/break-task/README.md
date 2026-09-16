@@ -7,7 +7,8 @@ Only signed-in users can call it.
 
 - `index.ts`: HTTP handler covering auth, moderation, rate limits, providers, the time budget and persistence.
 - `pipeline.ts`: the AI pipeline: layered prompt, output contract, validation, repair and fallback. It has no HTTP or storage dependencies.
-- `pipeline.test.ts`: Deno tests for the pipeline. Run them with `deno test --no-lock supabase/functions/`; CI runs them too.
+- `providers.ts`: the OpenAI and Gemini adapters, plus the timeout, retry and model-time measurement policy wrapped around them.
+- `pipeline.test.ts` / `providers.test.ts`: Deno tests. Run them with `deno test --no-lock supabase/functions/`; CI runs them too.
 
 ## Setup
 
@@ -114,7 +115,9 @@ If the provider cannot be reached at all, the function answers `503 AI_DOWN` ins
   - The whole request, including one repair, runs inside a 17s budget that fits under the client's 20s timeout.
   - Each provider call is capped at 9s.
   - The first generation gets one transport retry, on network errors and 5xx responses only; a 429 is not retried.
-- **Logging:** Log lines are structured JSON tagged with `prompt_version`, `source` and any validation issues. They never include the task text or the model's reply.
+- **Telemetry:** Every answered request writes one `tasks` row carrying `ai_model`, `prompt_version`, `ai_latency_ms` (model time only, measured with `performance.now()` and including failed attempts), `latency_ms` (end to end), `token_usage` (prompt + completion) and `breakdown_source`. The user's later score lands on the same row as `feedback_score`, written through `submit_breakdown_feedback()` (migration 012).
+- **Request id:** The client sends its tracing id in the body so it can score that row later; the `x-request-id` header is the fallback for clients that only trace by header.
+- **Logging:** Log lines are structured JSON tagged with `prompt_version`, `source`, `ai_model`, latencies and any validation issues. They never include the task text or the model's reply.
 - **Privacy:** Input is hashed with HMAC-SHA256 and never stored in raw form.
 - **Moderation:** Fail-safe. If content is flagged, the function returns `CONTENT_FLAGGED` (requires `OPENAI_API_KEY`).
 - **Rate Limiting:**

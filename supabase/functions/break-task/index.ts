@@ -5,20 +5,15 @@ import {
   type User,
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
-import {
-  type ChatMessage,
-  type Complete,
-  type Completion,
-  PROMPT_VERSION,
-  runBreakdownPipeline,
-  TaskBreakdownSchema,
-} from './pipeline.ts';
+import { PROMPT_VERSION, runBreakdownPipeline, TaskBreakdownSchema } from './pipeline.ts';
+import { createMeter, REQUEST_BUDGET_MS, resolveProvider, withBudget } from './providers.ts';
 
 /**
  * Edge Function: break-task
  *
  * Turns one overwhelming task into a validated, structured micro-step plan with OpenAI or Gemini.
- * The AI pipeline itself (prompt, validation, repair, fallback) lives in ./pipeline.ts.
+ * The AI pipeline itself (prompt, validation, repair, fallback) lives in ./pipeline.ts, and the
+ * provider adapters with their timeout and retry budget live in ./providers.ts.
  *
  * Steps:
  * 0. Authenticate the caller (a signed-in user JWT is required)
@@ -26,12 +21,13 @@ import {
  * 2. Moderation (Fail-Safe) → if flagged, return CONTENT_FLAGGED
  * 3. Per-user and per-IP rate limits (enforced; fail open only if a check itself errors)
  * 4. AI pipeline → generate, validate, one repair, deterministic fallback, all inside a time budget
- * 5. Persistence → Retry 3x in-memory
+ * 5. Persistence → one telemetry row per request (retry 3x), which the user's feedback later scores
  */
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-request-id, x-guest-id',
 };
 
 // Zod schemas for validation
@@ -134,6 +130,19 @@ function clientIp(req: Request): string | null {
   return (
     req.headers.get('cf-connecting-ip') ?? req.headers.get('x-real-ip') ?? (forwardedFor || null)
   );
+}
+
+// The header is caller-controlled and lands in an analytics column, so it is kept opaque and short.
+const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,64}$/;
+
+/**
+ * The tracing id this request is logged under. The client sends it in the body so it can attach
+ * feedback to the row later; the header is the fallback for clients that only trace by header.
+ */
+function traceId(req: Request, bodyRequestId: string | undefined): string | null {
+  if (bodyRequestId) return bodyRequestId;
+  const header = req.headers.get('x-request-id');
+  return header && SAFE_REQUEST_ID.test(header) ? header : null;
 }
 
 /**
@@ -263,157 +272,6 @@ function displayNameOf(user: User): string | null {
   return sanitizeDisplayName(metadata.display_name ?? metadata.full_name ?? metadata.name);
 }
 
-// ─── AI providers ────────────────────────────────────────────────────────────────────────────────
-
-// The client waits at most 20s, so the whole request, one repair round-trip included, must fit.
-const REQUEST_BUDGET_MS = 17_000;
-const AI_CALL_TIMEOUT_MS = 9_000;
-// Starting an attempt with less time than this left would only end in a timeout.
-const MIN_ATTEMPT_MS = 2_500;
-const RETRY_DELAY_MS = 400;
-// A 7-step plan with instructions needs room; the schema's length caps keep it well below this.
-const MAX_OUTPUT_TOKENS = 1000;
-
-/** One raw chat request. Throws on failure; retry policy lives in `withBudget`. */
-type Provider = (messages: ChatMessage[], signal: AbortSignal) => Promise<Completion>;
-
-class ProviderError extends Error {
-  constructor(
-    message: string,
-    readonly retryable: boolean
-  ) {
-    super(message);
-    this.name = 'ProviderError';
-  }
-}
-
-// 429 is usually an exhausted quota, which a retry only makes worse.
-function isRetryableStatus(status: number): boolean {
-  return status >= 500 || status === 408;
-}
-
-function openAiProvider(apiKey: string): Provider {
-  return async (messages, signal) => {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages,
-        // JSON mode guarantees syntactically valid JSON; the schema itself is enforced by the pipeline.
-        response_format: { type: 'json_object' },
-        max_tokens: MAX_OUTPUT_TOKENS,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new ProviderError(
-        `OpenAI API error: ${response.status} ${await response.text()}`,
-        isRetryableStatus(response.status)
-      );
-    }
-
-    const data = await response.json();
-    const content: unknown = data.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || !content.trim()) {
-      throw new ProviderError('No content in OpenAI response', true);
-    }
-    return { content, tokenUsage: Number(data.usage?.total_tokens) || 0 };
-  };
-}
-
-function geminiProvider(apiKey: string, model: string): Provider {
-  // v1beta is the API version that supports systemInstruction and JSON mode.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-
-  return async (messages, signal) => {
-    const systemText = messages
-      .filter((message) => message.role === 'system')
-      .map((message) => message.content)
-      .join('\n\n');
-    const contents = messages
-      .filter((message) => message.role !== 'system')
-      .map((message) => ({
-        role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: message.content }],
-      }));
-
-    const response = await fetch(url, {
-      method: 'POST',
-      signal,
-      // Header auth keeps the key out of URLs, and therefore out of proxy and error logs.
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemText }] },
-        contents,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.7,
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new ProviderError(
-        `Gemini API error: ${response.status} ${await response.text()}`,
-        isRetryableStatus(response.status)
-      );
-    }
-
-    const data = await response.json();
-    const parts: Array<{ text?: string }> = data.candidates?.[0]?.content?.parts ?? [];
-    const content = parts
-      .map((part) => part.text ?? '')
-      .join('')
-      .trim();
-    if (!content) {
-      throw new ProviderError('No content in Gemini response', true);
-    }
-    return { content, tokenUsage: Number(data.usageMetadata?.totalTokenCount) || 0 };
-  };
-}
-
-function resolveProvider(
-  name: string,
-  keys: { openaiKey: string; geminiKey: string; geminiModel: string }
-): Provider | null {
-  if (name === 'openai' && keys.openaiKey) return openAiProvider(keys.openaiKey);
-  if (name === 'gemini' && keys.geminiKey) return geminiProvider(keys.geminiKey, keys.geminiModel);
-  return null;
-}
-
-/** Adapts a provider to the pipeline: per-call timeouts, bounded retries, one shared deadline. */
-function withBudget(provider: Provider, deadline: number): Complete {
-  return async (messages, { attempts }) => {
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      const remaining = deadline - Date.now();
-      if (remaining < MIN_ATTEMPT_MS) {
-        console.warn(`AI budget exhausted before attempt ${attempt}`);
-        return null;
-      }
-      try {
-        return await provider(
-          messages,
-          AbortSignal.timeout(Math.min(AI_CALL_TIMEOUT_MS, remaining))
-        );
-      } catch (error) {
-        console.error(`AI call attempt ${attempt}/${attempts} failed:`, error);
-        if (error instanceof ProviderError && !error.retryable) return null;
-        if (attempt < attempts) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        }
-      }
-    }
-    return null;
-  };
-}
-
 /**
  * Main handler
  */
@@ -476,6 +334,7 @@ serve(async (req: Request) => {
     }
 
     const { input, guest_id, request_id } = body;
+    const requestId = traceId(req, request_id);
     const ipAddress = clientIp(req);
     // The domain prefix keeps IP hashes from ever colliding with input hashes.
     const ipHash = ipAddress ? await hashInput(`ip:${ipAddress}`, hmacSecret) : null;
@@ -483,7 +342,7 @@ serve(async (req: Request) => {
       user_id: user.id,
       client_ip_hash: ipHash,
       guest_id: guest_id || null,
-      request_id: request_id || null,
+      request_id: requestId,
     };
 
     // Step 1: Sanitize input & HMAC-SHA256 hash
@@ -528,21 +387,33 @@ serve(async (req: Request) => {
     }
 
     // Step 4: AI pipeline (generate → validate → one repair → deterministic fallback)
-    const result = await runBreakdownPipeline(withBudget(provider, startTime + REQUEST_BUDGET_MS), {
-      task: sanitizedInput,
-      displayName: displayNameOf(user),
-    });
+    const meter = createMeter();
+    const result = await runBreakdownPipeline(
+      withBudget(provider, startTime + REQUEST_BUDGET_MS, meter),
+      { task: sanitizedInput, displayName: displayNameOf(user) }
+    );
+
+    // Telemetry that makes a quality change traceable to the model and prompt that produced it.
+    // ai_latency_ms is model time only; latency_ms stays end-to-end, and the gap is our overhead.
+    const telemetry = {
+      ai_model: provider.model,
+      prompt_version: PROMPT_VERSION,
+      ai_latency_ms: meter.aiLatencyMs,
+    };
 
     if (!result) {
       logEvent('warn', 'break_task.ai_down', {
         provider: aiProvider,
-        request_id,
+        ai_model: provider.model,
+        request_id: requestId,
+        ai_latency_ms: meter.aiLatencyMs,
         latency_ms: Date.now() - startTime,
       });
       supabase
         .from('tasks')
         .insert({
           ...taskRecordBase,
+          ...telemetry,
           input_hash: inputHash,
           token_usage: null,
           latency_ms: Date.now() - startTime,
@@ -567,9 +438,11 @@ serve(async (req: Request) => {
     const latencyMs = Date.now() - startTime;
     logEvent(source === 'model' ? 'info' : 'warn', 'break_task.completed', {
       provider: aiProvider,
+      ai_model: provider.model,
       source,
-      request_id,
+      request_id: requestId,
       token_usage: tokenUsage,
+      ai_latency_ms: meter.aiLatencyMs,
       latency_ms: latencyMs,
       ...(issues.length > 0 ? { validation_issues: issues } : {}),
     });
@@ -579,9 +452,11 @@ serve(async (req: Request) => {
       try {
         const { error } = await supabase.from('tasks').insert({
           ...taskRecordBase,
+          ...telemetry,
           input_hash: inputHash,
           token_usage: tokenUsage,
           latency_ms: latencyMs,
+          breakdown_source: source,
           fallback_reason: null,
           steps: breakdown.steps,
         });
