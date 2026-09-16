@@ -148,7 +148,7 @@ export default function HomeScreen() {
         steps: resumableSession.steps,
         empathyBridge: resumableSession.empathyBridge,
         firstStepHook: resumableSession.firstStepHook,
-        stoppingPoint: resumableSession.stoppingPoint,
+        stoppingPoint: resumableSession.stoppingPoint ?? null,
       },
       { taskId: resumableSession.taskId, resumeStepIndex: resumableSession.currentStepIndex }
     );

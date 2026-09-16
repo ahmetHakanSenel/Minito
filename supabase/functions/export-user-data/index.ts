@@ -59,7 +59,7 @@ serve(async (req) => {
     const { data: breakdowns, error: breakdownsError } = await supabaseAdmin
       .from('task_breakdowns')
       .select(
-        'title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at'
+        'title, empathy_bridge, first_step_hook, stopping_point, steps, completed_step_count, completed_at, created_at'
       )
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
