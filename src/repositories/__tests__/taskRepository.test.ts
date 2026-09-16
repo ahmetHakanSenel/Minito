@@ -19,7 +19,17 @@ const mockedBreakTask = jest.mocked(breakTask);
 
 type QueryResult = { data: unknown; error: unknown };
 
-const CHAIN_METHODS = ['select', 'insert', 'update', 'delete', 'eq', 'order', 'limit', 'single'];
+const CHAIN_METHODS = [
+  'select',
+  'insert',
+  'update',
+  'delete',
+  'eq',
+  'order',
+  'limit',
+  'range',
+  'single',
+];
 
 // Mimics PostgREST's thenable builder: chained calls return the builder, awaiting it yields `result`.
 function mockQuery(result: QueryResult) {
@@ -103,6 +113,17 @@ describe('taskRepository.listRecent', () => {
         createdAt: '2026-09-15T10:00:00Z',
       },
     ]);
+  });
+
+  it('pages through history newest first with a stable tie-break', async () => {
+    const query = mockQuery({ data: [row], error: null });
+
+    await taskRepository.listPage({ offset: 20, limit: 20 });
+
+    expect(query.order).toHaveBeenNthCalledWith(1, 'created_at', { ascending: false });
+    expect(query.order).toHaveBeenNthCalledWith(2, 'id', { ascending: false });
+    // PostgREST ranges are inclusive on both ends.
+    expect(query.range).toHaveBeenCalledWith(20, 39);
   });
 
   it('reports a missing table as unavailable', async () => {
