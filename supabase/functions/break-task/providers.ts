@@ -71,12 +71,22 @@ export function openAiProvider(apiKey: string, model = DEFAULT_OPENAI_MODEL): Pr
       }
 
       const data = await response.json();
-      const content: unknown = data.choices?.[0]?.message?.content;
+      const choice = data.choices?.[0];
+      const content: unknown = choice?.message?.content;
       if (typeof content !== 'string' || !content.trim()) {
         throw new ProviderError('No content in OpenAI response', true);
       }
-      // total_tokens is prompt + completion, which is what the cost is billed on.
-      return { content, tokenUsage: Number(data.usage?.total_tokens) || 0 };
+      const usage = data.usage ?? {};
+      // total_tokens is prompt + completion, which is what the cost is billed on. The split
+      // matters because the two are priced differently, and cached prompt tokens cheaper still.
+      return {
+        content,
+        tokenUsage: Number(usage.total_tokens) || 0,
+        promptTokens: Number(usage.prompt_tokens) || 0,
+        completionTokens: Number(usage.completion_tokens) || 0,
+        cachedTokens: Number(usage.prompt_tokens_details?.cached_tokens) || 0,
+        finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
+      };
     },
   };
 }
@@ -123,7 +133,8 @@ export function geminiProvider(apiKey: string, model: string): ProviderAdapter {
       }
 
       const data = await response.json();
-      const parts: Array<{ text?: string }> = data.candidates?.[0]?.content?.parts ?? [];
+      const candidate = data.candidates?.[0];
+      const parts: Array<{ text?: string }> = candidate?.content?.parts ?? [];
       const content = parts
         .map((part) => part.text ?? '')
         .join('')
@@ -131,7 +142,16 @@ export function geminiProvider(apiKey: string, model: string): ProviderAdapter {
       if (!content) {
         throw new ProviderError('No content in Gemini response', true);
       }
-      return { content, tokenUsage: Number(data.usageMetadata?.totalTokenCount) || 0 };
+      const usage = data.usageMetadata ?? {};
+      return {
+        content,
+        tokenUsage: Number(usage.totalTokenCount) || 0,
+        promptTokens: Number(usage.promptTokenCount) || 0,
+        completionTokens: Number(usage.candidatesTokenCount) || 0,
+        cachedTokens: Number(usage.cachedContentTokenCount) || 0,
+        finishReason:
+          typeof candidate?.finishReason === 'string' ? candidate.finishReason : undefined,
+      };
     },
   };
 }

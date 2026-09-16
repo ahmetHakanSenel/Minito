@@ -6,6 +6,7 @@ import {
 import type { ChatMessage } from './pipeline.ts';
 import {
   createMeter,
+  geminiProvider,
   isRetryableStatus,
   openAiProvider,
   type ProviderAdapter,
@@ -185,17 +186,69 @@ async function withStubbedFetch(response: Response, run: () => Promise<void>): P
   }
 }
 
-Deno.test('the OpenAI adapter reads the reply and its prompt + completion tokens', async () => {
+Deno.test('the OpenAI adapter reads the reply, its token split and why it stopped', async () => {
   const body = {
-    choices: [{ message: { content: '{"language":"en"}' } }],
-    usage: { prompt_tokens: 400, completion_tokens: 212, total_tokens: 612 },
+    choices: [{ message: { content: '{"language":"en"}' }, finish_reason: 'stop' }],
+    usage: {
+      prompt_tokens: 1200,
+      completion_tokens: 212,
+      total_tokens: 1412,
+      prompt_tokens_details: { cached_tokens: 1024 },
+    },
   };
 
   await withStubbedFetch(new Response(JSON.stringify(body), { status: 200 }), async () => {
     const completion = await openAiProvider('sk-test').send(messages, AbortSignal.timeout(1000));
 
     assertEquals(completion.content, '{"language":"en"}');
-    assertEquals(completion.tokenUsage, 612);
+    assertEquals(completion.tokenUsage, 1412);
+    assertEquals(completion.promptTokens, 1200);
+    assertEquals(completion.completionTokens, 212);
+    assertEquals(completion.cachedTokens, 1024);
+    assertEquals(completion.finishReason, 'stop');
+  });
+});
+
+Deno.test('a truncated OpenAI reply is reported as finish_reason length', async () => {
+  const body = {
+    choices: [{ message: { content: '{"language":"en"' }, finish_reason: 'length' }],
+    usage: { prompt_tokens: 1200, completion_tokens: 1000, total_tokens: 2200 },
+  };
+
+  await withStubbedFetch(new Response(JSON.stringify(body), { status: 200 }), async () => {
+    const completion = await openAiProvider('sk-test').send(messages, AbortSignal.timeout(1000));
+
+    // The content is broken JSON; only finishReason explains that it hit the output ceiling
+    // rather than the model ignoring the contract.
+    assertEquals(completion.finishReason, 'length');
+  });
+});
+
+Deno.test('the Gemini adapter maps its own usage and finish fields', async () => {
+  const body = {
+    candidates: [
+      { content: { parts: [{ text: '{"language":' }, { text: '"tr"}' }] }, finishReason: 'STOP' },
+    ],
+    usageMetadata: {
+      promptTokenCount: 1180,
+      candidatesTokenCount: 320,
+      totalTokenCount: 1500,
+      cachedContentTokenCount: 0,
+    },
+  };
+
+  await withStubbedFetch(new Response(JSON.stringify(body), { status: 200 }), async () => {
+    const completion = await geminiProvider('g-test', 'gemini-2.0-flash').send(
+      messages,
+      AbortSignal.timeout(1000)
+    );
+
+    // Gemini streams the object across parts; they are joined before parsing.
+    assertEquals(completion.content, '{"language":"tr"}');
+    assertEquals(completion.tokenUsage, 1500);
+    assertEquals(completion.promptTokens, 1180);
+    assertEquals(completion.completionTokens, 320);
+    assertEquals(completion.finishReason, 'STOP');
   });
 });
 

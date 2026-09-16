@@ -5,7 +5,12 @@ import {
   type User,
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
-import { PROMPT_VERSION, runBreakdownPipeline, TaskBreakdownSchema } from './pipeline.ts';
+import {
+  detectLanguage,
+  PROMPT_VERSION,
+  runBreakdownPipeline,
+  TaskBreakdownSchema,
+} from './pipeline.ts';
 import {
   createMeter,
   DEFAULT_OPENAI_MODEL,
@@ -499,14 +504,26 @@ serve(async (req: Request) => {
       );
     }
 
-    const { breakdown, source, tokenUsage, issues } = result;
+    const { breakdown, source, tokens, finishReason, issues } = result;
     const latencyMs = Date.now() - startTime;
+    // A fallback plan's language comes from our own heuristic, so comparing it with that same
+    // heuristic would always agree. Only the model's own choice is worth scoring.
+    const responseLanguage = source === 'fallback' ? null : breakdown.language;
+    const languageMatch =
+      responseLanguage === null ? null : responseLanguage === detectLanguage(sanitizedInput);
+
     logEvent(source === 'model' ? 'info' : 'warn', 'break_task.completed', {
       provider: aiProvider,
       ai_model: provider.model,
       source,
       request_id: requestId,
-      token_usage: tokenUsage,
+      token_usage: tokens.total,
+      prompt_tokens: tokens.prompt,
+      completion_tokens: tokens.completion,
+      cached_tokens: tokens.cached,
+      finish_reason: finishReason,
+      response_language: responseLanguage,
+      language_match: languageMatch,
       ai_latency_ms: meter.aiLatencyMs,
       latency_ms: latencyMs,
       ...(issues.length > 0 ? { validation_issues: issues } : {}),
@@ -520,7 +537,15 @@ serve(async (req: Request) => {
         ...taskRecordBase,
         ...telemetry,
         input_hash: inputHash,
-        token_usage: tokenUsage,
+        token_usage: tokens.total,
+        prompt_token_usage: tokens.prompt,
+        completion_token_usage: tokens.completion,
+        cached_token_usage: tokens.cached,
+        finish_reason: finishReason ?? null,
+        response_language: responseLanguage,
+        language_match: languageMatch,
+        // Which rule the first reply broke, so a prompt can be fixed by evidence rather than guess.
+        validation_issues: issues.length > 0 ? issues : null,
         latency_ms: latencyMs,
         breakdown_source: source,
         fallback_reason: null,
@@ -533,7 +558,7 @@ serve(async (req: Request) => {
         success: true,
         breakdown,
         meta: { prompt_version: PROMPT_VERSION, source },
-        token_usage: tokenUsage,
+        token_usage: tokens.total,
         latency_ms: latencyMs,
       },
       200

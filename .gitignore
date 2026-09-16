@@ -46,3 +46,6 @@ yarn-error.*
 supabase/.env.functions
 supabase/.temp/
 
+
+# Dry-run evaluation output is noise; real runs are committed deliberately.
+docs/eval/results/*dry-run*

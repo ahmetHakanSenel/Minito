@@ -40,8 +40,12 @@ jobs:
         with:
           deno-version: v2.x
 
-      - run: deno check --no-lock supabase/functions/*/index.ts
+      - run: deno check --no-lock supabase/functions/*/index.ts scripts/eval.ts
       - run: deno test --no-lock supabase/functions/
+
+      # Keeps the evaluation harness honest without spending anything: the dry run exercises
+      # every pipeline outcome with a fake provider.
+      - run: deno run --no-lock --allow-net --allow-env --allow-read --allow-write scripts/eval.ts --dry-run --out "${RUNNER_TEMP}/eval"
 
   secrets:
     name: Secret scan

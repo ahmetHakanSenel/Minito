@@ -45,8 +45,12 @@ const validBreakdown = {
   stopping_point: 'You can stop here. The kitchen already looks different.',
 };
 
-function reply(body: unknown, tokenUsage = 100): Completion {
-  return { content: typeof body === 'string' ? body : JSON.stringify(body), tokenUsage };
+function reply(body: unknown, tokenUsage = 100, extra: Partial<Completion> = {}): Completion {
+  return {
+    content: typeof body === 'string' ? body : JSON.stringify(body),
+    tokenUsage,
+    ...extra,
+  };
 }
 
 // A provider that answers from a script and records every request it receives.
@@ -62,24 +66,33 @@ function scriptedProvider(replies: Array<Completion | null>) {
 const input = { task: 'Clean the kitchen', displayName: null };
 
 Deno.test('a valid first reply is returned as-is, with no repair', async () => {
-  const provider = scriptedProvider([reply(validBreakdown, 250)]);
+  const provider = scriptedProvider([
+    reply(validBreakdown, 250, { promptTokens: 200, completionTokens: 50, finishReason: 'stop' }),
+  ]);
 
   const result = await runBreakdownPipeline(provider.complete, input);
 
   assertEquals(result?.source, 'model');
   assertEquals(result?.breakdown.steps.length, 3);
-  assertEquals(result?.tokenUsage, 250);
+  assertEquals(result?.tokens, { total: 250, prompt: 200, completion: 50, cached: 0 });
+  assertEquals(result?.finishReason, 'stop');
   assertEquals(provider.calls.length, 1);
 });
 
 Deno.test('an invalid reply triggers exactly one repair that carries the issues', async () => {
   const broken = { ...validBreakdown, steps: validBreakdown.steps.slice(0, 1) };
-  const provider = scriptedProvider([reply(broken, 200), reply(validBreakdown, 150)]);
+  const provider = scriptedProvider([
+    reply(broken, 200, { promptTokens: 150, completionTokens: 50, finishReason: 'length' }),
+    reply(validBreakdown, 150, { promptTokens: 120, completionTokens: 30, finishReason: 'stop' }),
+  ]);
 
   const result = await runBreakdownPipeline(provider.complete, input);
 
   assertEquals(result?.source, 'repaired');
-  assertEquals(result?.tokenUsage, 350);
+  // Both calls are billed, so both are counted.
+  assertEquals(result?.tokens, { total: 350, prompt: 270, completion: 80, cached: 0 });
+  // The FIRST reply's finish reason is the one that explains the repair.
+  assertEquals(result?.finishReason, 'length');
   assertEquals(provider.calls.length, 2);
 
   const repairCall = provider.calls[1];
