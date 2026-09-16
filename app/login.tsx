@@ -135,7 +135,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View className="items-center mb-8">
-          <MinitoIcon size={80} color="#8B5CF6" />
+          <MinitoIcon size={80} />
         </View>
 
         <Text className="text-textMain text-3xl font-bold text-center mb-2">

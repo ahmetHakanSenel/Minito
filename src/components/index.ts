@@ -3,6 +3,7 @@ export { FocusCard } from './FocusCard';
 export { OfflineBanner } from './OfflineBanner';
 export { PanicKit } from './PanicKit';
 export { MinitoIcon } from './MinitoIcon';
+export { MinitoMark } from './brand/MinitoMark';
 export { PremiumStepAnimation } from './PremiumStepAnimation';
 export { ConfettiAnimation } from './ConfettiAnimation';
 export { SuccessIcon } from './SuccessIcon';
