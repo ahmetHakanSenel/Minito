@@ -7,34 +7,23 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
-      system_prompts: {
+      rate_limits: {
         Row: {
-          created_at: string
-          id: string
-          is_active: boolean
-          prompt_text: string
-          updated_at: string
+          identifier: string
+          request_count: number
+          window_start: string
         }
         Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          prompt_text: string
-          updated_at?: string
+          identifier: string
+          request_count?: number
+          window_start?: string
         }
         Update: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          prompt_text?: string
-          updated_at?: string
+          identifier?: string
+          request_count?: number
+          window_start?: string
         }
         Relationships: []
       }
@@ -86,14 +75,12 @@ export type Database = {
           ai_model: string | null
           breakdown_source: string | null
           cached_token_usage: number | null
-          client_ip_hash: string | null
           completion_token_usage: number | null
           created_at: string
           fallback_reason: string | null
           feedback_at: string | null
           feedback_score: string | null
           finish_reason: string | null
-          guest_id: string | null
           id: string
           input_hash: string
           language_match: boolean | null
@@ -112,14 +99,12 @@ export type Database = {
           ai_model?: string | null
           breakdown_source?: string | null
           cached_token_usage?: number | null
-          client_ip_hash?: string | null
           completion_token_usage?: number | null
           created_at?: string
           fallback_reason?: string | null
           feedback_at?: string | null
           feedback_score?: string | null
           finish_reason?: string | null
-          guest_id?: string | null
           id?: string
           input_hash: string
           language_match?: boolean | null
@@ -138,14 +123,12 @@ export type Database = {
           ai_model?: string | null
           breakdown_source?: string | null
           cached_token_usage?: number | null
-          client_ip_hash?: string | null
           completion_token_usage?: number | null
           created_at?: string
           fallback_reason?: string | null
           feedback_at?: string | null
           feedback_score?: string | null
           finish_reason?: string | null
-          guest_id?: string | null
           id?: string
           input_hash?: string
           language_match?: boolean | null
@@ -196,26 +179,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      cleanup_old_tasks: { Args: never; Returns: number }
-      get_translations_for_language: {
-        Args: { p_language_code: string; p_namespace?: string }
-        Returns: {
-          key: string
-          value: string
-        }[]
+      check_and_consume_quota: {
+        Args: {
+          p_identifier: string
+          p_max_requests: number
+          p_window_interval: string
+        }
+        Returns: boolean
       }
+      cleanup_old_tasks: { Args: never; Returns: number }
+      cleanup_rate_limits: { Args: { p_older_than?: string }; Returns: number }
       submit_breakdown_feedback: {
         Args: { p_request_id: string; p_score: string }
         Returns: boolean
-      }
-      upsert_translation: {
-        Args: {
-          p_key: string
-          p_language_code: string
-          p_namespace?: string
-          p_value: string
-        }
-        Returns: string
       }
     }
     Enums: {
@@ -349,3 +325,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
