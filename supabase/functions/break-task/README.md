@@ -17,6 +17,8 @@ Only signed-in users can call it.
 2. Set secrets (`supabase secrets set NAME=value`):
    - `HMAC_SECRET` (required): key for HMAC-SHA256 input hashing, e.g. `openssl rand -hex 32`. The function refuses to run without it.
    - `AI_PROVIDER`: `openai` (default) or `gemini`.
+   - `OPENAI_MODEL`: optional, defaults to `gpt-4o-mini`. Swapping it by deploy makes model comparisons possible through the `ai_model` column.
+   - `ALLOW_UNMODERATED`: optional escape hatch, `true` only. Without `OPENAI_API_KEY` the function refuses to run (`503 MOD_DOWN`) unless this is set, so moderation can never be dropped silently by choosing a different provider.
    - `OPENAI_API_KEY`: required for the OpenAI provider and for moderation.
    - `GEMINI_API_KEY` / `GEMINI_MODEL`: required for the Gemini provider.
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: set automatically by Supabase.
@@ -119,11 +121,11 @@ If the provider cannot be reached at all, the function answers `503 AI_DOWN` ins
 - **Request id:** The client sends its tracing id in the body so it can score that row later; the `x-request-id` header is the fallback for clients that only trace by header.
 - **Logging:** Log lines are structured JSON tagged with `prompt_version`, `source`, `ai_model`, latencies and any validation issues. They never include the task text or the model's reply.
 - **Privacy:** Input is hashed with HMAC-SHA256 and never stored in raw form.
-- **Moderation:** Fail-safe. If content is flagged, the function returns `CONTENT_FLAGGED` (requires `OPENAI_API_KEY`).
+- **Moderation:** Fail-safe and mandatory. It runs in parallel with the rate-limit check, and a flagged input wins over an exhausted quota: telling someone in crisis that they are out of requests would be the wrong answer. It needs `OPENAI_API_KEY` whichever provider writes the plan (see `ALLOW_UNMODERATED`).
 - **Rate Limiting:**
   - 20 requests/hour per authenticated user and 40/hour per client IP (`429 RATE_DOWN`).
   - The IP is stored only as an HMAC.
   - Checks fail open only if the query itself errors.
 - **Client IP:** Taken from `cf-connecting-ip`, then `x-real-ip`, then the first `x-forwarded-for` hop. That hop is caller-controlled, so this is best-effort only.
 - **Legacy table:** `system_prompts` is no longer read. A runtime-editable prompt could silently break the output contract.
-- **Persistence:** Task records retry 3 times. Failures are logged but don't block the response.
+- **Persistence:** The telemetry row is written **after** the reply is sent, kept alive by `EdgeRuntime.waitUntil`, and retried 3 times. Its retries used to run first and could push a finished plan past the client's 20s ceiling, so the user saw offline steps for a breakdown that had already been paid for. A row that is lost after all retries is logged as `break_task.telemetry_lost`.

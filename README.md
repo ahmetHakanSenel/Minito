@@ -84,7 +84,7 @@ sequenceDiagram
       LLM-->>EF: Corrected JSON
       EF->>EF: Re-validate, else use the deterministic fallback plan
     end
-    EF->>DB: Insert analytics row (hash only, no raw text)
+    EF-)DB: Telemetry row, after the reply (input as HMAC)
     EF-->>App: breakdown (typed steps) + meta.prompt_version and source
     App->>DB: Save breakdown to task_breakdowns (RLS: owner only)
   end
@@ -224,6 +224,8 @@ In addition:
 
 ### Privacy
 
+- **What the analytics table holds:** The user's own words are stored only as an HMAC, never in plain text. The generated plan is kept, because judging a prompt version means being able to read what it produced. That table is closed to clients and reachable only by the service role.
+- **What the user sees:** Their readable history lives in `task_breakdowns`, owner-only under RLS.
 - **Data export:** GDPR export (`export-user-data`) includes every saved breakdown.
 - **Account deletion:** Deletion (`delete-user`) removes the account, and all owned rows cascade with it.
 - **Monitoring:** Sentry tracks users by opaque id only; `sendDefaultPii` is off.

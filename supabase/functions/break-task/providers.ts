@@ -7,7 +7,9 @@ import type { ChatMessage, Complete, Completion } from './pipeline.ts';
  * so adding a provider never means touching request handling.
  */
 
-export const OPENAI_MODEL = 'gpt-4o-mini';
+// Overridable through OPENAI_MODEL, so a model can be swapped by deploy rather than by release,
+// and compared afterwards through the ai_model column.
+export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
 // The client waits at most 20s, so the whole request, one repair round-trip included, must fit.
 export const REQUEST_BUDGET_MS = 17_000;
@@ -40,9 +42,9 @@ export function isRetryableStatus(status: number): boolean {
   return status >= 500 || status === 408;
 }
 
-export function openAiProvider(apiKey: string): ProviderAdapter {
+export function openAiProvider(apiKey: string, model = DEFAULT_OPENAI_MODEL): ProviderAdapter {
   return {
-    model: OPENAI_MODEL,
+    model,
     send: async (messages, signal) => {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -52,7 +54,7 @@ export function openAiProvider(apiKey: string): ProviderAdapter {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: OPENAI_MODEL,
+          model,
           messages,
           // JSON mode guarantees syntactically valid JSON; the schema is enforced by the pipeline.
           response_format: { type: 'json_object' },
@@ -136,9 +138,11 @@ export function geminiProvider(apiKey: string, model: string): ProviderAdapter {
 
 export function resolveProvider(
   name: string,
-  keys: { openaiKey: string; geminiKey: string; geminiModel: string }
+  keys: { openaiKey: string; openaiModel?: string; geminiKey: string; geminiModel: string }
 ): ProviderAdapter | null {
-  if (name === 'openai' && keys.openaiKey) return openAiProvider(keys.openaiKey);
+  if (name === 'openai' && keys.openaiKey) {
+    return openAiProvider(keys.openaiKey, keys.openaiModel || DEFAULT_OPENAI_MODEL);
+  }
   if (name === 'gemini' && keys.geminiKey) return geminiProvider(keys.geminiKey, keys.geminiModel);
   return null;
 }
