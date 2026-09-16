@@ -11,6 +11,8 @@ export type TaskBreakdown = {
   title: string;
   empathyBridge: string | null;
   firstStepHook: string | null;
+  /** Permission to stop after the last step. Null for breakdowns saved before the v1 contract. */
+  stoppingPoint: string | null;
   steps: BreakdownStep[];
   completedStepCount: number;
   completedAt: string | null;
@@ -19,11 +21,8 @@ export type TaskBreakdown = {
 
 export type BreakdownContent = Pick<
   TaskBreakdown,
-  'title' | 'empathyBridge' | 'firstStepHook' | 'steps'
-> & {
-  /** Only fresh breakdowns carry one; history rows do not store it. */
-  stoppingPoint?: string | null;
-};
+  'title' | 'empathyBridge' | 'firstStepHook' | 'stoppingPoint' | 'steps'
+>;
 
 export type BreakdownOutcome =
   | { status: 'ready'; content: BreakdownContent; saved: TaskBreakdown | null; isOffline: boolean }
@@ -48,6 +47,7 @@ type TaskBreakdownRow = Pick<
   | 'title'
   | 'empathy_bridge'
   | 'first_step_hook'
+  | 'stopping_point'
   | 'steps'
   | 'completed_step_count'
   | 'completed_at'
@@ -56,7 +56,7 @@ type TaskBreakdownRow = Pick<
 
 const TABLE = 'task_breakdowns';
 const COLUMNS =
-  'id, title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at';
+  'id, title, empathy_bridge, first_step_hook, stopping_point, steps, completed_step_count, completed_at, created_at';
 
 // The table does not exist yet, i.e. the migration has not been applied.
 const MISSING_TABLE_CODES = new Set(['PGRST205', '42P01']);
@@ -94,6 +94,7 @@ function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {
     title: row.title,
     empathyBridge: row.empathy_bridge,
     firstStepHook: row.first_step_hook,
+    stoppingPoint: row.stopping_point,
     // Rows saved before structured output hold plain strings; they are upgraded on read.
     steps: normalizeSteps(row.steps),
     completedStepCount: row.completed_step_count,
@@ -119,6 +120,7 @@ async function save(content: BreakdownContent): Promise<TaskBreakdown> {
       title: content.title,
       empathy_bridge: content.empathyBridge,
       first_step_hook: content.firstStepHook,
+      stopping_point: content.stoppingPoint,
       steps: toStepRows(content.steps),
     })
     .select(COLUMNS)

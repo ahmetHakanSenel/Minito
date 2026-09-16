@@ -49,6 +49,7 @@ const row = {
   title: 'Clean the kitchen',
   empathy_bridge: 'Kitchens feel endless, I know.',
   first_step_hook: 'Stand up.',
+  stopping_point: 'You can stop here.',
   // A legacy string step, a malformed entry and a structured step side by side.
   steps: [
     'Grab one cup',
@@ -80,6 +81,7 @@ describe('taskRepository.listRecent', () => {
         title: 'Clean the kitchen',
         empathyBridge: 'Kitchens feel endless, I know.',
         firstStepHook: 'Stand up.',
+        stoppingPoint: 'You can stop here.',
         steps: [
           {
             id: 'step-1',
@@ -186,6 +188,7 @@ describe('taskRepository.breakDown', () => {
     expect(query.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Clean the kitchen',
+        stopping_point: 'You can stop here.',
         steps: [
           {
             id: 'step-1',

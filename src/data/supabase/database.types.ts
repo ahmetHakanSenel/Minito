@@ -47,6 +47,7 @@ export type Database = {
           first_step_hook: string | null
           id: string
           steps: Json
+          stopping_point: string | null
           title: string
           updated_at: string
           user_id: string
@@ -59,6 +60,7 @@ export type Database = {
           first_step_hook?: string | null
           id?: string
           steps: Json
+          stopping_point?: string | null
           title: string
           updated_at?: string
           user_id?: string
@@ -71,6 +73,7 @@ export type Database = {
           first_step_hook?: string | null
           id?: string
           steps?: Json
+          stopping_point?: string | null
           title?: string
           updated_at?: string
           user_id?: string
