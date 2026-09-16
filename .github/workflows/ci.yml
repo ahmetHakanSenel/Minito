@@ -14,25 +14,28 @@ concurrency:
 
 jobs:
   app:
-    name: Typecheck, lint, format, test
+    name: App · typecheck, lint, format, test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
       - run: npm run typecheck
+      # Zero warnings allowed: the script passes --max-warnings 0.
       - run: npm run lint
       - run: npm run format:check
       - run: npm test -- --ci
 
   edge-functions:
-    name: Type-check and test edge functions
+    name: Edge functions · check, test, eval harness
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -41,21 +44,65 @@ jobs:
           deno-version: v2.x
 
       - run: deno check --no-lock supabase/functions/*/index.ts scripts/eval.ts
-      - run: deno test --no-lock supabase/functions/
+      # --allow-read: one test checks language detection against the evaluation task set.
+      - run: deno test --no-lock --allow-read supabase/functions/ scripts/
 
       # Keeps the evaluation harness honest without spending anything: the dry run exercises
       # every pipeline outcome with a fake provider.
       - run: deno run --no-lock --allow-net --allow-env --allow-read --allow-write scripts/eval.ts --dry-run --out "${RUNNER_TEMP}/eval"
 
-  secrets:
-    name: Secret scan
+  database:
+    name: Database · migrations, RLS, concurrency, type drift
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        # Supabase runs Postgres 15 or later; 15 is the oldest these migrations must support.
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Applies every migration to an empty database, then checks RLS, grants, quota
+      # concurrency, cascades, schema-wide invariants and the runbook's queries.
+      - run: npm run test:db
+
+      # The committed client types must match what the migrations actually produce.
+      - name: Check generated types against the migrations
+        run: |
+          npx -y supabase@2 gen types typescript \
+            --db-url "postgres://postgres:postgres@localhost:5432/minito_migrations_test" \
+            --schema public > "${RUNNER_TEMP}/database.types.ts"
+          diff -u src/data/supabase/database.types.ts "${RUNNER_TEMP}/database.types.ts"
+
+  secrets:
+    name: Secret scan · full history
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           # Full history, so secrets committed in the past are caught too.
           fetch-depth: 0
 
+      # Known placeholder values are allowlisted by fingerprint in .gitleaksignore.
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
