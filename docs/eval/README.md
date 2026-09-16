@@ -31,7 +31,8 @@ Commit the results of real runs: they are the evidence behind a prompt or model 
 | `first_step_easy_rate` | Is step 1 actually an easy one, which is the whole product promise |
 | `truncated_replies` | Replies that hit the output ceiling (`finish_reason: length`). Any of these means raising `MAX_OUTPUT_TOKENS` or shortening the contract |
 | `cached_prompt_tokens` | Whether the provider is serving our static system prompt from its cache |
-| `p50` / `p95_ai_latency_ms` | Model time only, excluding our own overhead |
+| `p50` / `p95_ai_latency_ms` | Model time only, excluding our own overhead. Nearest-rank percentiles; with 20 tasks, p95 is the 19th value |
+| `max_ai_latency_ms` | The slowest task. A value above the 9 s call timeout means an attempt timed out and was retried |
 | `estimated_cost_usd` | Rough, from a hardcoded price table. Verify prices before quoting them |
 
 ## Changing the task set
@@ -46,3 +47,12 @@ is fine; rewriting existing ones invalidates older results.
 Structural quality only. Whether the plan sounds human, and whether it actually got someone
 started, needs real users (`feedback_score`) or a person reading the output. For a tone change,
 read ten outputs by hand before trusting the rates.
+
+## Baseline
+
+`results/task-breakdown-v2_gpt-4o-mini_*.json` is the current baseline: 20/20 valid on the first
+try, every answer in the right language, p50 3.5 s and p95 6.5 s model time. The slowest task
+(`tr-finance-1`, 11.9 s) had its first call time out at 9 s and succeed on the retry.
+
+That file's summary was recomputed from its own per-task results after a percentile bug was fixed:
+the harness used to report the sample maximum as p95.
