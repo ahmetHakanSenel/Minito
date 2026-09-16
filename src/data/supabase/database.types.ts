@@ -82,39 +82,57 @@ export type Database = {
       }
       tasks: {
         Row: {
+          ai_latency_ms: number | null
+          ai_model: string | null
+          breakdown_source: string | null
           client_ip_hash: string | null
           created_at: string
           fallback_reason: string | null
+          feedback_at: string | null
+          feedback_score: string | null
           guest_id: string | null
           id: string
           input_hash: string
           latency_ms: number | null
+          prompt_version: string | null
           request_id: string | null
           steps: Json | null
           token_usage: number | null
           user_id: string | null
         }
         Insert: {
+          ai_latency_ms?: number | null
+          ai_model?: string | null
+          breakdown_source?: string | null
           client_ip_hash?: string | null
           created_at?: string
           fallback_reason?: string | null
+          feedback_at?: string | null
+          feedback_score?: string | null
           guest_id?: string | null
           id?: string
           input_hash: string
           latency_ms?: number | null
+          prompt_version?: string | null
           request_id?: string | null
           steps?: Json | null
           token_usage?: number | null
           user_id?: string | null
         }
         Update: {
+          ai_latency_ms?: number | null
+          ai_model?: string | null
+          breakdown_source?: string | null
           client_ip_hash?: string | null
           created_at?: string
           fallback_reason?: string | null
+          feedback_at?: string | null
+          feedback_score?: string | null
           guest_id?: string | null
           id?: string
           input_hash?: string
           latency_ms?: number | null
+          prompt_version?: string | null
           request_id?: string | null
           steps?: Json | null
           token_usage?: number | null
@@ -164,6 +182,10 @@ export type Database = {
           key: string
           value: string
         }[]
+      }
+      submit_breakdown_feedback: {
+        Args: { p_request_id: string; p_score: string }
+        Returns: boolean
       }
       upsert_translation: {
         Args: {
