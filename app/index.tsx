@@ -336,7 +336,7 @@ export default function HomeScreen() {
 
           <View className="flex-1 justify-center">
             <View className="items-center mb-6">
-              <MinitoIcon size={64} color="#8B5CF6" />
+              <MinitoIcon size={64} />
             </View>
 
             <View className="rounded-3xl bg-white/5 border border-white/10 py-6">
