@@ -83,7 +83,9 @@ export const FocusCard: React.FC<FocusCardProps> = ({
             <Text style={styles.stepBadgeText}>{stepNumber}</Text>
           </View>
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>{t('focus.step', { current: stepNumber, total: totalSteps })}</Text>
+            <Text style={styles.eyebrow}>
+              {t('focus.step', { current: stepNumber, total: totalSteps })}
+            </Text>
             {step.difficulty ? (
               <Text style={styles.difficulty}>{t(`focus.difficulty.${step.difficulty}`)}</Text>
             ) : null}
@@ -124,7 +126,12 @@ export const FocusCard: React.FC<FocusCardProps> = ({
           <AnimatedTouchableOpacity
             onPress={() => handlePress(primaryAction)}
             disabled={disabled}
-            style={[styles.primaryButton, isFinalStep && styles.completeButton, disabled && styles.disabledButton, actionStyle]}
+            style={[
+              styles.primaryButton,
+              isFinalStep && styles.completeButton,
+              disabled && styles.disabledButton,
+              actionStyle,
+            ]}
             onPressIn={() => {
               actionScale.value = withSpring(0.97);
             }}
