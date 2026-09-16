@@ -89,16 +89,15 @@ describe('breakTask', () => {
     );
   });
 
-  it('still reads the flat string steps of a pre-v1 deployment', async () => {
+  it('refuses a success response whose steps are unusable', async () => {
     mockedPost.mockResolvedValue({
-      data: { success: true, empathy_bridge: 'I know.', steps: ['Grab one cup'] },
+      data: { success: true, breakdown: { steps: [42, { title: '' }] } },
     } as never);
 
+    // A malformed payload is a validation failure, not a plan with zero steps.
     await expect(breakTask('Clean the kitchen')).resolves.toMatchObject({
-      success: true,
-      source: 'model',
-      empathyBridge: 'I know.',
-      steps: [{ title: 'Grab one cup', instruction: '', estimatedMinutes: null }],
+      success: false,
+      fallbackReason: FallbackReason.VALIDATION,
     });
   });
 

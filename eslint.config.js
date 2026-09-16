@@ -13,6 +13,7 @@ module.exports = defineConfig([
       '.expo/*',
       // Deno runtime with URL imports; checked with `deno check` instead.
       'supabase/functions/*',
+      'scripts/*',
       'src/data/supabase/database.types.ts',
     ],
   },

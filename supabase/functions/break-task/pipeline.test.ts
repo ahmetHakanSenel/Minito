@@ -4,6 +4,7 @@ import {
   assertStringIncludes,
 } from 'https://deno.land/std@0.168.0/testing/asserts.ts';
 import {
+  buildFallbackBreakdown,
   buildUserPrompt,
   type ChatMessage,
   type Complete,
@@ -147,6 +148,34 @@ Deno.test('the schema rejects steps that are too long or too few', () => {
     steps: validBreakdown.steps.map((step) => ({ ...step, id: 'step-1' })),
   };
   assertEquals(validateBreakdown(JSON.stringify(duplicateIds)).ok, false);
+});
+
+Deno.test('a plan that opens with a hard step is sent back for repair', async () => {
+  const steepStart = {
+    ...validBreakdown,
+    steps: validBreakdown.steps.map((step, index) =>
+      index === 0 ? { ...step, difficulty: 'medium' } : step
+    ),
+  };
+  const provider = scriptedProvider([reply(steepStart), reply(validBreakdown)]);
+
+  const result = await runBreakdownPipeline(provider.complete, input);
+
+  assertEquals(result?.source, 'repaired');
+  assertStringIncludes(result?.issues[0] ?? '', 'the first step must be easy');
+  // The rule is carried to the model, not just enforced silently.
+  assertStringIncludes(
+    provider.calls[1].messages.at(-1)?.content ?? '',
+    'steps.0.difficulty: the first step must be easy'
+  );
+});
+
+Deno.test('the deterministic fallbacks satisfy the contract they enforce', () => {
+  for (const language of ['tr', 'en'] as const) {
+    const fallback = buildFallbackBreakdown(language);
+    assertEquals(TaskBreakdownSchema.safeParse(fallback).success, true);
+    assertEquals(fallback.steps[0].difficulty, 'easy');
+  }
 });
 
 Deno.test('a fenced JSON reply is accepted without a repair', () => {
