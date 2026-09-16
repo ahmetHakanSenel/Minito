@@ -1,4 +1,4 @@
-import { Platform, Vibration } from 'react-native';
+import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 let enabled = true;
@@ -23,10 +23,11 @@ function fire(feedback: () => Promise<void> | void): void {
   }
 }
 
-// On Android, expo-haptics' selection feedback is a 50 ms pulse at low amplitude. One of them is
-// fine; a dial passing values every few tens of milliseconds stacks them into a continuous buzz.
-// A detent needs a pulse short enough to end before the next one starts.
-const ANDROID_TICK_MS = 12;
+// On Android, expo-haptics' selection feedback is a long, faint pulse (50 ms at amplitude 30):
+// stacked by a turning dial it reads as a buzz. Its medium impact is shorter and firmer (43 ms at
+// amplitude 50), so it lands as a distinct click, and it still ends well inside the dial's 90 ms
+// gap between ticks. A raw vibration shorter than that is not a fix: many motors cannot spin up in
+// ~10 ms, and the tick is simply not felt.
 
 /**
  * One tactile vocabulary for the whole app, so the same kind of gesture always feels the same.
@@ -39,7 +40,9 @@ export const haptics = {
   /** A detent on a dial: the shortest, sharpest click, made to be felt many times in a row. */
   tick: () =>
     fire(() =>
-      Platform.OS === 'android' ? Vibration.vibrate(ANDROID_TICK_MS) : Haptics.selectionAsync()
+      Platform.OS === 'android'
+        ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+        : Haptics.selectionAsync()
     ),
   /** Scrolling, toggling a choice, moving focus. */
   selection: () => fire(() => Haptics.selectionAsync()),

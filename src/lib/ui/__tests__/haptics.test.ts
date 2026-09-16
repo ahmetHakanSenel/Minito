@@ -1,4 +1,4 @@
-import { Platform, Vibration } from 'react-native';
+import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { haptics, setHapticsEnabled } from '../haptics';
 
@@ -11,7 +11,6 @@ jest.mock('expo-haptics', () => ({
 }));
 
 const originalOS = Platform.OS;
-const vibrate = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
 
 function runOn(os: 'ios' | 'android') {
   Object.defineProperty(Platform, 'OS', { configurable: true, get: () => os });
@@ -25,7 +24,6 @@ beforeEach(() => {
 
 afterAll(() => {
   Object.defineProperty(Platform, 'OS', { configurable: true, get: () => originalOS });
-  vibrate.mockRestore();
 });
 
 describe('haptics', () => {
@@ -39,16 +37,12 @@ describe('haptics', () => {
     expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('ticks with one very short pulse on Android, so fast dial turns stay clicks', () => {
+  it('ticks with the short, firm impact on Android rather than the long selection pulse', () => {
     runOn('android');
 
     haptics.tick();
 
-    expect(vibrate).toHaveBeenCalledTimes(1);
-    const [duration] = vibrate.mock.calls[0];
-    expect(typeof duration).toBe('number');
-    // Shorter than the dial's minimum gap between ticks, so pulses never overlap into a buzz.
-    expect(duration as number).toBeLessThan(60);
+    expect(Haptics.impactAsync).toHaveBeenCalledWith('medium');
     expect(Haptics.selectionAsync).not.toHaveBeenCalled();
   });
 
@@ -63,7 +57,6 @@ describe('haptics', () => {
 
     expect(Haptics.impactAsync).not.toHaveBeenCalled();
     expect(Haptics.notificationAsync).not.toHaveBeenCalled();
-    expect(vibrate).not.toHaveBeenCalled();
   });
 
   it('swallows rejections from devices without a haptic engine', async () => {
@@ -74,12 +67,11 @@ describe('haptics', () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 
-  it('survives a vibrator that throws synchronously', () => {
-    runOn('android');
-    vibrate.mockImplementationOnce(() => {
+  it('survives a haptics module that throws synchronously', () => {
+    jest.mocked(Haptics.impactAsync).mockImplementationOnce(() => {
       throw new Error('no vibrator');
     });
 
-    expect(() => haptics.tick()).not.toThrow();
+    expect(() => haptics.tap()).not.toThrow();
   });
 });
