@@ -26,6 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import { useTranslation } from 'react-i18next';
+import { splitDuration } from '../lib/time/duration';
 
 const { width } = Dimensions.get('window');
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -37,7 +38,7 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 export interface SessionCompletionModalProps {
   visible: boolean;
   onClose: () => void;
-  sessionDuration: number; // in minutes
+  sessionDuration: number; // in seconds
   pickupCount: number;
   taskTitle: string;
   onTaskCompleted: () => void; // Marks task as done
@@ -117,15 +118,20 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
     transform: [{ scale: buttonBScale.value }],
   }));
 
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) {
-      return t('duration.minutes', { count: minutes });
+  // Sessions can be set to the second, so a 30-second one must not read as "1 minute".
+  const formatDuration = (totalSeconds: number) => {
+    const { hours, minutes, seconds } = splitDuration(totalSeconds);
+    if (hours > 0) {
+      return minutes > 0
+        ? t('duration.hoursMinutes', { hours, minutes })
+        : t('duration.hours', { count: hours });
     }
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0
-      ? t('duration.hoursMinutes', { hours, minutes: mins })
-      : t('duration.hours', { count: hours });
+    if (minutes > 0) {
+      return seconds > 0
+        ? t('duration.minutesSeconds', { minutes, seconds })
+        : t('duration.minutes', { count: minutes });
+    }
+    return t('duration.seconds', { count: seconds });
   };
 
   // Calculate focus score (less pickups = better)

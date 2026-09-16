@@ -144,15 +144,22 @@
     "reset": "Sıfırla",
     "back": "Geri",
     "stop": "Durdur",
-    "tapToStop": "Durdurmak için dokun"
+    "tapToStop": "Durdurmak için dokun",
+    "editHint": "Dakika ve saniye ayarlamak için çarkı açar",
+    "tapToSet": "Ayarlamak için dokun",
+    "done": "Tamam",
+    "increase": "Bir dakika ekle",
+    "decrease": "Bir dakika çıkar"
   },
   "focusMode": {
-    "warning": "Odaklan!",
-    "gentleWarning": "⚠️ DİKKATİN DAĞILIYOR",
-    "remainingMinutes": "{{minutes}} dk kaldı",
+    "gentleWarning": "Telefonu bırak, odağa dön",
     "focusLabel": "Odak",
     "pause": "Duraklat",
-    "resume": "Devam Et"
+    "resume": "Devam Et",
+    "paused": "Duraklatıldı",
+    "end": "Oturumu bitir",
+    "remainingA11y": "{{time}} kaldı",
+    "pickupsA11y": "Eline alma: {{count}}"
   },
   "dashboard": {
     "guest": "Misafir",
@@ -283,13 +290,34 @@
     "sectionTitle": "Arka plan sesleri",
     "sectionSubtitle": "Odaklanmanı artırmak için bir ses seç",
     "tracks": {
-      "deep_brown": { "name": "Derin kahverengi", "description": "Düşük ve sabit odak" },
-      "infinite_drift": { "name": "Sonsuz akış", "description": "Yumuşak ambiyans" },
-      "rushing_river": { "name": "Akan nehir", "description": "Akışkan su sesi" },
-      "theta_focus": { "name": "Theta odak", "description": "Yavaş ve geniş bir ritim" },
-      "slow_binaural": { "name": "Yavaş binaural", "description": "Sessiz derin odak" },
-      "ambient_pulse": { "name": "Ambiyans ritmi", "description": "Sabit odak temposu" },
-      "modern_classical": { "name": "Modern klasik", "description": "Sakin enstrümantal odak" }
+      "deep_brown": {
+        "name": "Derin kahverengi",
+        "description": "Düşük ve sabit odak"
+      },
+      "infinite_drift": {
+        "name": "Sonsuz akış",
+        "description": "Yumuşak ambiyans"
+      },
+      "rushing_river": {
+        "name": "Akan nehir",
+        "description": "Akışkan su sesi"
+      },
+      "theta_focus": {
+        "name": "Theta odak",
+        "description": "Yavaş ve geniş bir ritim"
+      },
+      "slow_binaural": {
+        "name": "Yavaş binaural",
+        "description": "Sessiz derin odak"
+      },
+      "ambient_pulse": {
+        "name": "Ambiyans ritmi",
+        "description": "Sabit odak temposu"
+      },
+      "modern_classical": {
+        "name": "Modern klasik",
+        "description": "Sakin enstrümantal odak"
+      }
     }
   },
   "stats": {
@@ -325,13 +353,9 @@
     "focusSession": "ODAK OTURUMU",
     "duration": "SÜRE",
     "ambience": "AMBİYANS",
-    "customDuration": "Özel süre...",
-    "minutes": "dakika",
     "mute": "Sessiz",
-    "brownNoise": "Kahverengi Gürültü",
-    "rain": "Yağmur",
-    "lofi": "Lo-Fi",
-    "durationOption": "{{count}} dk"
+    "durationOption": "{{count}} dk",
+    "minDuration": "En az 10 saniye seç."
   },
   "sessionComplete": {
     "title": "Harika!",
@@ -348,7 +372,9 @@
     "minutes": "{{count}} dakika",
     "hours": "{{count}} saat",
     "hoursMinutes": "{{hours}} saat {{minutes}} dakika",
-    "minutesShort": "{{count}} dk"
+    "minutesShort": "{{count}} dk",
+    "seconds": "{{count}} saniye",
+    "minutesSeconds": "{{minutes}} dakika {{seconds}} saniye"
   },
   "offlineSteps": {
     "cleaning": [
@@ -414,5 +440,13 @@
       "Gerektiğinde mola ver",
       "Yol boyunca küçük kazanımları kutla"
     ]
+  },
+  "wheel": {
+    "hours": "Saat",
+    "minutes": "Dakika",
+    "seconds": "Saniye",
+    "hoursShort": "sa",
+    "minutesShort": "dk",
+    "secondsShort": "sn"
   }
 }

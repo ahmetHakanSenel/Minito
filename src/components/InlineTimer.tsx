@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Check, Pause, Play, RotateCcw, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { DurationWheels } from './time/DurationWheels';
 
 interface InlineTimerProps {
   initialMinutes: number;
@@ -25,6 +26,9 @@ interface InlineTimerProps {
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
+// The dial has no hours wheel: a micro-step that needs an hour is not a micro-step.
+const MAX_TIMER_SECONDS = 59 * 60 + 59;
+
 export const InlineTimer: React.FC<InlineTimerProps> = ({
   initialMinutes,
   initialSeconds,
@@ -33,8 +37,12 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
 }) => {
   const { t } = useTranslation();
   const initialTotal = Math.max(0, initialMinutes * 60 + initialSeconds);
+  // What the countdown runs from. Starts as the step's own estimate; setting a time replaces it,
+  // so progress and reset always refer to the time the person actually chose.
+  const [plannedTotal, setPlannedTotal] = useState(initialTotal);
   const [remaining, setRemaining] = useState(initialTotal);
   const [isRunning, setIsRunning] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isCompletionLoop, setIsCompletionLoop] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -74,8 +82,10 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
     clearTimer();
     clearCompletionFeedback();
     completionHandledRef.current = false;
+    setPlannedTotal(initialTotal);
     setRemaining(initialTotal);
     setIsRunning(false);
+    setIsEditing(false);
     setIsCompletionLoop(false);
   }, [clearCompletionFeedback, clearTimer, initialTotal]);
 
@@ -109,10 +119,11 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   }, [handleComplete, isRunning, remaining]);
 
   const handleStart = () => {
-    if (isCompletionLoop || isRunning || initialTotal <= 0) return;
+    if (isCompletionLoop || isRunning || plannedTotal <= 0) return;
+    setIsEditing(false);
     if (remaining <= 0) {
       completionHandledRef.current = false;
-      setRemaining(initialTotal);
+      setRemaining(plannedTotal);
     }
     setIsRunning(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -133,7 +144,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
     completionHandledRef.current = false;
     setIsRunning(false);
     setIsCompletionLoop(false);
-    setRemaining(initialTotal);
+    setRemaining(plannedTotal);
     onCompletionStateChange?.(false);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -146,10 +157,21 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
     onComplete?.();
   };
 
-  const adjustTime = (deltaMinutes: number) => {
+  // Setting a time is a new plan: it replaces the countdown and its total together.
+  const setPlan = (seconds: number) => {
     if (isRunning || isCompletionLoop) return;
+    const next = Math.max(0, Math.min(seconds, MAX_TIMER_SECONDS));
     completionHandledRef.current = false;
-    setRemaining((current) => Math.max(0, current + deltaMinutes * 60));
+    setPlannedTotal(next);
+    setRemaining(next);
+  };
+
+  const adjustTime = (deltaMinutes: number) => setPlan(remaining + deltaMinutes * 60);
+
+  const toggleEditing = () => {
+    if (isRunning || isCompletionLoop) return;
+    void Haptics.selectionAsync();
+    setIsEditing((current) => !current);
   };
 
   const formatTime = (totalSeconds: number) => {
@@ -158,7 +180,8 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const progress = initialTotal > 0 ? Math.min(1, Math.max(0, (initialTotal - remaining) / initialTotal)) : 0;
+  const progress =
+    plannedTotal > 0 ? Math.min(1, Math.max(0, (plannedTotal - remaining) / plannedTotal)) : 0;
   const progressWidth: DimensionValue = `${progress * 100}%`;
   const actionStyle = useAnimatedStyle(() => ({
     transform: [{ scale: actionScale.value }],
@@ -168,8 +191,15 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   }));
 
   return (
-    <AnimatedView entering={FadeInDown.duration(260)} exiting={FadeOutDown.duration(180)} style={styles.container}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.completionGlow, completionStyle]} />
+    <AnimatedView
+      entering={FadeInDown.duration(260)}
+      exiting={FadeOutDown.duration(180)}
+      style={styles.container}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFillObject, styles.completionGlow, completionStyle]}
+      />
 
       <View style={styles.statusRow}>
         <Text style={styles.statusLabel}>
@@ -182,7 +212,20 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
         <View style={[styles.progressFill, { width: progressWidth }]} />
       </View>
 
-      <Text style={[styles.timeText, isCompletionLoop && styles.timeTextComplete]}>{formatTime(remaining)}</Text>
+      <TouchableOpacity
+        onPress={toggleEditing}
+        disabled={isRunning || isCompletionLoop}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityHint={t('timer.editHint')}
+      >
+        <Text style={[styles.timeText, isCompletionLoop && styles.timeTextComplete]}>
+          {formatTime(remaining)}
+        </Text>
+        {!isRunning && !isCompletionLoop && !isEditing ? (
+          <Text style={styles.editHint}>{t('timer.tapToSet')}</Text>
+        ) : null}
+      </TouchableOpacity>
 
       {isCompletionLoop ? (
         <View style={styles.completionState}>
@@ -201,6 +244,18 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
             <Text style={styles.stopButtonText}>{t('timer.tapToStop')}</Text>
           </AnimatedTouchableOpacity>
         </View>
+      ) : isEditing ? (
+        <View style={styles.editor}>
+          <DurationWheels value={remaining} onChange={setPlan} />
+          <TouchableOpacity
+            style={styles.doneButton}
+            onPress={toggleEditing}
+            accessibilityRole="button"
+          >
+            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+            <Text style={styles.mainButtonText}>{t('timer.done')}</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <>
           <View style={styles.controls}>
@@ -208,7 +263,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
               style={[styles.iconButton, (isRunning || remaining <= 0) && styles.disabledControl]}
               onPress={() => adjustTime(-1)}
               disabled={isRunning || remaining <= 0}
-              accessibilityLabel="Decrease timer"
+              accessibilityLabel={t('timer.decrease')}
             >
               <Text style={styles.adjustText}>−</Text>
             </TouchableOpacity>
@@ -222,7 +277,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
               onPressOut={() => {
                 actionScale.value = withSpring(1);
               }}
-              disabled={initialTotal <= 0}
+              disabled={plannedTotal <= 0}
               accessibilityRole="button"
             >
               {isRunning ? (
@@ -236,10 +291,11 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
             </AnimatedTouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.iconButton, (isRunning || remaining <= 0) && styles.disabledControl]}
+              style={[styles.iconButton, isRunning && styles.disabledControl]}
               onPress={() => adjustTime(1)}
-              disabled={isRunning || remaining <= 0}
-              accessibilityLabel="Increase timer"
+              // Adding time is always possible, even from zero.
+              disabled={isRunning}
+              accessibilityLabel={t('timer.increase')}
             >
               <Text style={styles.adjustText}>+</Text>
             </TouchableOpacity>
@@ -304,6 +360,29 @@ const styles = StyleSheet.create({
   },
   timeTextComplete: {
     color: '#6EE7B7',
+  },
+  editHint: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.35)',
+  },
+  editor: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 14,
+  },
+  doneButton: {
+    minHeight: 42,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#7C3AED',
   },
   controls: {
     width: '100%',
