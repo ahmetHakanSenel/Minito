@@ -53,10 +53,12 @@ type TaskResult = {
   issues: string[];
 };
 
-function percentile(values: number[], p: number): number {
+/** Nearest-rank percentile: the smallest value with at least p% of the sample at or below it. */
+export function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+  const rank = Math.ceil((p / 100) * sorted.length);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, rank - 1))];
 }
 
 function rate(count: number, total: number): string {
@@ -72,7 +74,9 @@ function dryRunProvider(): Complete {
   let call = 0;
   return (messages: ChatMessage[]) => {
     call += 1;
-    const task = messages.at(-2)?.content ?? messages.at(-1)?.content ?? '';
+    // The task is the fenced part of the first user message; a repair request adds more messages.
+    const prompt = messages.find((message) => message.role === 'user')?.content ?? '';
+    const task = /<task_input>\n?([\s\S]*?)\n?<\/task_input>/.exec(prompt)?.[1] ?? '';
     const language = detectLanguage(task);
     const plan = {
       language,
@@ -241,6 +245,8 @@ async function main(): Promise<void> {
     cached_prompt_tokens: results.reduce((s, r) => s + r.tokens.cached, 0),
     p50_ai_latency_ms: percentile(latencies, 50),
     p95_ai_latency_ms: percentile(latencies, 95),
+    // Above the per-call timeout means an attempt timed out and was retried.
+    max_ai_latency_ms: percentile(latencies, 100),
     estimated_cost_usd: cost === null ? null : Number(cost.toFixed(4)),
   };
 

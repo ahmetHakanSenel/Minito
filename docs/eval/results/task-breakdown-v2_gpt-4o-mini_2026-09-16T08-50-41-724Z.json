@@ -14,9 +14,11 @@
     "truncated_replies": 0,
     "avg_total_tokens": 1467,
     "cached_prompt_tokens": 18432,
-    "p50_ai_latency_ms": 3578,
-    "p95_ai_latency_ms": 11877,
-    "estimated_cost_usd": 0.0076
+    "p50_ai_latency_ms": 3530,
+    "p95_ai_latency_ms": 6524,
+    "max_ai_latency_ms": 11877,
+    "estimated_cost_usd": 0.0076,
+    "percentile_method": "nearest-rank (recomputed from results after the percentile fix)"
   },
   "results": [
     {
