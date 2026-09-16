@@ -22,8 +22,9 @@ This README focuses on the engineering: architecture, security posture and the t
   - Exactly one repair round-trip, then a deterministic fallback.
   - Deno tests in CI.
 - **Day-2 AI operations:**
-  - Per-request telemetry: model, prompt version, model latency, end-to-end latency, tokens and outcome.
+  - Per-request telemetry: model, prompt version, latencies, token split, why the model stopped and which rule it broke.
   - A closed feedback loop that scores a prompt version by the people using it.
+  - An offline evaluation set, so a prompt or model change is judged by measurement rather than impression.
 - **Encrypted session storage:** AES-256 session encryption with the key held in the iOS Keychain or Android Keystore.
 - **Graceful degradation everywhere:**
   - The app boots even without backend config.
@@ -76,7 +77,7 @@ sequenceDiagram
   alt quota exceeded
     EF-->>App: 429 RATE_DOWN
   else within quota
-    EF->>LLM: Layered prompt (task-breakdown-v1) + fenced task input
+    EF->>LLM: Layered prompt (task-breakdown-v2) + fenced task input
     LLM-->>EF: JSON (provider JSON mode)
     EF->>EF: JSON.parse + zod TaskBreakdownSchema
     opt reply breaks the contract
@@ -109,9 +110,9 @@ Navigation is guarded at the root with Expo Router's `Stack.Protected`. The spla
 
 | Stage          | What happens                                                                                                                                                                                  |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Layered prompt | Identity, Rules, Tone, Decomposition and Output Contract layers form one system prompt, versioned as `PROMPT_VERSION = 'task-breakdown-v1'`                                                   |
+| Layered prompt | Identity, Rules, Tone, Decomposition and Output Contract layers form one system prompt, versioned as `PROMPT_VERSION = 'task-breakdown-v2'`                                                   |
 | Generate       | Provider JSON mode (OpenAI `response_format`, Gemini `responseMimeType`), with per-call timeouts inside a 17 s request budget                                                                 |
-| Validate       | `JSON.parse`, then zod `TaskBreakdownSchema`: 3–7 steps of `{ id, title, instruction, estimated_minutes (1–10), difficulty }`, plus `empathy_bridge`, `first_step_hook` and `stopping_point` |
+| Validate       | `JSON.parse`, then zod `TaskBreakdownSchema`: 3–7 steps of `{ id, title, instruction, estimated_minutes (1–10), difficulty }`, a first step that must be `easy`, plus `empathy_bridge`, `first_step_hook` and `stopping_point` |
 | Repair         | Exactly one follow-up request carrying the validation issues, with no transport retries                                                                                                       |
 | Fallback       | A deterministic, schema-valid plan in the task's language, validated at module load, so a bad reply never surfaces as an error                                                                |
 
@@ -131,7 +132,7 @@ What the client does with it:
 
 ```mermaid
 flowchart TB
-  IN["Task input<br/>fenced in &lt;task_input&gt;"] --> GEN["Generate<br/>JSON mode · task-breakdown-v1"]
+  IN["Task input<br/>fenced in &lt;task_input&gt;"] --> GEN["Generate<br/>JSON mode · task-breakdown-v2"]
   GEN --> VAL{"zod<br/>TaskBreakdownSchema"}
   VAL -- valid --> OK["source: model"]
   VAL -- invalid --> REP["One repair request<br/>carrying the zod issues"]
@@ -157,11 +158,20 @@ Each answered request attempts one telemetry row, so cost, speed and quality can
 | `breakdown_source`              | How often does the model get it right first time, need a repair, or fall back? |
 | `ai_latency_ms` · `latency_ms`  | How much of the wait is the model, and how much is us?                         |
 | `token_usage`                   | What does a breakdown cost?                                                    |
+| `finish_reason`                 | Did the model finish, or run out of output room? Both look like broken JSON    |
+| `validation_issues`             | Which contract rule the first reply broke                                      |
+| `language_match`                | Did it answer in the language it was asked in?                                 |
 | `feedback_score`                | Did the plan actually fit the person who asked for it?                         |
 
 - **Measured, not guessed:** `ai_latency_ms` is measured with `performance.now()` around the provider calls, failed attempts included, so a retry is visible rather than hidden inside the total.
 - **Feedback path:** `tasks` stays closed to clients. A score is written only through `submit_breakdown_feedback()`, which validates the score and matches the row by request id **and** `auth.uid()`, so nobody can score a row that isn't theirs.
 - **No content, ever:** Telemetry and logs carry ids, counts and durations. The task text lives on only as an HMAC.
+
+### Deciding by measurement, not impression
+
+Production traffic is the slowest possible way to learn whether a prompt change helped, so the structural half of that question is answered offline instead. `npm run eval:ai` runs a fixed set of 20 tasks (Turkish and English, including a single word, a vague feeling and a question rather than a task) through the real pipeline and reports first-try pass rate, repair rate, fallback rate, language match, tokens, latency and cost. A run costs a few cents, so a temperature or model comparison is an afternoon rather than a quarter.
+
+What it deliberately does not claim to measure is tone, and whether the plan actually got someone started. Those need real users — which is exactly what `feedback_score` is for. `--dry-run` exercises every outcome with a fake provider, so CI keeps the harness working without a key or a bill.
 
 ---
 

@@ -50,7 +50,7 @@ Only signed-in users can call it.
 }
 ```
 
-**Success Response** (output contract `task-breakdown-v1`):
+**Success Response** (output contract `task-breakdown-v2`):
 
 ```json
 {
@@ -70,7 +70,7 @@ Only signed-in users can call it.
     ],
     "stopping_point": "…"
   },
-  "meta": { "prompt_version": "task-breakdown-v1", "source": "model" },
+  "meta": { "prompt_version": "task-breakdown-v2", "source": "model" },
   "token_usage": 612,
   "latency_ms": 3120
 }
@@ -103,6 +103,7 @@ The client renders the panic kit in the user's own locale; the server never ship
 3. **Generate:** The request uses provider JSON mode: OpenAI `response_format: json_object`, or Gemini `responseMimeType: application/json`.
 4. **Validate:** The reply goes through `JSON.parse`, then the zod `TaskBreakdownSchema`. The contract requires:
    - 3 to 7 steps with unique ids.
+   - The first step's difficulty is `easy`. A plan that opens with a hard step hands the paralysis straight back, so this is a contract rule rather than prompt advice.
    - `estimated_minutes` between 1 and 10.
    - Length caps on every string.
 5. **Repair:** If validation fails, exactly one follow-up request is sent, carrying the validation issues. It has no transport retries.

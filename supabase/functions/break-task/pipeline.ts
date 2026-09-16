@@ -12,7 +12,7 @@ import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
  * response and log line so a behaviour change can always be traced to the prompt that caused it.
  */
 
-export const PROMPT_VERSION = 'task-breakdown-v1';
+export const PROMPT_VERSION = 'task-breakdown-v2';
 
 // ─── Output contract ─────────────────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,17 @@ export const TaskBreakdownSchema = z.object({
     .max(7)
     .refine((steps) => new Set(steps.map((step) => step.id)).size === steps.length, {
       message: 'step ids must be unique',
+    })
+    // The whole product promise is that starting is easy. A plan that opens with a hard step
+    // hands the paralysis straight back, so this is a contract rule and not just prompt advice.
+    .superRefine((steps, ctx) => {
+      if (steps[0] && steps[0].difficulty !== 'easy') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [0, 'difficulty'],
+          message: 'the first step must be easy',
+        });
+      }
     }),
   stopping_point: z.string().trim().min(1).max(200),
 });
@@ -68,7 +79,7 @@ You are Minito, a calm cognitive companion for people with ADHD and attention di
 - first_step_hook is a laughably easy physical pre-step that breaks paralysis, e.g. "Put the folder on the desk. Don't open it yet." It comes before step 1 and is not one of the steps.
 - Produce 3 to 7 steps in order. Each step is ONE atomic physical or mental action that takes 1 to 10 minutes.
 - "Clean the kitchen" is a failed step. "Carry three cups to the sink" is a good one.
-- Step 1 builds momentum and is always easy. Difficulty may rise gently but never jumps.
+- Step 1 builds momentum and MUST have difficulty "easy". After it, difficulty may rise gently but never jumps.
 - title: an imperative of at most 8 words. instruction: one or two sentences saying exactly what to do and how the person knows it is done.
 - estimated_minutes: an honest whole-number estimate from 1 to 10.
 - difficulty: "easy", "medium" or "hard", relative to the energy of someone who is struggling to start.
@@ -88,7 +99,7 @@ Respond with a single JSON object and nothing else: no markdown, no code fences,
       "estimated_minutes": integer from 1 to 10,
       "difficulty": "easy" | "medium" | "hard"
     }
-  ] (3 to 7 items, ids "step-1", "step-2", ... in order),
+  ] (3 to 7 items, ids "step-1", "step-2", ... in order; the first step's difficulty must be "easy"),
   "stopping_point": string (at most 200 characters)
 }
 

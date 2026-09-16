@@ -26,10 +26,6 @@ export interface BreakTaskResponse {
     stopping_point: string; // Explicit permission to stop after the last step
   };
   meta?: { prompt_version: string; source: Exclude<BreakdownSource, 'offline'> };
-  // A function deployed before task-breakdown-v1 answers with flat string steps; still readable.
-  empathy_bridge?: string;
-  first_step_hook?: string;
-  steps?: unknown[];
   fallback_reason?: FallbackReason;
   error?: string;
   token_usage?: number;
@@ -146,13 +142,13 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
     const data = response.data;
     const breakdown = data.breakdown;
     // The response is still untrusted input: only well-formed steps make it into the app.
-    const steps = normalizeSteps(breakdown?.steps ?? data.steps);
+    const steps = normalizeSteps(breakdown?.steps);
 
     if (data.success && steps.length > 0) {
       return {
         success: true,
-        empathyBridge: breakdown?.empathy_bridge ?? data.empathy_bridge,
-        firstStepHook: breakdown?.first_step_hook ?? data.first_step_hook,
+        empathyBridge: breakdown?.empathy_bridge,
+        firstStepHook: breakdown?.first_step_hook,
         stoppingPoint: breakdown?.stopping_point,
         steps,
         requestId,
