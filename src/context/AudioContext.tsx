@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useState, useRef, useCallback, ReactNode } from 'react';
-import { Audio } from 'expo-av';
-import type { AVPlaybackSource } from 'expo-av';
+import {
+  createAudioPlayer,
+  setAudioModeAsync,
+  type AudioPlayer,
+  type AudioSource,
+  type AudioStatus,
+} from 'expo-audio';
 
 // Audio tracks available
 export interface AudioTrack {
   /** Also the key under audio.tracks for the track's localized name and description. */
   id: string;
   color: string;
-  source: AVPlaybackSource;
+  source: AudioSource;
 }
 
 export const AUDIO_TRACKS: AudioTrack[] = [
@@ -52,6 +57,7 @@ interface AudioContextType {
   isPlaying: boolean;
   currentTrack: AudioTrack | null;
   volume: number;
+  /** True from the moment a track is requested until its audio has loaded. */
   isLoading: boolean;
   play: (trackId?: string) => Promise<void>;
   pause: () => Promise<void>;
@@ -72,6 +78,9 @@ interface AudioContextType {
 
 type SessionSnapshot = { trackId: string | null; wasPlaying: boolean };
 
+/** A native player plus its status subscription; both are released together. */
+type LoadedPlayer = { player: AudioPlayer; subscription: { remove: () => void } };
+
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
 
 export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -80,11 +89,12 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [volume, setVolumeState] = useState(0.7);
   const [isLoading, setIsLoading] = useState(false);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const loadedRef = useRef<LoadedPlayer | null>(null);
   // Mirrors of the state above, for session calls that run after an await and must not read a
   // stale closure.
   const currentTrackRef = useRef<AudioTrack | null>(null);
   const isPlayingRef = useRef(false);
+  const volumeRef = useRef(0.7);
   const sessionSnapshotRef = useRef<SessionSnapshot | null>(null);
 
   React.useEffect(() => {
@@ -95,30 +105,30 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Initialize audio mode on mount
-  React.useEffect(() => {
-    const setupAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-        });
-      } catch (error) {
-        console.warn('Failed to setup audio mode:', error);
-      }
-    };
-    setupAudio();
-
-    // Cleanup on unmount
-    return () => {
-      if (soundRef.current) {
-        void soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-    };
+  // Players are native objects that live until released; nothing may outlive the provider.
+  const releasePlayer = useCallback(() => {
+    const loaded = loadedRef.current;
+    loadedRef.current = null;
+    if (!loaded) return;
+    loaded.subscription.remove();
+    try {
+      loaded.player.pause();
+      loaded.player.remove();
+    } catch (error) {
+      console.warn('Error releasing audio player:', error);
+    }
   }, []);
+
+  React.useEffect(() => {
+    // Ambience keeps playing while the person is off doing the step, which is the whole point.
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'duckOthers',
+    }).catch((error) => console.warn('Failed to set up audio mode:', error));
+
+    return releasePlayer;
+  }, [releasePlayer]);
 
   const selectTrack = useCallback((trackId: string) => {
     const track = AUDIO_TRACKS.find((t) => t.id === trackId);
@@ -129,100 +139,82 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const play = useCallback(
     async (trackId?: string) => {
+      const track = trackId
+        ? AUDIO_TRACKS.find((t) => t.id === trackId)
+        : (currentTrackRef.current ?? AUDIO_TRACKS[0]);
+      if (!track) {
+        console.warn('No track to play');
+        return;
+      }
+
+      releasePlayer();
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-
-        // If trackId provided, select that track
-        if (trackId) {
-          selectTrack(trackId);
-        }
-
-        const track = trackId
-          ? AUDIO_TRACKS.find((t) => t.id === trackId)
-          : currentTrack || AUDIO_TRACKS[0];
-
-        if (!track) {
-          console.warn('No track to play');
-          return;
-        }
-
-        // Unload previous sound if exists
-        if (soundRef.current) {
-          await soundRef.current.unloadAsync();
-          soundRef.current = null;
-        }
-
-        const { sound } = await Audio.Sound.createAsync(track.source, {
-          shouldPlay: true,
-          isLooping: true,
-          volume,
-          progressUpdateIntervalMillis: 1000,
+        const player = createAudioPlayer(track.source, { updateInterval: 1000 });
+        const subscription = player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
+          if (status.isLoaded) setIsLoading(false);
         });
+        loadedRef.current = { player, subscription };
 
-        soundRef.current = sound;
+        player.loop = true;
+        player.volume = volumeRef.current;
+        // Playback starts as soon as the asset has loaded.
+        player.play();
+
         setCurrentTrack(track);
         setIsPlaying(true);
       } catch (error) {
+        releasePlayer();
+        setIsLoading(false);
         setIsPlaying(false);
         setCurrentTrack(null);
         console.warn('Error playing audio:', error);
-      } finally {
-        setIsLoading(false);
       }
     },
-    [currentTrack, volume, selectTrack]
+    [releasePlayer]
   );
 
   const pause = useCallback(async () => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.pauseAsync();
-      }
+      loadedRef.current?.player.pause();
       setIsPlaying(false);
     } catch (error) {
-      console.error('Error pausing audio:', error);
+      console.warn('Error pausing audio:', error);
     }
   }, []);
 
   const resume = useCallback(async () => {
+    const loaded = loadedRef.current;
+    if (!loaded) {
+      await play(currentTrackRef.current?.id);
+      return;
+    }
     try {
-      if (!soundRef.current || !currentTrack) {
-        await play(currentTrack?.id);
-        return;
-      }
-      await soundRef.current.playAsync();
+      loaded.player.play();
       setIsPlaying(true);
     } catch (error) {
       setIsPlaying(false);
       console.warn('Error resuming audio:', error);
     }
-  }, [currentTrack, play]);
+  }, [play]);
 
   const stop = useCallback(async () => {
-    const sound = soundRef.current;
-    soundRef.current = null;
+    releasePlayer();
+    setIsLoading(false);
     setIsPlaying(false);
     setCurrentTrack(null);
-
-    if (!sound) return;
-
-    try {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-    } catch (error) {
-      console.warn('Error stopping audio:', error);
-    }
-  }, []);
+  }, [releasePlayer]);
 
   const setVolume = useCallback(async (newVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, newVolume));
+    volumeRef.current = clampedVolume;
+    setVolumeState(clampedVolume);
     try {
-      const clampedVolume = Math.max(0, Math.min(1, newVolume));
-      setVolumeState(clampedVolume);
-      if (soundRef.current) {
-        await soundRef.current.setVolumeAsync(clampedVolume);
+      if (loadedRef.current) {
+        loadedRef.current.player.volume = clampedVolume;
       }
     } catch (error) {
-      console.error('Error setting volume:', error);
+      console.warn('Error setting volume:', error);
     }
   }, []);
 
@@ -247,7 +239,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (isPlayingRef.current) await pause();
         return;
       }
-      if (currentTrackRef.current?.id === trackId && soundRef.current) {
+      if (currentTrackRef.current?.id === trackId && loadedRef.current) {
         // Same track: keep its position instead of restarting it.
         if (!isPlayingRef.current) await resume();
         return;
