@@ -51,6 +51,7 @@ npx supabase secrets set OPENAI_API_KEY=sk-...
 | `OPENAI_MODEL` | No | Defaults to `gpt-4o-mini` |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | With Gemini | `GEMINI_MODEL` defaults to `gemini-2.0-flash` |
 | `ALLOW_UNMODERATED` | No | `true` serves requests without moderation. Without it, a deployment that has no OpenAI key answers `503 MOD_DOWN` |
+| `OPS_ALERTS_SECRET`, `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_FORMAT` | No | Operational alerts, off unless a webhook is set. See [RUNBOOK.md](./RUNBOOK.md#alert-delivery) |
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by the platform.
 
@@ -60,6 +61,8 @@ Deploy the functions:
 npx supabase functions deploy break-task
 npx supabase functions deploy delete-user
 npx supabase functions deploy export-user-data
+# Optional: operational alerts (see RUNBOOK.md)
+npx supabase functions deploy ops-alerts --no-verify-jwt
 ```
 
 ### Upgrading an existing project past migration 014
@@ -102,6 +105,7 @@ Retention and quota cleanup are plain SQL functions. With the `pg_cron` extensio
 ```sql
 SELECT cron.schedule('cleanup-old-tasks', '0 3 * * *', 'SELECT public.cleanup_old_tasks();');
 SELECT cron.schedule('cleanup-rate-limits', '17 * * * *', 'SELECT public.cleanup_rate_limits();');
+SELECT cron.schedule('cleanup-planner-tombstones', '40 3 * * *', 'SELECT public.cleanup_planner_tombstones();');
 ```
 
 ## 5. Checking the deployment

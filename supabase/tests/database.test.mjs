@@ -631,6 +631,61 @@ describe('planner sync', () => {
   });
 });
 
+describe('ops alerting', () => {
+  test('the health snapshot counts the windows the alert rules read', async () => {
+    const user = await createUser();
+    const snapshotBefore = await as('service_role', null, async (client) => {
+      const { rows } = await client.query('SELECT public.ops_health_snapshot() AS s');
+      return rows[0].s;
+    });
+
+    await pool.query(
+      `INSERT INTO public.tasks
+         (user_id, request_id, input_hash, latency_ms, token_usage, breakdown_source, fallback_reason)
+       VALUES
+         ($1, 'snap-1', 'h', 3000, 1000, 'model', NULL),
+         ($1, 'snap-2', 'h', 15000, 1000, 'fallback', NULL),
+         ($1, 'snap-3', 'h', 17000, NULL, NULL, 'AI_DOWN'),
+         ($1, 'snap-4', 'h', 100, NULL, NULL, 'CONTENT_FLAGGED')`,
+      [user]
+    );
+
+    const snapshot = await as('service_role', null, async (client) => {
+      const { rows } = await client.query('SELECT public.ops_health_snapshot() AS s');
+      return rows[0].s;
+    });
+    const delta = (key) => snapshot.last_hour[key] - snapshotBefore.last_hour[key];
+
+    // A flagged request is neither good nor bad, so it is not eligible.
+    assert.deepEqual(
+      { eligible: delta('eligible'), answered: delta('answered') },
+      { eligible: 3, answered: 2 }
+    );
+    assert.equal(delta('from_model'), 1);
+    assert.equal(delta('fast'), 1);
+    assert.equal(snapshot.spend.tokens_today - snapshotBefore.spend.tokens_today, 2000);
+    assert.equal(
+      snapshot.budget_28d.failed - snapshotBefore.budget_28d.failed,
+      1,
+      'only the AI_DOWN request spends error budget'
+    );
+  });
+
+  test('neither the snapshot nor the alert state is reachable by clients', async () => {
+    const user = await createUser();
+    for (const role of ['anon', 'authenticated']) {
+      await assert.rejects(
+        as(role, user, (client) => client.query('SELECT public.ops_health_snapshot()')),
+        PERMISSION_DENIED
+      );
+      await assert.rejects(
+        as(role, user, (client) => client.query('SELECT * FROM public.ops_alert_state')),
+        PERMISSION_DENIED
+      );
+    }
+  });
+});
+
 describe('translations', () => {
   test('are readable by anyone and writable by no client', async () => {
     await pool.query(
