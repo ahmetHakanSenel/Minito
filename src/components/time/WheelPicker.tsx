@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -36,8 +36,9 @@ const CENTER_OFFSET = (WINDOW_HEIGHT - ROW_HEIGHT) / 2;
 const MARGIN_ROWS = Math.ceil(VISIBLE_ROWS / 2) + 1;
 // How far a flick carries, in seconds of its release velocity.
 const FLICK_CARRY_S = 0.16;
-// A fast spin would otherwise queue more ticks than the haptic engine can render crisply.
-const TICK_MIN_INTERVAL_MS = 32;
+// A fast spin would otherwise fire ticks faster than they can be felt apart, which blurs them into
+// a buzz. Beyond ~16 per second, extra values pass silently.
+const TICK_MIN_INTERVAL_MS = 60;
 
 const WELL_COLOR = '#12121C';
 const WELL_COLOR_CLEAR = 'rgba(18, 18, 28, 0)';
@@ -65,7 +66,6 @@ type StripProps = {
   /** Where, inside its container, the selected row's top edge sits. */
   offset: number;
   textStyle: TextStyle;
-  tickStyle: ViewStyle;
 };
 
 // One strip of labels, moved as a whole: its translateY is the only thing that animates.
@@ -76,7 +76,6 @@ const Strip = memo(function Strip({
   position,
   offset,
   textStyle,
-  tickStyle,
 }: StripProps) {
   const style = useAnimatedStyle(() => ({
     transform: [
@@ -88,9 +87,7 @@ const Strip = memo(function Strip({
     <Animated.View style={style}>
       {labels.map((label, i) => (
         <View key={i} style={styles.row}>
-          <View style={tickStyle} />
           <Text style={textStyle}>{label}</Text>
-          <View style={tickStyle} />
         </View>
       ))}
     </Animated.View>
@@ -132,23 +129,31 @@ export function WheelPicker({
     };
   }, [count, formatValue]);
 
+  const tick = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTickRef.current < TICK_MIN_INTERVAL_MS) return;
+    lastTickRef.current = now;
+    haptics.tick();
+  }, []);
+
   const report = useCallback(
     (index: number) => {
       const next = wrap(index, count);
-      const now = Date.now();
-      if (now - lastTickRef.current >= TICK_MIN_INTERVAL_MS) {
-        lastTickRef.current = now;
-        haptics.selection();
-      }
       if (externalTargetRef.current !== null) {
-        if (next === externalTargetRef.current) externalTargetRef.current = null;
+        // Turning itself to a preset: silent on the way, one click as it lands. Ten minutes to
+        // sixty is fifty values; felt one by one, that is a buzz, not a click.
+        if (next === externalTargetRef.current) {
+          externalTargetRef.current = null;
+          tick();
+        }
         return;
       }
+      tick();
       if (next === reportedRef.current) return;
       reportedRef.current = next;
       onChange(next);
     },
-    [count, onChange]
+    [count, onChange, tick]
   );
 
   // Any direct handling of the dial makes it the user's again.
@@ -186,7 +191,7 @@ export function WheelPicker({
     reportedRef.current = value;
     cancelAnimation(position);
     const target = nearestDetent(position.value, value, count);
-    // Only a dial that will actually pass values needs to hold its reports back.
+    // Only a dial that will actually move holds back its reports and ticks until it lands.
     externalTargetRef.current = target === Math.round(position.value) ? null : value;
     settleTo(target);
   }, [value, count, position, settleTo]);
@@ -257,7 +262,6 @@ export function WheelPicker({
           position={position}
           offset={CENTER_OFFSET}
           textStyle={styles.dimText}
-          tickStyle={styles.dimTick}
         />
 
         {/* The dial fades into the well above and below the window. */}
@@ -281,7 +285,6 @@ export function WheelPicker({
             position={position}
             offset={0}
             textStyle={styles.lensText}
-            tickStyle={styles.lensTick}
           />
         </View>
       </View>
@@ -300,21 +303,14 @@ const styles = StyleSheet.create({
   },
   row: {
     height: ROW_HEIGHT,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 6,
+    justifyContent: 'center',
   },
   dimText: {
     fontSize: 20,
     fontWeight: '500',
     color: 'rgba(255, 255, 255, 0.38)',
     fontVariant: ['tabular-nums'],
-  },
-  dimTick: {
-    width: 5,
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
   },
   lens: {
     position: 'absolute',
@@ -326,7 +322,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1D1B30',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(196, 181, 253, 0.55)',
+    borderColor: 'rgba(255, 255, 255, 0.14)',
   },
   lensText: {
     fontSize: 27,
@@ -334,12 +330,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
     letterSpacing: 0.5,
-  },
-  lensTick: {
-    width: 7,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: '#A78BFA',
   },
   fade: {
     position: 'absolute',
