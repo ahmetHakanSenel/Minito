@@ -10,6 +10,15 @@ import { getOrCreateGuestId } from './guestIdentity';
  *
  * @returns AxiosInstance - Configured axios instance with interceptors
  */
+/**
+ * A fresh tracing id. Callers that need to refer to a request later (to attach feedback to it,
+ * for example) generate one here and send it in the body, rather than relying on the header the
+ * interceptor adds.
+ */
+export function newRequestId(): string {
+  return Crypto.randomUUID();
+}
+
 export function createTracedAxiosInstance(): AxiosInstance {
   const instance = axios.create();
 
@@ -17,7 +26,7 @@ export function createTracedAxiosInstance(): AxiosInstance {
   instance.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
       // Generate unique request ID for this request
-      const requestId = await Crypto.randomUUID();
+      const requestId = newRequestId();
 
       // Ensure headers object exists
       if (!config.headers) {

@@ -25,7 +25,14 @@ export type BreakdownContent = Pick<
 >;
 
 export type BreakdownOutcome =
-  | { status: 'ready'; content: BreakdownContent; saved: TaskBreakdown | null; isOffline: boolean }
+  | {
+      status: 'ready';
+      content: BreakdownContent;
+      saved: TaskBreakdown | null;
+      isOffline: boolean;
+      /** Tracing id of the analytics row behind this breakdown, for the feedback loop. */
+      requestId: string | null;
+    }
   | { status: 'flagged' }
   | { status: 'failed'; reason: FallbackReason };
 
@@ -149,19 +156,20 @@ async function breakDown(input: string): Promise<BreakdownOutcome> {
     steps: result.steps,
   };
   const isOffline = result.source === 'offline';
+  const requestId = result.requestId ?? null;
 
   // Offline steps and the server's deterministic fallback are generic, so they are not worth
   // keeping in history.
   if (isOffline || result.source === 'fallback') {
-    return { status: 'ready', content, saved: null, isOffline };
+    return { status: 'ready', content, saved: null, isOffline, requestId };
   }
 
   // History is a convenience: a failed save must never stop the user from starting.
   try {
-    return { status: 'ready', content, saved: await save(content), isOffline };
+    return { status: 'ready', content, saved: await save(content), isOffline, requestId };
   } catch (error) {
     console.warn('Failed to save task breakdown:', error);
-    return { status: 'ready', content, saved: null, isOffline };
+    return { status: 'ready', content, saved: null, isOffline, requestId };
   }
 }
 

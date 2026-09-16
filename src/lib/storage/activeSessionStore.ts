@@ -17,6 +17,8 @@ export interface ActiveSession {
   empathyBridge: string;
   firstStepHook: string;
   stoppingPoint?: string;
+  /** Tracing id of the breakdown request, so feedback still works after a relaunch. */
+  requestId?: string;
   currentStepIndex: number;
   completedSteps: number[];
   taskId?: string;

@@ -115,6 +115,14 @@
       }
     }
   },
+  "feedback": {
+    "question": "Adımlar sana uygun muydu?",
+    "helpful": "Tam kıvamında",
+    "tooLarge": "Adımlar fazla büyük",
+    "tooSmall": "Adımlar fazla küçük",
+    "wrongTone": "Üslup tutmadı",
+    "thanks": "Not aldım, teşekkürler."
+  },
   "offline": {
     "banner": "Çevrimdışısınız. Yedek içerik kullanılıyor.",
     "title": "Çevrimdışı Mod"

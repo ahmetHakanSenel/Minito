@@ -37,6 +37,7 @@ export default function FocusModeScreen() {
     empathyBridge?: string;
     firstStepHook?: string;
     stoppingPoint?: string;
+    requestId?: string;
     resumeStepIndex?: string;
     taskId?: string;
   }>();
@@ -94,6 +95,7 @@ export default function FocusModeScreen() {
       empathyBridge,
       firstStepHook,
       stoppingPoint,
+      requestId: params.requestId,
       currentStepIndex: Math.max(0, currentStepIndex),
       completedSteps: [...completedSteps],
       taskId: params.taskId,
@@ -217,6 +219,8 @@ export default function FocusModeScreen() {
         params: {
           totalSteps: totalSteps.toString(),
           input: params.input || '',
+          // Carried through so the finished session can be scored where it ends.
+          ...(params.requestId ? { requestId: params.requestId } : {}),
         },
       });
     } catch (error) {

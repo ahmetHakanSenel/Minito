@@ -1,4 +1,4 @@
-import { tracedAxios } from '../requestTracing';
+import { newRequestId, tracedAxios } from '../requestTracing';
 import { getSupabase } from '../../data/supabase/client';
 import { FallbackReason } from '../../safety';
 import { getOfflineFallbackSteps } from '../offlineFallback';
@@ -55,6 +55,8 @@ export type BreakTaskResult =
       firstStepHook?: string;
       stoppingPoint?: string;
       steps: BreakdownStep[];
+      /** Tracing id of the analytics row this breakdown was logged under, for later feedback. */
+      requestId?: string;
       source: BreakdownSource;
       promptVersion?: string;
       tokenUsage?: number;
@@ -72,6 +74,17 @@ const REQUEST_TIMEOUT_MS = 20_000;
 
 function offlineResult(input: string): BreakTaskResult {
   return { success: true, steps: getOfflineFallbackSteps(input), source: 'offline' };
+}
+
+// Generated here rather than by the tracing interceptor, because feedback needs this exact id
+// later. Without one the breakdown still works; only the feedback link is lost.
+function safeRequestId(): string | undefined {
+  try {
+    return newRequestId();
+  } catch (error) {
+    console.warn('Failed to generate a request id:', error);
+    return undefined;
+  }
 }
 
 /**
@@ -104,11 +117,13 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
     return offlineResult(input.trim());
   }
 
+  const requestId = safeRequestId();
+
   try {
     const requestPayload: BreakTaskRequest = {
       input: input.trim(),
       guest_id: guestId,
-      // request_id is automatically added by tracedAxios interceptor
+      request_id: requestId,
     };
 
     // The edge function only serves signed-in users; the JWT identifies them for rate limiting.
@@ -140,6 +155,7 @@ export async function breakTask(input: string, guestId?: string): Promise<BreakT
         firstStepHook: breakdown?.first_step_hook ?? data.first_step_hook,
         stoppingPoint: breakdown?.stopping_point,
         steps,
+        requestId,
         source: data.meta?.source ?? 'model',
         promptVersion: data.meta?.prompt_version,
         tokenUsage: data.token_usage,
