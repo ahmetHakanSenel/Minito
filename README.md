@@ -22,6 +22,16 @@ three things:
 It is a React Native app on Supabase. This README is about the engineering behind it: how the
 system fails safely, how every claim is tested, and how it is operated.
 
+### The product in one minute
+
+1. **Say what feels too big.** For example, "clean the kitchen before Sunday".
+2. **Get a plan that starts absurdly small.** It has one line that shows the app understands, a
+   first action that takes seconds, and short steps with honest time estimates.
+3. **Do one step at a time.** Focus mode shows a single step, with a timer, optional ambient
+   sound and haptic feedback. Every step ends with explicit permission to stop.
+4. **Come back later.** History, progress and the project planner sync across devices, and keep
+   working offline.
+
 <p align="center">
   <img src="docs/assets/numbers.svg" alt="233 automated tests, 20 of 60 parallel calls granted under a quota of 20, 99% availability SLO, 6.5 s p95 model latency, 23 threats modeled, 0 lint warnings" width="100%">
 </p>
@@ -102,8 +112,8 @@ Every answered request writes one telemetry row after the reply. The row records
 Users can rate a plan with one tap. The rating goes through a `SECURITY DEFINER` function that
 writes only to the caller's own row.
 
-**Offline evaluation.** `npm run eval:ai` runs 20 fixed Turkish and English tasks through the real
-pipeline. The committed `gpt-4o-mini` baseline:
+**Offline evaluation.** A fixed set of 20 Turkish and English tasks runs through the real pipeline,
+so a prompt or model change is judged by measurement. The committed `gpt-4o-mini` baseline:
 
 - 20/20 valid on the first try, and 20/20 in the right language.
 - Model latency: p50 3.5 s, p95 6.5 s.
@@ -269,25 +279,6 @@ probes quietly and speaks only when something is down.
 | Operations | Structured JSON logs, SQL SLIs and error budget, `ops-alerts`, Sentry (opaque ids only) |
 | CI | GitHub Actions: app, edge functions, database with type drift, gitleaks; Dependabot |
 
-## Getting started
-
-```bash
-npm install
-cp .env.example .env    # Supabase URL and anon key
-npm start
-```
-
-Without a backend, the app boots into a signed-out offline mode. Backend setup, sign-in providers
-and scheduled jobs are in [`docs/SETUP.md`](docs/SETUP.md).
-
-| Command | What it does |
-| ------- | ------------ |
-| `npm test` · `npm run test:edge` · `npm run test:db` | The three test suites |
-| `npm run typecheck` · `lint` · `format:check` | Static checks |
-| `npm run gen:types` | Regenerates the database types from the migrations |
-| `npm run eval:ai` | Offline evaluation of the AI pipeline |
-| `npm run readme:assets` | Re-renders this README's artwork from code |
-
 <details>
 <summary><b>Project structure</b></summary>
 
@@ -309,7 +300,7 @@ supabase/
   migrations/                     001–017
   tests/                          database suite and the Supabase bootstrap
 scripts/                          evaluation harness, brand and README artwork
-docs/                             SETUP, RUNBOOK, THREAT_MODEL, ops SQL, evaluation
+docs/                             RUNBOOK, THREAT_MODEL, ops SQL, evaluation set and baseline
 ```
 
 </details>
