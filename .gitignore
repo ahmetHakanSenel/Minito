@@ -49,5 +49,5 @@ supabase/.temp/
 # Dry-run evaluation output is noise; real runs are committed deliberately.
 docs/eval/results/*dry-run*
 
-# README artwork previews (npm run readme:assets -- --preview)
+# README artwork previews (npm run readme:art -- --preview)
 docs/assets/*.preview.png
