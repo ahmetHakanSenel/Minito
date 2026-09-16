@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, SlideOutRight, LinearTransition } from 'react-native-reanimated';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
+import { STEP_CELEBRATION_MS } from '../src/components/PremiumStepAnimation';
 import { parseTimeFromStep } from '../src/lib/timeParser';
 import { normalizeSteps, type BreakdownStep } from '../src/lib/breakdownSteps';
 import { useAuroraContext } from '../src/lib/aurora';
@@ -163,14 +164,14 @@ export default function FocusModeScreen() {
         setShowStepAnimation(true);
         haptics.success();
 
-        // Move to next step after animation completes (wait for PremiumStepAnimation to finish)
-        // PremiumStepAnimation duration is 2500ms for non-final steps
+        // Hide the celebration and show the next step in the same update, so the old step never
+        // flashes back in between.
         nextTimeoutRef.current = setTimeout(() => {
           setShowStepAnimation(false);
           setCurrentStepIndex(currentStepIndex + 1);
           haptics.selection();
           nextTimeoutRef.current = null;
-        }, 2500); // Match PremiumStepAnimation duration
+        }, STEP_CELEBRATION_MS);
       });
     }
   };
@@ -286,8 +287,8 @@ export default function FocusModeScreen() {
       {!isFinalStep && (
         <PremiumStepAnimation
           visible={showStepAnimation}
-          onComplete={() => setShowStepAnimation(false)}
-          isFinalStep={false}
+          completedCount={currentStepIndex + 1}
+          totalSteps={totalSteps}
         />
       )}
       {/* NO ADS ALLOWED in Focus Mode - Core Law */}
