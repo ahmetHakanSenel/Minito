@@ -35,3 +35,33 @@ export function nearestDetent(current: number, value: number, count: number): nu
   const delta = wrap(value - current + count / 2, count) - count / 2;
   return Math.round(current + delta);
 }
+
+// Below this release speed (rows per second) a release is a placement, not a throw: the dial just
+// falls into the nearest detent. Above it, the throw decides the direction.
+export const MIN_FLING_ROWS_PER_S = 2.5;
+// How far a throw carries: the distance a dial would coast in this many seconds at release speed.
+export const FLING_CARRY_S = 0.18;
+// A hard throw still stops within a sensible distance instead of spinning through several laps.
+export const MAX_FLING_ROWS = 24;
+
+/**
+ * Where a released dial comes to rest.
+ *
+ * A slow release goes to the nearest detent. A throw carries on in its own direction and never
+ * lands behind the point of release, because snapping backwards against the direction of motion is
+ * exactly what makes a dial feel as if it could not decide where to go.
+ */
+export function flingTarget(position: number, velocityRowsPerS: number): number {
+  'worklet';
+  if (Math.abs(velocityRowsPerS) < MIN_FLING_ROWS_PER_S) {
+    return Math.round(position);
+  }
+  const carry = Math.max(
+    -MAX_FLING_ROWS,
+    Math.min(MAX_FLING_ROWS, velocityRowsPerS * FLING_CARRY_S)
+  );
+  const landing = Math.round(position + carry);
+  return velocityRowsPerS > 0
+    ? Math.max(landing, Math.ceil(position))
+    : Math.min(landing, Math.floor(position));
+}
