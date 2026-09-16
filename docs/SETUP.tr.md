@@ -132,9 +132,9 @@ Ardından uygulamada bir görev bölün ve
 | `npm run typecheck` | TypeScript, katı modda |
 | `npm run lint` | ESLint, sıfır uyarıyla |
 | `npm run format:check` | Prettier |
-| `npm test` | Jest: depolar, API istemcisi, oturum depolama, çeviriler, arayüz mantığı |
-| `npm run test:edge` | Deno: Edge Function işleyicisi, yapay zekâ hattı, sağlayıcılar, denetim |
-| `npm run test:db` | Postgres: migration'lar, RLS, yetkiler, kota eş zamanlılığı, operasyon sorguları |
+| `npm test` | Jest: planlayıcı senkronizasyonu, depolar, API istemcisi, oturum depolama, çeviriler, arayüz mantığı |
+| `npm run test:edge` | Deno: break-task işleyicisi, yapay zekâ hattı, sağlayıcılar, denetim ve uyarı kuralları |
+| `npm run test:db` | Postgres: migration'lar, RLS, yetkiler, kota eş zamanlılığı, planlayıcı korumaları, operasyon SQL'i |
 | `npm run gen:types` | `database.types.ts` dosyasını migration'lardan yeniden üretir (önce `test:db`) |
 | `npm run eval:ai -- --dry-run` | Çevrimdışı değerlendirme düzeneği, sağlayıcı olmadan |
 
