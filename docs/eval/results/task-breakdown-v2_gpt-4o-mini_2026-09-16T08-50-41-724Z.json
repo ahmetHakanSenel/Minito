@@ -1,0 +1,423 @@
+{
+  "summary": {
+    "prompt_version": "task-breakdown-v2",
+    "model": "gpt-4o-mini",
+    "provider": "openai",
+    "ran_at": "2026-09-16T08:50:41.713Z",
+    "tasks": 20,
+    "first_try_pass_rate": "100.0%",
+    "repair_rate": "0.0%",
+    "fallback_rate": "0.0%",
+    "unreachable_rate": "0.0%",
+    "language_match_rate": "100.0%",
+    "first_step_easy_rate": "100.0%",
+    "truncated_replies": 0,
+    "avg_total_tokens": 1467,
+    "cached_prompt_tokens": 18432,
+    "p50_ai_latency_ms": 3578,
+    "p95_ai_latency_ms": 11877,
+    "estimated_cost_usd": 0.0076
+  },
+  "results": [
+    {
+      "id": "tr-cleaning-1",
+      "category": "cleaning",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 3,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 7,
+      "tokens": {
+        "total": 1381,
+        "prompt": 1115,
+        "completion": 266,
+        "cached": 0
+      },
+      "aiLatencyMs": 4224,
+      "issues": []
+    },
+    {
+      "id": "tr-cleaning-2",
+      "category": "cleaning",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 3,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 7,
+      "tokens": {
+        "total": 1358,
+        "prompt": 1115,
+        "completion": 243,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3530,
+      "issues": []
+    },
+    {
+      "id": "tr-work-1",
+      "category": "work",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 22,
+      "tokens": {
+        "total": 1477,
+        "prompt": 1116,
+        "completion": 361,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3420,
+      "issues": []
+    },
+    {
+      "id": "tr-work-2",
+      "category": "work",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 7,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 17,
+      "tokens": {
+        "total": 1679,
+        "prompt": 1115,
+        "completion": 564,
+        "cached": 1024
+      },
+      "aiLatencyMs": 4618,
+      "issues": []
+    },
+    {
+      "id": "tr-study-1",
+      "category": "study",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 5,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 30,
+      "tokens": {
+        "total": 1565,
+        "prompt": 1118,
+        "completion": 447,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3902,
+      "issues": []
+    },
+    {
+      "id": "tr-finance-1",
+      "category": "financial",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 3,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 20,
+      "tokens": {
+        "total": 1415,
+        "prompt": 1111,
+        "completion": 304,
+        "cached": 0
+      },
+      "aiLatencyMs": 11877,
+      "issues": []
+    },
+    {
+      "id": "tr-health-1",
+      "category": "health",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 11,
+      "tokens": {
+        "total": 1487,
+        "prompt": 1114,
+        "completion": 373,
+        "cached": 1024
+      },
+      "aiLatencyMs": 6524,
+      "issues": []
+    },
+    {
+      "id": "tr-social-1",
+      "category": "social",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 3,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 4,
+      "tokens": {
+        "total": 1420,
+        "prompt": 1115,
+        "completion": 305,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3581,
+      "issues": []
+    },
+    {
+      "id": "tr-vague-1",
+      "category": "general",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 3,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 9,
+      "tokens": {
+        "total": 1423,
+        "prompt": 1116,
+        "completion": 307,
+        "cached": 1024
+      },
+      "aiLatencyMs": 4212,
+      "issues": []
+    },
+    {
+      "id": "tr-short-1",
+      "category": "general",
+      "expectedLanguage": "tr",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "tr",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 15,
+      "tokens": {
+        "total": 1455,
+        "prompt": 1104,
+        "completion": 351,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3356,
+      "issues": []
+    },
+    {
+      "id": "en-cleaning-1",
+      "category": "cleaning",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 7,
+      "tokens": {
+        "total": 1451,
+        "prompt": 1112,
+        "completion": 339,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3370,
+      "issues": []
+    },
+    {
+      "id": "en-work-1",
+      "category": "work",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 22,
+      "tokens": {
+        "total": 1450,
+        "prompt": 1115,
+        "completion": 335,
+        "cached": 1024
+      },
+      "aiLatencyMs": 2713,
+      "issues": []
+    },
+    {
+      "id": "en-work-2",
+      "category": "work",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 5,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 13,
+      "tokens": {
+        "total": 1503,
+        "prompt": 1115,
+        "completion": 388,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3578,
+      "issues": []
+    },
+    {
+      "id": "en-study-1",
+      "category": "study",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 15,
+      "tokens": {
+        "total": 1450,
+        "prompt": 1110,
+        "completion": 340,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3317,
+      "issues": []
+    },
+    {
+      "id": "en-finance-1",
+      "category": "financial",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 10,
+      "tokens": {
+        "total": 1445,
+        "prompt": 1114,
+        "completion": 331,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3703,
+      "issues": []
+    },
+    {
+      "id": "en-health-1",
+      "category": "health",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 5,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 11,
+      "tokens": {
+        "total": 1513,
+        "prompt": 1110,
+        "completion": 403,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3489,
+      "issues": []
+    },
+    {
+      "id": "en-social-1",
+      "category": "social",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 5,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 7,
+      "tokens": {
+        "total": 1529,
+        "prompt": 1113,
+        "completion": 416,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3674,
+      "issues": []
+    },
+    {
+      "id": "en-admin-1",
+      "category": "general",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 5,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 35,
+      "tokens": {
+        "total": 1506,
+        "prompt": 1110,
+        "completion": 396,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3257,
+      "issues": []
+    },
+    {
+      "id": "en-vague-1",
+      "category": "general",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 3,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 9,
+      "tokens": {
+        "total": 1369,
+        "prompt": 1108,
+        "completion": 261,
+        "cached": 1024
+      },
+      "aiLatencyMs": 2364,
+      "issues": []
+    },
+    {
+      "id": "en-question-1",
+      "category": "general",
+      "expectedLanguage": "en",
+      "source": "model",
+      "finishReason": "stop",
+      "responseLanguage": "en",
+      "languageMatch": true,
+      "stepCount": 4,
+      "firstStepDifficulty": "easy",
+      "totalMinutes": 10,
+      "tokens": {
+        "total": 1461,
+        "prompt": 1112,
+        "completion": 349,
+        "cached": 1024
+      },
+      "aiLatencyMs": 3058,
+      "issues": []
+    }
+  ]
+}

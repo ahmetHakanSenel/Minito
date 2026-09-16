@@ -364,7 +364,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
               <View style={[styles.colorIndicator, { backgroundColor: project.color }]} />
-              <Text style={styles.projectTitle}>{project.title}</Text>
+              <Text style={styles.projectTitle} numberOfLines={2} ellipsizeMode="tail">
+                {project.title}
+              </Text>
             </View>
             <Animated.View style={chevronAnimatedStyle}>
               <ChevronDown size={20} color="rgba(255,255,255,0.5)" />
@@ -494,6 +496,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardTitleRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -504,6 +508,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   projectTitle: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
@@ -556,6 +561,7 @@ const styles = StyleSheet.create({
   },
   nextStepText: {
     fontSize: 14,
+    lineHeight: 20,
     color: '#FFFFFF', // Full brightness - the "anchor"
     fontWeight: '600',
     marginTop: 2,

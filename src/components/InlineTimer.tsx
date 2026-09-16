@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View, type DimensionValue } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  withRepeat,
   cancelAnimation,
   Easing,
   FadeInDown,
   FadeOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { Play, Pause, RotateCcw, Clock, Square } from 'lucide-react-native';
+import { Check, Pause, Play, RotateCcw, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 interface InlineTimerProps {
@@ -32,467 +32,360 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   onCompletionStateChange,
 }) => {
   const { t } = useTranslation();
-  const [remaining, setRemaining] = useState(initialMinutes * 60 + initialSeconds);
+  const initialTotal = Math.max(0, initialMinutes * 60 + initialSeconds);
+  const [remaining, setRemaining] = useState(initialTotal);
   const [isRunning, setIsRunning] = useState(false);
   const [isCompletionLoop, setIsCompletionLoop] = useState(false);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const completionHapticRef = useRef<NodeJS.Timeout | null>(null);
-  const completionTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completionHapticRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completionTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const completionHandledRef = useRef(false);
 
-  // Animations
-  const buttonScale = useSharedValue(1);
-  const pulseOpacity = useSharedValue(0);
-  const borderPulseOpacity = useSharedValue(1);
+  const actionScale = useSharedValue(1);
+  const completionPulse = useSharedValue(0);
 
-  // Kept fresh via the render below so the unmount cleanup (a stale
-  // closure by nature) always calls the *current* callback.
-  const onCompletionStateChangeRef = useRef(onCompletionStateChange);
-  onCompletionStateChangeRef.current = onCompletionStateChange;
-
-  // Cleanup on unmount. This is the single source of truth for "this
-  // timer is gone": if it unmounts mid completion-loop (user tapped Next
-  // instead of this timer's own Stop), the parent must still be told the
-  // loop ended, or its Aurora/border pulse would run forever. `withRepeat`
-  // animations also outlive the unmounted view unless explicitly
-  // cancelled, so they're stopped here too.
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (completionHapticRef.current) clearInterval(completionHapticRef.current);
-      completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
-      cancelAnimation(pulseOpacity);
-      cancelAnimation(borderPulseOpacity);
-      onCompletionStateChangeRef.current?.(false);
-    };
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
   }, []);
 
-  // Reset when initial values change
+  const clearCompletionFeedback = useCallback(() => {
+    if (completionHapticRef.current) {
+      clearInterval(completionHapticRef.current);
+      completionHapticRef.current = null;
+    }
+    completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
+    completionTimeoutsRef.current = [];
+    cancelAnimation(completionPulse);
+    completionPulse.value = 0;
+  }, [completionPulse]);
+
   useEffect(() => {
-    setRemaining(initialMinutes * 60 + initialSeconds);
+    return () => {
+      clearTimer();
+      clearCompletionFeedback();
+    };
+  }, [clearTimer, clearCompletionFeedback]);
+
+  useEffect(() => {
+    clearTimer();
+    clearCompletionFeedback();
+    completionHandledRef.current = false;
+    setRemaining(initialTotal);
     setIsRunning(false);
     setIsCompletionLoop(false);
-    // Reset animations
-    cancelAnimation(pulseOpacity);
-    cancelAnimation(borderPulseOpacity);
-    pulseOpacity.value = 0;
-    borderPulseOpacity.value = 1;
-  }, [initialMinutes, initialSeconds]);
+  }, [clearCompletionFeedback, clearTimer, initialTotal]);
 
-  // Triple haptic burst (like flow-timer)
-  const tripleHapticBurst = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  const tripleHapticBurst = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     completionTimeoutsRef.current.push(
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
+      setTimeout(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 180),
+      setTimeout(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 360)
     );
-    completionTimeoutsRef.current.push(
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 400)
+  }, []);
+
+  const handleComplete = useCallback(() => {
+    if (completionHandledRef.current) return;
+    completionHandledRef.current = true;
+    clearTimer();
+    setIsRunning(false);
+    setIsCompletionLoop(true);
+    onCompletionStateChange?.(true);
+    tripleHapticBurst();
+    completionPulse.value = withRepeat(
+      withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true
     );
-  };
+    completionHapticRef.current = setInterval(tripleHapticBurst, 3000);
+  }, [clearTimer, completionPulse, onCompletionStateChange, tripleHapticBurst]);
+
+  useEffect(() => {
+    if (!isRunning || remaining > 0) return;
+    handleComplete();
+  }, [handleComplete, isRunning, remaining]);
 
   const handleStart = () => {
-    if (isCompletionLoop) return;
-
+    if (isCompletionLoop || isRunning || initialTotal <= 0) return;
     if (remaining <= 0) {
-      // Reset and start
-      setRemaining(initialMinutes * 60 + initialSeconds);
+      completionHandledRef.current = false;
+      setRemaining(initialTotal);
     }
-
-    if (remaining <= 0 && initialMinutes * 60 + initialSeconds <= 0) return;
-
     setIsRunning(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    // The updater only counts down. Completion side effects live in the
-    // effect below — an updater can run during render, and handleComplete
-    // sets state on the parent (focus.tsx) too, which React forbids
-    // mid-render ("Cannot update a component while rendering another").
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     timerRef.current = setInterval(() => {
-      setRemaining((prev) => Math.max(0, prev - 1));
+      setRemaining((current) => Math.max(0, current - 1));
     }, 1000);
   };
 
-  // Completion detection — runs after commit, never during render
-  useEffect(() => {
-    if (!isRunning || remaining > 0) return;
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    handleComplete();
-  }, [remaining, isRunning]);
-
   const handlePause = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    clearTimer();
     setIsRunning(false);
-    Haptics.selectionAsync();
+    void Haptics.selectionAsync();
   };
 
   const handleReset = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    clearTimer();
+    clearCompletionFeedback();
+    completionHandledRef.current = false;
     setIsRunning(false);
     setIsCompletionLoop(false);
-    // Stop animations
-    cancelAnimation(pulseOpacity);
-    cancelAnimation(borderPulseOpacity);
-    pulseOpacity.value = 0;
-    borderPulseOpacity.value = 1;
-    // Stop haptic loop
-    if (completionHapticRef.current) {
-      clearInterval(completionHapticRef.current);
-      completionHapticRef.current = null;
-    }
-    completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
-    completionTimeoutsRef.current = [];
-    // Reset time
-    setRemaining(initialMinutes * 60 + initialSeconds);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const handleComplete = () => {
-    setIsRunning(false);
-    setIsCompletionLoop(true);
-
-    // Notify parent about completion state
-    onCompletionStateChange?.(true);
-
-    // Clear any previous timeouts
-    completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
-    completionTimeoutsRef.current = [];
-
-    // Strong triple haptic burst on completion
-    tripleHapticBurst();
-
-    // Pulse animation on container background
-    pulseOpacity.value = withRepeat(
-      withTiming(0.6, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true
-    );
-
-    // Border pulse animation
-    borderPulseOpacity.value = withRepeat(
-      withTiming(0.4, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true
-    );
-
-    // Repeating triple haptic every 3 seconds until user stops
-    if (completionHapticRef.current) clearInterval(completionHapticRef.current);
-    completionHapticRef.current = setInterval(() => {
-      tripleHapticBurst();
-    }, 3000);
-
-    // TODO: Play completion sound here when audio is added
-  };
-
-  const handleStop = () => {
-    setIsCompletionLoop(false);
-
-    // Notify parent about completion state
+    setRemaining(initialTotal);
     onCompletionStateChange?.(false);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
-    // Stop animations
-    cancelAnimation(pulseOpacity);
-    pulseOpacity.value = withTiming(0, { duration: 300, easing: Easing.inOut(Easing.sin) });
-    cancelAnimation(borderPulseOpacity);
-    borderPulseOpacity.value = 1;
-
-    // Stop haptic loop
-    if (completionHapticRef.current) {
-      clearInterval(completionHapticRef.current);
-      completionHapticRef.current = null;
-    }
-    completionTimeoutsRef.current.forEach((id) => clearTimeout(id));
-    completionTimeoutsRef.current = [];
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleStopCompletion = () => {
+    clearCompletionFeedback();
+    setIsCompletionLoop(false);
+    onCompletionStateChange?.(false);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onComplete?.();
   };
 
-  // Adjust time
   const adjustTime = (deltaMinutes: number) => {
     if (isRunning || isCompletionLoop) return;
-    setRemaining((prev) => Math.max(0, prev + deltaMinutes * 60));
+    completionHandledRef.current = false;
+    setRemaining((current) => Math.max(0, current + deltaMinutes * 60));
   };
 
   const formatTime = (totalSeconds: number) => {
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const buttonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withSpring(buttonScale.value) }],
+  const progress = initialTotal > 0 ? Math.min(1, Math.max(0, (initialTotal - remaining) / initialTotal)) : 0;
+  const progressWidth: DimensionValue = `${progress * 100}%`;
+  const actionStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: actionScale.value }],
   }));
-
-  // Animated pulse overlay
-  const pulseStyle = useAnimatedStyle(() => ({
-    opacity: pulseOpacity.value,
+  const completionStyle = useAnimatedStyle(() => ({
+    opacity: isCompletionLoop ? 0.12 + completionPulse.value * 0.16 : 0,
   }));
-
-  // Animated border pulse
-  const containerBorderStyle = useAnimatedStyle(() => {
-    const opacity = borderPulseOpacity.value;
-    return {
-      // Removed border styling - now a slot inside FocusCard
-      // Keep shadow glow for completion feedback
-      shadowColor: isCompletionLoop ? '#A855F7' : 'transparent',
-      shadowOpacity: isCompletionLoop ? opacity * 0.5 : 0,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 0 },
-    };
-  });
-
-  const isComplete = remaining <= 0 && !isRunning && !isCompletionLoop;
 
   return (
-    <AnimatedView
-      entering={FadeInDown.springify().damping(12)}
-      exiting={FadeOutDown.duration(200)}
-      style={[styles.container, containerBorderStyle]}
-    >
-      {/* Timer Header */}
-      <View style={styles.header}>
-        <Clock size={16} color={isCompletionLoop ? '#A855F7' : '#8B5CF6'} strokeWidth={2} />
-        <Text style={[styles.headerText, isCompletionLoop && styles.headerTextComplete]}>
+    <AnimatedView entering={FadeInDown.duration(260)} exiting={FadeOutDown.duration(180)} style={styles.container}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFillObject, styles.completionGlow, completionStyle]} />
+
+      <View style={styles.statusRow}>
+        <Text style={styles.statusLabel}>
           {isCompletionLoop ? t('timer.completed') : t('timer.title')}
         </Text>
+        {isCompletionLoop ? <Check size={16} color="#6EE7B7" strokeWidth={2.5} /> : null}
       </View>
 
-      {/* Time Display Row */}
-      <View style={styles.timeRow}>
-        {/* Decrease Button */}
-        <TouchableOpacity
-          style={[
-            styles.adjustButton,
-            (isRunning || isCompletionLoop) && styles.adjustButtonDisabled,
-          ]}
-          onPress={() => adjustTime(-1)}
-          disabled={isRunning || isCompletionLoop}
-        >
-          <Text
-            style={[
-              styles.adjustButtonText,
-              (isRunning || isCompletionLoop) && styles.adjustButtonTextDisabled,
-            ]}
-          >
-            −
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: progressWidth }]} />
+      </View>
 
-        {/* Time Display */}
-        <View
-          style={[
-            styles.timeDisplay,
-            isComplete && styles.timeDisplayComplete,
-            isCompletionLoop && styles.timeDisplayPulsing,
-          ]}
-        >
-          <Text
-            style={[
-              styles.timeText,
-              isComplete && styles.timeTextComplete,
-              isCompletionLoop && styles.timeTextPulsing,
-            ]}
+      <Text style={[styles.timeText, isCompletionLoop && styles.timeTextComplete]}>{formatTime(remaining)}</Text>
+
+      {isCompletionLoop ? (
+        <View style={styles.completionState}>
+          <Text style={styles.completionMessage}>{t('timer.tapToStop')}</Text>
+          <AnimatedTouchableOpacity
+            style={[styles.stopButton, actionStyle]}
+            onPress={handleStopCompletion}
+            onPressIn={() => {
+              actionScale.value = withSpring(0.96);
+            }}
+            onPressOut={() => {
+              actionScale.value = withSpring(1);
+            }}
           >
-            {formatTime(remaining)}
-          </Text>
+            <Square size={17} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.3} />
+            <Text style={styles.stopButtonText}>{t('timer.tapToStop')}</Text>
+          </AnimatedTouchableOpacity>
         </View>
+      ) : (
+        <>
+          <View style={styles.controls}>
+            <TouchableOpacity
+              style={[styles.iconButton, (isRunning || remaining <= 0) && styles.disabledControl]}
+              onPress={() => adjustTime(-1)}
+              disabled={isRunning || remaining <= 0}
+              accessibilityLabel="Decrease timer"
+            >
+              <Text style={styles.adjustText}>−</Text>
+            </TouchableOpacity>
 
-        {/* Increase Button */}
-        <TouchableOpacity
-          style={[
-            styles.adjustButton,
-            (isRunning || isCompletionLoop) && styles.adjustButtonDisabled,
-          ]}
-          onPress={() => adjustTime(1)}
-          disabled={isRunning || isCompletionLoop}
-        >
-          <Text
-            style={[
-              styles.adjustButtonText,
-              (isRunning || isCompletionLoop) && styles.adjustButtonTextDisabled,
-            ]}
-          >
-            +
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <AnimatedTouchableOpacity
+              style={[styles.mainButton, isRunning && styles.pauseButton, actionStyle]}
+              onPress={isRunning ? handlePause : handleStart}
+              onPressIn={() => {
+                actionScale.value = withSpring(0.95);
+              }}
+              onPressOut={() => {
+                actionScale.value = withSpring(1);
+              }}
+              disabled={initialTotal <= 0}
+              accessibilityRole="button"
+            >
+              {isRunning ? (
+                <Pause size={20} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.4} />
+              ) : (
+                <Play size={20} color="#FFFFFF" fill="#FFFFFF" strokeWidth={2.4} />
+              )}
+              <Text style={styles.mainButtonText}>
+                {isRunning ? t('timer.pause') : t('timer.start')}
+              </Text>
+            </AnimatedTouchableOpacity>
 
-      {/* Control Buttons */}
-      <View style={styles.controls}>
-        {/* Reset Button - hidden during completion */}
-        {!isCompletionLoop && (
-          <TouchableOpacity style={styles.controlButton} onPress={handleReset}>
-            <RotateCcw size={18} color="#A1A1AA" strokeWidth={2} />
+            <TouchableOpacity
+              style={[styles.iconButton, (isRunning || remaining <= 0) && styles.disabledControl]}
+              onPress={() => adjustTime(1)}
+              disabled={isRunning || remaining <= 0}
+              accessibilityLabel="Increase timer"
+            >
+              <Text style={styles.adjustText}>+</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
+            <RotateCcw size={14} color="rgba(255,255,255,0.48)" strokeWidth={2} />
+            <Text style={styles.resetText}>{t('timer.reset')}</Text>
           </TouchableOpacity>
-        )}
-
-        {/* Main Action Button */}
-        <AnimatedTouchableOpacity
-          style={[
-            styles.playButton,
-            isComplete && styles.playButtonComplete,
-            isCompletionLoop && styles.stopButton,
-            buttonStyle,
-          ]}
-          onPressIn={() => {
-            buttonScale.value = 0.95;
-          }}
-          onPressOut={() => {
-            buttonScale.value = 1;
-          }}
-          onPress={isCompletionLoop ? handleStop : isRunning ? handlePause : handleStart}
-        >
-          {isCompletionLoop ? (
-            <Square size={20} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
-          ) : isRunning ? (
-            <Pause size={20} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
-          ) : (
-            <Play size={20} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
-          )}
-        </AnimatedTouchableOpacity>
-
-        {/* Spacer for symmetry - hidden during completion */}
-        {!isCompletionLoop && <View style={styles.controlButton} />}
-      </View>
-
-      {/* Stop hint text during completion */}
-      {isCompletionLoop && <Text style={styles.stopHint}>{t('timer.tapToStop')}</Text>}
+        </>
+      )}
     </AnimatedView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    // Removed card styling - now a slot inside FocusCard
-    overflow: 'hidden',
     position: 'relative',
+    overflow: 'hidden',
+    alignItems: 'center',
+    paddingTop: 2,
   },
-  header: {
+  completionGlow: {
+    borderRadius: 20,
+    backgroundColor: '#34D399',
+  },
+  statusRow: {
+    minHeight: 22,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginBottom: 12,
+    gap: 7,
   },
-  headerText: {
-    color: '#8B5CF6',
-    fontSize: 13,
-    fontWeight: '600',
+  statusLabel: {
+    color: 'rgba(255,255,255,0.52)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    letterSpacing: 1,
   },
-  headerTextComplete: {
-    color: '#A855F7',
+  progressTrack: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: 12,
   },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    marginBottom: 16,
-  },
-  adjustButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  adjustButtonDisabled: {
-    opacity: 0.3,
-  },
-  adjustButtonText: {
-    color: '#E5E5E5',
-    fontSize: 20,
-    fontWeight: '500',
-  },
-  adjustButtonTextDisabled: {
-    color: 'rgba(229, 229, 229, 0.3)',
-  },
-  timeDisplay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  timeDisplayComplete: {
-    backgroundColor: 'rgba(168, 85, 247, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.3)',
-  },
-  timeDisplayPulsing: {
-    backgroundColor: 'rgba(168, 85, 247, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.5)',
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: '#A78BFA',
   },
   timeText: {
-    color: '#E5E5E5',
-    fontSize: 32,
+    color: '#FFFFFF',
+    fontSize: 48,
+    lineHeight: 58,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
     letterSpacing: 2,
+    marginTop: 18,
   },
   timeTextComplete: {
-    color: '#A855F7',
-  },
-  timeTextPulsing: {
-    color: '#A855F7',
+    color: '#6EE7B7',
   },
   controls: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  disabledControl: {
+    opacity: 0.3,
+  },
+  adjustText: {
+    color: '#E4E4E7',
+    fontSize: 25,
+    lineHeight: 28,
+    fontWeight: '400',
+  },
+  mainButton: {
+    minWidth: 126,
+    minHeight: 46,
+    paddingHorizontal: 18,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
-  },
-  controlButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  playButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#8B5CF6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#8B5CF6',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  playButtonComplete: {
-    backgroundColor: '#A855F7',
-    shadowColor: '#A855F7',
-  },
-  stopButton: {
+    gap: 8,
     backgroundColor: '#7C3AED',
-    shadowColor: '#7C3AED',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
   },
-  stopHint: {
-    color: '#A1A1AA',
+  pauseButton: {
+    backgroundColor: '#6D28D9',
+  },
+  mainButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 13,
+    padding: 5,
+  },
+  resetText: {
+    color: 'rgba(255,255,255,0.48)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  completionState: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  completionMessage: {
+    color: 'rgba(255,255,255,0.58)',
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 12,
+    marginBottom: 10,
+  },
+  stopButton: {
+    minHeight: 44,
+    paddingHorizontal: 18,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#059669',
+  },
+  stopButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

@@ -1,21 +1,51 @@
 import React, { createContext, useContext, useState, useRef, useCallback, ReactNode } from 'react';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import type { AVPlaybackSource } from 'expo-av';
 
 // Audio tracks available
 export interface AudioTrack {
   /** Also the key under audio.tracks for the track's localized name and description. */
   id: string;
   color: string;
-  // In a real app, this would be a require() or remote URL
-  // For now we'll use placeholder - audio files need to be added to assets
-  source?: any;
+  source: AVPlaybackSource;
 }
 
 export const AUDIO_TRACKS: AudioTrack[] = [
-  { id: 'brown_noise', color: '#8B4513' },
-  { id: 'white_noise', color: '#E5E5E5' },
-  { id: 'rain', color: '#60A5FA' },
-  { id: 'forest', color: '#34D399' },
+  {
+    id: 'deep_brown',
+    color: '#A16207',
+    source: require('../../assets/audio/continious-deepbrown.m4a'),
+  },
+  {
+    id: 'infinite_drift',
+    color: '#8B5CF6',
+    source: require('../../assets/audio/Infinite Drift.m4a'),
+  },
+  {
+    id: 'rushing_river',
+    color: '#60A5FA',
+    source: require('../../assets/audio/Rushing River Dreams.m4a'),
+  },
+  {
+    id: 'theta_focus',
+    color: '#34D399',
+    source: require('../../assets/audio/bineural-thetafrq.m4a'),
+  },
+  {
+    id: 'slow_binaural',
+    color: '#F472B6',
+    source: require('../../assets/audio/slow-bineural-6hz.m4a'),
+  },
+  {
+    id: 'ambient_pulse',
+    color: '#38BDF8',
+    source: require('../../assets/audio/ambient-60bpm-bineural.m4a'),
+  },
+  {
+    id: 'modern_classical',
+    color: '#C4B5FD',
+    source: require('../../assets/audio/modernclasical.m4a'),
+  },
 ];
 
 interface AudioContextType {
@@ -57,10 +87,11 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
     setupAudio();
 
-    // Cleanup on unmount
+      // Cleanup on unmount
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync();
+        void soundRef.current.unloadAsync();
+        soundRef.current = null;
       }
     };
   }, []);
@@ -97,20 +128,20 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           soundRef.current = null;
         }
 
-        // For now, we'll just set state since we don't have actual audio files
-        // In production, you would load the audio file here:
-        // const { sound } = await Audio.Sound.createAsync(track.source, {
-        //   isLooping: true,
-        //   volume
-        // });
-        // soundRef.current = sound;
-        // await sound.playAsync();
+        const { sound } = await Audio.Sound.createAsync(track.source, {
+          shouldPlay: true,
+          isLooping: true,
+          volume,
+          progressUpdateIntervalMillis: 1000,
+        });
 
+        soundRef.current = sound;
         setCurrentTrack(track);
         setIsPlaying(true);
-        console.log('Playing:', track.id);
       } catch (error) {
-        console.error('Error playing audio:', error);
+        setIsPlaying(false);
+        setCurrentTrack(null);
+        console.warn('Error playing audio:', error);
       } finally {
         setIsLoading(false);
       }
@@ -131,27 +162,31 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const resume = useCallback(async () => {
     try {
-      if (soundRef.current) {
-        await soundRef.current.playAsync();
+      if (!soundRef.current || !currentTrack) {
+        await play(currentTrack?.id);
+        return;
       }
+      await soundRef.current.playAsync();
       setIsPlaying(true);
     } catch (error) {
-      console.error('Error resuming audio:', error);
+      setIsPlaying(false);
+      console.warn('Error resuming audio:', error);
     }
-  }, []);
+  }, [currentTrack, play]);
 
   const stop = useCallback(async () => {
+    const sound = soundRef.current;
+    soundRef.current = null;
+    setIsPlaying(false);
+    setCurrentTrack(null);
+
+    if (!sound) return;
+
     try {
-      if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-      setIsPlaying(false);
-      // Clearing the track dismisses the floating audio button too
-      setCurrentTrack(null);
+      await sound.stopAsync();
+      await sound.unloadAsync();
     } catch (error) {
-      console.error('Error stopping audio:', error);
+      console.warn('Error stopping audio:', error);
     }
   }, []);
 

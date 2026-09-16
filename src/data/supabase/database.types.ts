@@ -85,58 +85,79 @@ export type Database = {
           ai_latency_ms: number | null
           ai_model: string | null
           breakdown_source: string | null
+          cached_token_usage: number | null
           client_ip_hash: string | null
+          completion_token_usage: number | null
           created_at: string
           fallback_reason: string | null
           feedback_at: string | null
           feedback_score: string | null
+          finish_reason: string | null
           guest_id: string | null
           id: string
           input_hash: string
+          language_match: boolean | null
           latency_ms: number | null
+          prompt_token_usage: number | null
           prompt_version: string | null
           request_id: string | null
+          response_language: string | null
           steps: Json | null
           token_usage: number | null
           user_id: string | null
+          validation_issues: Json | null
         }
         Insert: {
           ai_latency_ms?: number | null
           ai_model?: string | null
           breakdown_source?: string | null
+          cached_token_usage?: number | null
           client_ip_hash?: string | null
+          completion_token_usage?: number | null
           created_at?: string
           fallback_reason?: string | null
           feedback_at?: string | null
           feedback_score?: string | null
+          finish_reason?: string | null
           guest_id?: string | null
           id?: string
           input_hash: string
+          language_match?: boolean | null
           latency_ms?: number | null
+          prompt_token_usage?: number | null
           prompt_version?: string | null
           request_id?: string | null
+          response_language?: string | null
           steps?: Json | null
           token_usage?: number | null
           user_id?: string | null
+          validation_issues?: Json | null
         }
         Update: {
           ai_latency_ms?: number | null
           ai_model?: string | null
           breakdown_source?: string | null
+          cached_token_usage?: number | null
           client_ip_hash?: string | null
+          completion_token_usage?: number | null
           created_at?: string
           fallback_reason?: string | null
           feedback_at?: string | null
           feedback_score?: string | null
+          finish_reason?: string | null
           guest_id?: string | null
           id?: string
           input_hash?: string
+          language_match?: boolean | null
           latency_ms?: number | null
+          prompt_token_usage?: number | null
           prompt_version?: string | null
           request_id?: string | null
+          response_language?: string | null
           steps?: Json | null
           token_usage?: number | null
           user_id?: string | null
+          validation_issues?: Json | null
         }
         Relationships: []
       }

@@ -283,10 +283,13 @@
     "sectionTitle": "Background sounds",
     "sectionSubtitle": "Pick a sound to deepen your focus",
     "tracks": {
-      "brown_noise": { "name": "Brown noise", "description": "Deep focus" },
-      "white_noise": { "name": "White noise", "description": "Concentration" },
-      "rain": { "name": "Rain", "description": "Relax" },
-      "forest": { "name": "Forest", "description": "Nature" }
+      "deep_brown": { "name": "Deep brown", "description": "Low, steady focus" },
+      "infinite_drift": { "name": "Infinite drift", "description": "Soft ambient space" },
+      "rushing_river": { "name": "Rushing river", "description": "Flowing water" },
+      "theta_focus": { "name": "Theta focus", "description": "Slow, spacious pulse" },
+      "slow_binaural": { "name": "Slow binaural", "description": "Quiet deep focus" },
+      "ambient_pulse": { "name": "Ambient pulse", "description": "Steady focus rhythm" },
+      "modern_classical": { "name": "Modern classical", "description": "Calm instrumental focus" }
     }
   },
   "stats": {

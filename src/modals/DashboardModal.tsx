@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Dimensions,
   ScrollView,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -17,9 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../features/auth/controller/AuthContext';
 
-const { width } = Dimensions.get('window');
 const CARD_GAP = 12;
-const CARD_SIZE = (width - 40 - CARD_GAP) / 2;
 
 interface DashboardModalProps {
   visible: boolean;
@@ -65,6 +62,7 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const { displayName, user } = useAuth();
+
   // Screens that do not pass a name still show the signed-in user's handle.
   const name = userName ?? displayName ?? user?.email ?? t('dashboard.guest');
 
@@ -270,10 +268,10 @@ const styles = StyleSheet.create({
     gap: CARD_GAP,
   },
   actionCard: {
-    width: CARD_SIZE,
-    aspectRatio: 1,
+    width: '48%',
+    minHeight: 140,
     borderRadius: 24,
-    padding: 20,
+    padding: 16,
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
