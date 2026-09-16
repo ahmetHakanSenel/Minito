@@ -23,6 +23,17 @@ Uygulama React Native ile yazıldı ve Supabase üzerinde çalışıyor. Bu belg
 tarafını anlatıyor: sistem arıza anında nasıl güvenli kalıyor, her iddia nasıl test ediliyor ve
 canlıda nasıl işletiliyor.
 
+### Bir dakikada ürün
+
+1. **Gözünüzde büyüyeni yazın.** Örneğin "pazara kadar mutfağı toplamam lazım".
+2. **Saçma derecede küçük başlayan bir plan alın.** Sizi anladığını gösteren bir cümle, birkaç
+   saniyelik bir ilk hareket ve gerçekçi süreleri olan kısa adımlar.
+3. **Her seferinde tek adım.** Odak ekranında yalnızca bir adım görünür; yanında sayaç, isteğe
+   bağlı ortam sesi ve dokunsal geri bildirim vardır. Her adım, bırakmanın da sorun olmadığını
+   açıkça söyleyerek biter.
+4. **Sonra kaldığınız yerden devam edin.** Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında
+   senkronize olur ve çevrimdışıyken de çalışır.
+
 <p align="center">
   <img src="assets/numbers.svg" alt="233 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, yüzde 99 erişilebilirlik hedefi, 6,5 sn p95 model gecikmesi, 23 modellenmiş tehdit, 0 lint uyarısı" width="100%">
 </p>
@@ -104,8 +115,8 @@ bulunur:
 Kullanıcı bir planı tek dokunuşla puanlayabilir. Puan, yalnızca çağıranın kendi satırına yazabilen
 bir `SECURITY DEFINER` fonksiyonundan geçer.
 
-**Çevrimdışı değerlendirme.** `npm run eval:ai`, sabit 20 Türkçe ve İngilizce görevi gerçek hattan
-geçirir. Kayıtlı `gpt-4o-mini` temel ölçümü:
+**Çevrimdışı değerlendirme.** Sabit 20 Türkçe ve İngilizce görev gerçek hattan geçirilir; böylece
+bir istem ya da model değişikliği ölçümle değerlendirilir. Kayıtlı `gpt-4o-mini` temel ölçümü:
 
 - 20/20 ilk denemede geçerli; 20/20 doğru dilde.
 - Model gecikmesi: p50 3,5 sn, p95 6,5 sn.
@@ -275,24 +286,31 @@ konuşur.
 | Operasyon | Yapılandırılmış JSON günlükleri, SQL ile SLO göstergeleri ve hata bütçesi, `ops-alerts`, Sentry (yalnızca anonim kimlikler) |
 | CI | GitHub Actions: uygulama, Edge Functions, tip sapması denetimli veritabanı, gitleaks; Dependabot |
 
-## Başlarken
+<details>
+<summary><b>Proje yapısı</b></summary>
 
-```bash
-npm install
-cp .env.example .env    # Supabase URL'si ve anon anahtarı
-npm start
+```
+app/                              Expo Router ekranları; her biri kendi hata sınırını dışa aktarır
+src/
+  data/                           Supabase istemcisi, şifreli oturum deposu, giriş sağlayıcıları
+  repositories/                   oturum, görevler, geri bildirim, sağlık
+  features/planner/               çevrimdışı öncelikli senkronizasyon: model, motor, zamanlayıcı, depolama
+  features/                       oturum, görevler, sağlık, ayarlar
+  context/                        ses (expo-audio) ve planlayıcı sağlayıcısı
+  lib/                            API istemcisi, i18n (EN/TR), dokunsal geri bildirim, izleme
+supabase/
+  functions/_shared/              HTTP ve kimlik doğrulama yardımcıları
+  functions/break-task/           işleyici, yapay zekâ hattı, sağlayıcılar, denetim
+  functions/ops-alerts/           SLO kuralları ve bildirim geçişleri
+  functions/delete-user/          silinme hakkı
+  functions/export-user-data/     erişim hakkı
+  migrations/                     001–017
+  tests/                          veritabanı testleri ve Supabase ortamı
+scripts/                          değerlendirme düzeneği, marka ve README görselleri
+docs/                             RUNBOOK, THREAT_MODEL, operasyon SQL'i, değerlendirme
 ```
 
-Arka uç tanımlı değilse uygulama, oturumu kapalı bir çevrimdışı modda açılır. Arka uç kurulumu,
-giriş sağlayıcıları ve zamanlanmış işler [`SETUP.tr.md`](SETUP.tr.md) içinde.
-
-| Komut | Ne yapar |
-| ----- | -------- |
-| `npm test` · `npm run test:edge` · `npm run test:db` | Üç test paketi |
-| `npm run typecheck` · `lint` · `format:check` | Statik kontroller |
-| `npm run gen:types` | Veritabanı tiplerini migration'lardan yeniden üretir |
-| `npm run eval:ai` | Yapay zekâ hattının çevrimdışı değerlendirmesi |
-| `npm run readme:assets` | Bu belgedeki görselleri koddan yeniden üretir |
+</details>
 
 ## Bilinen sınırlamalar
 
