@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/hero.svg" alt="Minito: bunaltan bir görev, gülünç derecede kolay bir ilk adıma dönüşür" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-tr-dark.svg">
+    <img src="assets/hero-tr-light.svg" alt="Minito: bunaltan bir görev, gülünç derecede kolay bir ilk adıma dönüşür" width="100%">
+  </picture>
 </p>
 
 <p align="center">
@@ -35,7 +38,10 @@ canlıda nasıl işletiliyor.
    senkronize olur ve çevrimdışıyken de çalışır.
 
 <p align="center">
-  <img src="assets/numbers.svg" alt="233 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, yüzde 99 erişilebilirlik hedefi, 6,5 sn p95 model gecikmesi, 23 modellenmiş tehdit, 0 lint uyarısı" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/numbers-tr-dark.svg">
+    <img src="assets/numbers-tr-light.svg" alt="233 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, yüzde 99 erişilebilirlik hedefi, 6,5 sn p95 model gecikmesi, 23 modellenmiş tehdit, 0 lint uyarısı" width="100%">
+  </picture>
 </p>
 
 ## İnceleyenler için: nereye bakmalı
@@ -55,30 +61,12 @@ canlıda nasıl işletiliyor.
 
 ## Mimari
 
-```mermaid
-flowchart LR
-  subgraph Device["Mobil uygulama · Expo / React Native"]
-    direction TB
-    UI["Ekranlar"] --> CTRL["Denetleyiciler<br/>oturum · planlayıcı · görevler"]
-    CTRL --> REPO["Depolar<br/>tipli hata kodları"]
-    REPO --> DATA["Veri kaynakları"]
-    CTRL --> PSYNC["Planlayıcı senkronizasyonu<br/>bekleyen kuyruk · geri çekilme"]
-    PSYNC --> LOCAL[("Hesaba özel durum<br/>cihaz diskinde")]
-    DATA --> SESSION[("Oturum<br/>AES-256 şifreli")]
-    SESSION -. "her yazmada yeni anahtar" .-> KEYCHAIN[("Keychain / Keystore")]
-  end
-
-  DATA -- "PostgREST + JWT" --> PG[("Postgres<br/>her tabloda RLS")]
-  PSYNC -- "upsert · imleçten sonrasını çek" --> PG
-  DATA -- "POST + JWT" --> EF["break-task<br/>Edge Function"]
-  EF -- "doğrula" --> AUTH["Supabase Auth"]
-  EF -- "atomik kota · telemetri" --> PG
-  EF --> MOD["OpenAI denetimi"]
-  EF -- "çitli istem · JSON modu" --> AI["OpenAI / Gemini"]
-  CRON["pg_cron · 15 dakikada bir"] --> OPS["ops-alerts<br/>Edge Function"]
-  OPS -- "SLO anlık görüntüsü" --> PG
-  OPS -. "yalnızca ayarlıysa" .-> HOOK["Discord / Slack"]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-tr-dark.svg">
+    <img src="assets/architecture-tr-light.svg" alt="Sistem mimarisi: Expo uygulaması, sağlamlaştırılmış Supabase arka ucu ve model sağlayıcıları" width="100%">
+  </picture>
+</p>
 
 - **Uygulama katmanları.** Veri kaynakları, depolar, denetleyiciler ve arayüz ayrı işler yapar.
   Tipli hatalar her katmandan geçer; bu yüzden arka uç eksikse uygulama çökmez, giriş ekranı
@@ -91,7 +79,10 @@ flowchart LR
 ## Yapay zekâ hattı
 
 <p align="center">
-  <img src="assets/pipeline.svg" alt="break-task hattı: giriş kontrolleri, denetim ve kota, çitli istem, üretim, doğrulama, tek onarım, deterministik yedek" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/pipeline-tr-dark.svg">
+    <img src="assets/pipeline-tr-light.svg" alt="break-task hattı: giriş kontrolleri, denetim ve kota, çitli istem, üretim, doğrulama, tek onarım, deterministik yedek" width="100%">
+  </picture>
 </p>
 
 | Aşama | Ne olur |
@@ -160,21 +151,12 @@ Hedeflerin nasıl seçildiği, günlük olayları kataloğu ve yukarıdaki her s
 
 ## Çevrimdışı öncelikli planlayıcı senkronizasyonu
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant UI as Planlayıcı ekranı
-  participant Local as Cihazdaki durum
-  participant Engine as Senkronizasyon motoru
-  participant DB as Postgres
-  UI->>Local: Düzenle (anında, çevrimdışı da çalışır)
-  Local-->>UI: Cihazdaki durumdan yeniden çiz
-  Engine->>DB: Bekleyen satırları gönder (önce projeler, sonra görevler; 100'lük gruplar)
-  Note over DB: Tetikleyici, satırdan eski yazmaları atlar,<br/>cihaz saatini sınırlar, updated_at'i sunucu saatiyle yazar
-  Engine->>DB: İmleç − 60 sn'den bu yana değişenleri çek
-  DB-->>Engine: Satırlar ve silme işaretleri
-  Engine->>Local: Birleştir; bekleyen yerel düzenlemeler önceliklidir
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/sync-tr-dark.svg">
+    <img src="assets/sync-tr-light.svg" alt="Çevrimdışı öncelikli planlayıcı senkronizasyonu: yerel düzenleme, gönderilen satırlar, sunucu koruması ve örtüşen çekme" width="100%">
+  </picture>
+</p>
 
 | Garanti | Nasıl |
 | ------- | ----- |

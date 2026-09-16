@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/assets/hero.svg" alt="Minito: an overwhelming task, turned into a laughably easy first step" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-en-dark.svg">
+    <img src="docs/assets/hero-en-light.svg" alt="Minito: an overwhelming task, turned into a laughably easy first step" width="100%">
+  </picture>
 </p>
 
 <p align="center">
@@ -33,7 +36,10 @@ system fails safely, how every claim is tested, and how it is operated.
    working offline.
 
 <p align="center">
-  <img src="docs/assets/numbers.svg" alt="233 automated tests, 20 of 60 parallel calls granted under a quota of 20, 99% availability SLO, 6.5 s p95 model latency, 23 threats modeled, 0 lint warnings" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/numbers-en-dark.svg">
+    <img src="docs/assets/numbers-en-light.svg" alt="233 automated tests, 20 of 60 parallel calls granted under a quota of 20, 99% availability SLO, 6.5 s p95 model latency, 23 threats modeled, 0 lint warnings" width="100%">
+  </picture>
 </p>
 
 ## For reviewers: where to look
@@ -53,30 +59,12 @@ system fails safely, how every claim is tested, and how it is operated.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  subgraph Device["Mobile app · Expo / React Native"]
-    direction TB
-    UI["Screens"] --> CTRL["Controllers<br/>auth · planner · tasks"]
-    CTRL --> REPO["Repositories<br/>typed error codes"]
-    REPO --> DATA["Data sources"]
-    CTRL --> PSYNC["Planner sync engine<br/>pending queue · backoff"]
-    PSYNC --> LOCAL[("Per-account state<br/>on disk")]
-    DATA --> SESSION[("Session<br/>AES-256 ciphertext")]
-    SESSION -. "key per write" .-> KEYCHAIN[("Keychain / Keystore")]
-  end
-
-  DATA -- "PostgREST + JWT" --> PG[("Postgres<br/>RLS on every table")]
-  PSYNC -- "upsert · pull since cursor" --> PG
-  DATA -- "POST + JWT" --> EF["break-task<br/>Edge Function"]
-  EF -- "verify" --> AUTH["Supabase Auth"]
-  EF -- "atomic quota · telemetry" --> PG
-  EF --> MOD["OpenAI moderation"]
-  EF -- "fenced prompt · JSON mode" --> AI["OpenAI / Gemini"]
-  CRON["pg_cron · every 15 min"] --> OPS["ops-alerts<br/>Edge Function"]
-  OPS -- "SLO snapshot" --> PG
-  OPS -. "only if configured" .-> HOOK["Discord / Slack"]
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-en-dark.svg">
+    <img src="docs/assets/architecture-en-light.svg" alt="System architecture: the Expo app, a hardened Supabase backend and the model providers" width="100%">
+  </picture>
+</p>
 
 - **App layers.** Data sources, repositories, controllers and UI each have their own job. Typed
   errors cross every boundary, so a missing backend shows up as an explanation on the login
@@ -89,7 +77,10 @@ flowchart LR
 ## The AI pipeline
 
 <p align="center">
-  <img src="docs/assets/pipeline.svg" alt="break-task pipeline: gatekeeping, moderation and quota, fenced prompt, generate, validate, one repair, deterministic fallback" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pipeline-en-dark.svg">
+    <img src="docs/assets/pipeline-en-light.svg" alt="break-task pipeline: gatekeeping, moderation and quota, fenced prompt, generate, validate, one repair, deterministic fallback" width="100%">
+  </picture>
 </p>
 
 | Stage | What happens |
@@ -157,21 +148,12 @@ playbook for every row above.
 
 ## Offline-first planner sync
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant UI as Planner screen
-  participant Local as Device state
-  participant Engine as Sync engine
-  participant DB as Postgres
-  UI->>Local: Edit (instant, works offline)
-  Local-->>UI: Re-render from local state
-  Engine->>DB: Upsert pending rows (projects, then tasks; 100 per batch)
-  Note over DB: Trigger skips writes older than the row,<br/>clamps device clocks, stamps updated_at
-  Engine->>DB: Pull rows changed since cursor − 60 s
-  DB-->>Engine: Rows and tombstones
-  Engine->>Local: Merge; pending local edits win
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sync-en-dark.svg">
+    <img src="docs/assets/sync-en-light.svg" alt="Offline-first planner sync: local edits, pushed rows, a server-side guard and an overlapping pull" width="100%">
+  </picture>
+</p>
 
 | Guarantee | How |
 | --------- | --- |
