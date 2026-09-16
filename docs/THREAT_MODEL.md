@@ -49,6 +49,10 @@ data. Its reply is validated as untrusted input on the server and again in the a
 | T17 | **Harmful content** | OpenAI moderation, with safety ranked above quota. A deployment without a moderation key refuses to serve unless it opts out explicitly | `handler.test.ts`, `moderation.test.ts` |
 | T18 | **Leaked credentials in the repository** | gitleaks scans the full history in CI. Known placeholder values are allowlisted by fingerprint | CI `secrets` job |
 | T19 | **Keeping data without a purpose** | IP hashes and guest ids were dropped once nothing used them. Telemetry has a 90-day retention job. Export and deletion cover every owned row | `database.test.mjs`: dropped columns and cascade tests |
+| T20 | **Anyone triggering or probing the alert function** | It requires its own secret, compared in constant time, and returns only rule names. The snapshot function and the alert state are closed to clients | `ops-alerts/handler.test.ts`, `database.test.mjs` |
+| T21 | **Attaching a planner task to someone else's project** | A composite foreign key `(project_id, user_id)` on top of RLS | `database.test.mjs`. Replacing the composite key with a plain one makes the test fail (checked by hand) |
+| T22 | **Overwriting another user's planner row with an upsert** | Upserts are subject to the update policy on the existing row | `database.test.mjs` |
+| T23 | **A stale or badly clocked device overwriting newer edits** | A trigger skips older writes and clamps device clocks to server time plus one minute | `database.test.mjs` |
 
 ## Accepted risks
 
@@ -62,4 +66,5 @@ These are known, deliberate and documented. Each has a trigger for when it shoul
 | **AES-CTR without an integrity tag** | It protects confidentiality. An attacker who can already write the app's private storage has more direct attacks available | The platform offers authenticated encryption for this pattern |
 | **No nonce on Apple ID tokens** | Tokens are short-lived and bound to the app's client ID | Apple sign-in ships to production (iOS is not release-configured yet) |
 | **Plans are kept in telemetry** | Judging a prompt version means reading what it produced. The rows are closed to clients, exported on request, deleted with the account, and expire after 90 days | A plan could identify a person more than its task hash can |
+| **Last write wins in the planner** | Concurrent edits to the same row from two devices resolve by edit time, not by merging fields. A planner row is a title or a checkbox, so a merge would not add much | Planner items gain richer fields |
 | **Moderation needs OpenAI even with Gemini** | One moderation implementation, applied whichever model writes the plan | A second provider's moderation is needed |

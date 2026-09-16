@@ -51,6 +51,7 @@ npx supabase secrets set OPENAI_API_KEY=sk-...
 | `OPENAI_MODEL` | Hayır | Varsayılanı `gpt-4o-mini` |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini ile | `GEMINI_MODEL` varsayılanı `gemini-2.0-flash` |
 | `ALLOW_UNMODERATED` | Hayır | `true` ise istekler denetimsiz karşılanır. Bu değer yoksa OpenAI anahtarı olmayan kurulum `503 MOD_DOWN` döner |
+| `OPS_ALERTS_SECRET`, `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_FORMAT` | Hayır | Operasyon uyarıları; webhook tanımlanmadıkça kapalıdır. Bkz. [RUNBOOK.md](./RUNBOOK.md#alert-delivery) |
 
 `SUPABASE_URL` ve `SUPABASE_SERVICE_ROLE_KEY` platform tarafından sağlanır.
 
@@ -60,6 +61,8 @@ Fonksiyonları yayına alın:
 npx supabase functions deploy break-task
 npx supabase functions deploy delete-user
 npx supabase functions deploy export-user-data
+# İsteğe bağlı: operasyon uyarıları (bkz. RUNBOOK.md)
+npx supabase functions deploy ops-alerts --no-verify-jwt
 ```
 
 ### Var olan bir projeyi 014 sonrasına taşımak
@@ -105,6 +108,7 @@ Saklama süresi ve kota temizliği düz SQL fonksiyonlarıdır. `pg_cron` eklent
 ```sql
 SELECT cron.schedule('cleanup-old-tasks', '0 3 * * *', 'SELECT public.cleanup_old_tasks();');
 SELECT cron.schedule('cleanup-rate-limits', '17 * * * *', 'SELECT public.cleanup_rate_limits();');
+SELECT cron.schedule('cleanup-planner-tombstones', '40 3 * * *', 'SELECT public.cleanup_planner_tombstones();');
 ```
 
 ## 5. Kurulumu doğrulama

@@ -74,17 +74,72 @@ Every server log line is one JSON object with `level` and `event`. `break-task` 
 | `break_task.content_flagged` | info | Moderation flagged the input | None; the app shows its support screen |
 | `break_task.telemetry_retry` / `telemetry_lost` | warn / error | The telemetry row could not be written | [Telemetry gaps](#telemetry-gaps) |
 | `break_task.unhandled_error` | error | A bug. The user got a generic `500` | Reproduce from `error`, add a handler test |
+| `ops_alerts.evaluated` | info / warn | One alert run; `firing` lists the rules, `notified` what was sent | None |
+| `ops_alerts.delivery_disabled` | info | Rules were evaluated, but no webhook is configured | None, unless delivery is wanted |
+| `ops_alerts.failed` | error | The snapshot, the state or the webhook failed; the next run retries | Check `error` |
 
-### Suggested alerts
+### Alerts
 
-| Condition | Severity |
-| --------- | -------- |
-| Q2 `available` < 0.95 for 2 consecutive hours | Page |
-| Q3 `budget_remaining` < 0 | Ticket; freeze prompt and model changes |
-| Any `misconfigured`, `provider_unconfigured` or `moderation_unconfigured` | Page |
-| `quota_check_failed` more than 10 in 10 minutes | Page: spend is unguarded |
-| Q2 `quality` < 0.9 for 3 hours | Ticket |
-| Q5 `estimated_usd` for today > 3 × the 7-day average | Ticket |
+The `ops-alerts` function evaluates these rules against `ops_health_snapshot()`. The thresholds
+live in [`rules.ts`](../supabase/functions/ops-alerts/rules.ts), and Deno tests pin them down.
+
+| Rule | Fires when | Minimum sample | Severity |
+| ---- | ---------- | -------------- | -------- |
+| `availability` | Under 95% of requests answered with a plan, last hour | 20 requests | Page |
+| `quality` | Under 90% of plans came from the model, last hour | 20 plans | Ticket |
+| `latency` | Under 90% of plans arrived within 12 s, last hour | 20 plans | Ticket |
+| `error_budget` | More failures than the 99% SLO allows, last 28 days | 100 requests | Ticket; freeze prompt and model changes |
+| `spend` | Today's tokens exceed 3 × the 7-day daily average | 50 000 tokens | Ticket |
+
+The minimum samples keep a quiet hour from paging anyone: at three requests, one failure reads
+as 67% availability.
+
+A rule notifies a person three times: when it starts firing, every 6 hours while it keeps firing,
+and when it resolves. The state lives in `ops_alert_state`, and it is saved only after the message
+was delivered. If delivery fails, the next run tries again.
+
+Log-based conditions are not covered by `ops-alerts`. Watch for them in the log explorer:
+
+- Any `misconfigured`, `provider_unconfigured` or `moderation_unconfigured` event (page).
+- More than 10 `quota_check_failed` events in 10 minutes (page: spend is unguarded).
+
+### Alert delivery
+
+Delivery is **off by default**: without `ALERT_WEBHOOK_URL` the function only evaluates the rules
+and logs `ops_alerts.delivery_disabled`. To switch it on:
+
+1. Create a webhook (a Discord channel webhook, or a Slack incoming webhook) and set the secrets:
+
+   ```bash
+   npx supabase secrets set OPS_ALERTS_SECRET="$(openssl rand -hex 32)"
+   npx supabase secrets set ALERT_WEBHOOK_URL=https://discord.com/api/webhooks/...
+   npx supabase secrets set ALERT_WEBHOOK_FORMAT=discord   # or slack
+   npx supabase functions deploy ops-alerts --no-verify-jwt
+   ```
+
+   `--no-verify-jwt` is correct here: the caller is a scheduler, and the function checks
+   `OPS_ALERTS_SECRET` itself, in constant time.
+
+2. Schedule it every 15 minutes with `pg_cron` and `pg_net`, keeping the URL and the secret in
+   Vault:
+
+   ```sql
+   SELECT vault.create_secret('https://<project-ref>.supabase.co/functions/v1/ops-alerts', 'ops_alerts_url');
+   SELECT vault.create_secret('<OPS_ALERTS_SECRET>', 'ops_alerts_secret');
+
+   SELECT cron.schedule('ops-alerts', '*/15 * * * *', $$
+     SELECT net.http_post(
+       url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'ops_alerts_url'),
+       headers := jsonb_build_object(
+         'Content-Type', 'application/json',
+         'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'ops_alerts_secret')
+       ),
+       body := '{}'::jsonb
+     );
+   $$);
+   ```
+
+To switch delivery off again, unset `ALERT_WEBHOOK_URL`. The schedule can stay in place.
 
 ## Playbooks
 
@@ -185,6 +240,19 @@ After a deploy:
 | `HMAC_SECRET` | `supabase secrets set`, redeploy | Hashes of older rows no longer match new ones, so dedup and per-IP counters restart. Nothing else reads them |
 | Service role key | Roll it in the dashboard; the platform re-injects it | None for the functions |
 
+### Planner sync problems
+
+Planner sync runs on the device, so it leaves no server logs. Its guarantees are covered by tests
+instead (`src/features/planner/__tests__`, and the planner block of `database.test.mjs`):
+
+- **A report of lost edits.** Edits stay in the device's pending queue until the server confirms
+  them. A row the server rejects (a constraint) stays on that device only, and the app logs
+  `Planner sync: the server rejected …`.
+- **A report of a deleted project coming back.** The server skips any write older than the
+  stored row, so an offline device cannot resurrect a newer tombstone. A device that stays offline
+  for longer than the tombstone retention (30 days, `cleanup_planner_tombstones()`) recreates the
+  row it edited. That is the intended failure: recreating a row is safer than losing an edit.
+
 ## Data requests
 
 - **Access and portability:** The app's privacy screen calls `export-user-data`. The export
@@ -192,5 +260,8 @@ After a deploy:
 - **Erasure:** `delete-user` deletes the auth user, and every owned row cascades with it. Quota
   counters are kept on purpose: they are keyed by id, hold no content, and expire within a day
   once the cleanup job runs.
-- **Retention:** `cleanup_old_tasks()` deletes request telemetry older than 90 days, once
-  scheduled (see [SETUP.md](./SETUP.md#4-scheduled-jobs)).
+- **Retention:** Once scheduled (see [SETUP.md](./SETUP.md#4-scheduled-jobs)):
+  - `cleanup_old_tasks()` deletes request telemetry older than 90 days.
+  - `cleanup_planner_tombstones()` purges planner deletions after 30 days.
+- **Planner:** It is part of the export. Deleting the account removes the server copy through the
+  cascade, and the app removes the device copy.

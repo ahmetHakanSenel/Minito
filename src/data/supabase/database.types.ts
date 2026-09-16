@@ -9,6 +9,30 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ops_alert_state: {
+        Row: {
+          detail: string | null
+          firing: boolean
+          notified_at: string | null
+          rule: string
+          since: string
+        }
+        Insert: {
+          detail?: string | null
+          firing: boolean
+          notified_at?: string | null
+          rule: string
+          since: string
+        }
+        Update: {
+          detail?: string | null
+          firing?: boolean
+          notified_at?: string | null
+          rule?: string
+          since?: string
+        }
+        Relationships: []
+      }
       planner_projects: {
         Row: {
           client_updated_at: string
@@ -276,6 +300,7 @@ export type Database = {
         Returns: number
       }
       cleanup_rate_limits: { Args: { p_older_than?: string }; Returns: number }
+      ops_health_snapshot: { Args: never; Returns: Json }
       submit_breakdown_feedback: {
         Args: { p_request_id: string; p_score: string }
         Returns: boolean
