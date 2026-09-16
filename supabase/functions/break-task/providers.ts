@@ -42,6 +42,15 @@ export function isRetryableStatus(status: number): boolean {
   return status >= 500 || status === 408;
 }
 
+// Provider error bodies are logged. They are short in practice, but nothing guarantees that, and
+// a body is never allowed to carry a whole request back into the logs.
+const MAX_ERROR_BODY_CHARS = 300;
+
+async function errorBody(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '');
+  return text.slice(0, MAX_ERROR_BODY_CHARS);
+}
+
 export function openAiProvider(apiKey: string, model = DEFAULT_OPENAI_MODEL): ProviderAdapter {
   return {
     model,
@@ -65,7 +74,7 @@ export function openAiProvider(apiKey: string, model = DEFAULT_OPENAI_MODEL): Pr
 
       if (!response.ok) {
         throw new ProviderError(
-          `OpenAI API error: ${response.status} ${await response.text()}`,
+          `OpenAI API error: ${response.status} ${await errorBody(response)}`,
           isRetryableStatus(response.status)
         );
       }
@@ -127,7 +136,7 @@ export function geminiProvider(apiKey: string, model: string): ProviderAdapter {
 
       if (!response.ok) {
         throw new ProviderError(
-          `Gemini API error: ${response.status} ${await response.text()}`,
+          `Gemini API error: ${response.status} ${await errorBody(response)}`,
           isRetryableStatus(response.status)
         );
       }
@@ -167,6 +176,11 @@ export function resolveProvider(
   return null;
 }
 
+// Same line format as the handler's logger, so every event can be queried the same way.
+function logAttempt(event: string, fields: Record<string, unknown>): void {
+  console.warn(JSON.stringify({ level: 'warn', event, ...fields }));
+}
+
 /** Model time actually spent on a request, failed and timed-out attempts included. */
 export type AiMeter = { aiLatencyMs: number };
 
@@ -183,7 +197,11 @@ export function withBudget(provider: ProviderAdapter, deadline: number, meter: A
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining < MIN_ATTEMPT_MS) {
-        console.warn(`AI budget exhausted before attempt ${attempt}`);
+        logAttempt('break_task.ai_budget_exhausted', {
+          attempt,
+          attempts,
+          remaining_ms: remaining,
+        });
         return null;
       }
 
@@ -195,7 +213,13 @@ export function withBudget(provider: ProviderAdapter, deadline: number, meter: A
           AbortSignal.timeout(Math.min(AI_CALL_TIMEOUT_MS, remaining))
         );
       } catch (error) {
-        console.error(`AI call attempt ${attempt}/${attempts} failed:`, error);
+        logAttempt('break_task.ai_attempt_failed', {
+          attempt,
+          attempts,
+          model: provider.model,
+          error:
+            error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 400) : 'unknown',
+        });
         if (error instanceof ProviderError && !error.retryable) return null;
         retry = attempt < attempts;
       } finally {
