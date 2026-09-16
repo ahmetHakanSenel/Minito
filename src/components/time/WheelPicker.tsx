@@ -8,19 +8,21 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { haptics } from '../../lib/ui/haptics';
-import { nearestDetent, stripTranslate, wrap } from './dialMath';
+import { flingTarget, nearestDetent, stripTranslate, wrap } from './dialMath';
 
 /**
  * A detent dial, closer to setting a watch than to scrolling a list.
  *
- * Every value is a detent: the dial follows the finger, clicks (a haptic tick) each time a value
- * crosses the window, and on release glides to rest exactly on a value, decelerating without
- * overshoot. No 3D tilt and no springs, so nothing wobbles.
+ * Every value is a detent. The dial follows the finger and clicks (a capped haptic tick) as values
+ * cross the window. On release it keeps the speed it was let go with and glides into a detent on a
+ * critically damped spring: no jump in pace, no bounce, and never back against the direction of a
+ * throw. A slow release simply falls into the nearest value. No 3D tilt, so nothing wobbles.
  *
  * It is not a list. A short strip of labels covering one lap, plus a margin either side, is
  * translated on the UI thread, and the position wraps modulo the lap, so the dial turns forever
@@ -34,11 +36,14 @@ const WINDOW_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
 const CENTER_OFFSET = (WINDOW_HEIGHT - ROW_HEIGHT) / 2;
 // Rows beyond the window on either side, so a partly visible row always has a label to draw.
 const MARGIN_ROWS = Math.ceil(VISIBLE_ROWS / 2) + 1;
-// How far a flick carries, in seconds of its release velocity.
-const FLICK_CARRY_S = 0.16;
-// A fast spin would otherwise fire ticks faster than they can be felt apart, which blurs them into
-// a buzz. Beyond ~16 per second, extra values pass silently.
-const TICK_MIN_INTERVAL_MS = 60;
+// Ticks are capped at about eleven a second. A slow turn clicks on every value; a fast spin clicks
+// at a steady rate instead of blurring into a buzz, and the values between pass silently.
+const TICK_MIN_INTERVAL_MS = 90;
+// Critically damped (damping = 2·√stiffness): the dial glides into a detent with no bounce.
+// Clamping ends the glide at the detent itself, which is what a click-stop feels like.
+const SETTLE_SPRING = { stiffness: 170, damping: 26, mass: 1, overshootClamping: true };
+// A preset turns the dial from rest, so it eases in and out like a hand turning it.
+const PRESET_TURN = { minMs: 220, maxMs: 460, msPerRow: 8 };
 
 const WELL_COLOR = '#12121C';
 const WELL_COLOR_CLEAR = 'rgba(18, 18, 28, 0)';
@@ -172,14 +177,26 @@ export function WheelPicker({
     [report]
   );
 
-  const settleTo = useCallback(
+  // The dial keeps the speed it was released with and glides from there into the detent, so there
+  // is no jump in pace at the moment the finger lifts.
+  const glideTo = useCallback(
+    (target: number, velocityRowsPerS: number) => {
+      'worklet';
+      position.value = withSpring(target, { ...SETTLE_SPRING, velocity: velocityRowsPerS });
+    },
+    [position]
+  );
+
+  const turnTo = useCallback(
     (target: number) => {
       'worklet';
-      const distance = Math.abs(target - position.value);
+      const rows = Math.abs(target - position.value);
       position.value = withTiming(target, {
-        // Longer throws take longer to come to rest, like a flywheel; a nudge simply snaps.
-        duration: Math.min(700, 140 + distance * 45),
-        easing: Easing.out(Easing.cubic),
+        duration: Math.min(
+          PRESET_TURN.maxMs,
+          Math.max(PRESET_TURN.minMs, rows * PRESET_TURN.msPerRow)
+        ),
+        easing: Easing.inOut(Easing.cubic),
       });
     },
     [position]
@@ -193,16 +210,16 @@ export function WheelPicker({
     const target = nearestDetent(position.value, value, count);
     // Only a dial that will actually move holds back its reports and ticks until it lands.
     externalTargetRef.current = target === Math.round(position.value) ? null : value;
-    settleTo(target);
-  }, [value, count, position, settleTo]);
+    turnTo(target);
+  }, [value, count, position, turnTo]);
 
   const step = useCallback(
     (direction: 1 | -1) => {
       releaseExternal();
       cancelAnimation(position);
-      settleTo(Math.round(position.value) + direction);
+      glideTo(Math.round(position.value) + direction, 0);
     },
-    [position, settleTo, releaseExternal]
+    [position, glideTo, releaseExternal]
   );
 
   const gesture = useMemo(() => {
@@ -221,12 +238,13 @@ export function WheelPicker({
         position.value = dragStart.value - event.translationY / ROW_HEIGHT;
       })
       .onEnd((event) => {
-        const carried = position.value - (event.velocityY / ROW_HEIGHT) * FLICK_CARRY_S;
-        settleTo(Math.round(carried));
+        // Dragging up is a positive turn, so the finger's velocity is inverted.
+        const velocity = -event.velocityY / ROW_HEIGHT;
+        glideTo(flingTarget(position.value, velocity), velocity);
       })
       .onFinalize((_event, success) => {
         // A touch that never became a drag must still leave the dial resting on a detent.
-        if (!success) settleTo(Math.round(position.value));
+        if (!success) glideTo(Math.round(position.value), 0);
       });
 
     // A tap above or below the window steps once, for anyone who would rather not drag.
@@ -240,7 +258,7 @@ export function WheelPicker({
       });
 
     return Gesture.Race(pan, tap);
-  }, [dragStart, position, settleTo, step, releaseExternal]);
+  }, [dragStart, position, glideTo, step, releaseExternal]);
 
   return (
     <GestureDetector gesture={gesture}>

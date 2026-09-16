@@ -1,4 +1,4 @@
-import { nearestDetent, stripTranslate, wrap } from '../dialMath';
+import { flingTarget, nearestDetent, stripTranslate, wrap } from '../dialMath';
 
 const ROW = 40;
 const OFFSET = 80;
@@ -69,6 +69,44 @@ describe('nearestDetent', () => {
         expect(Number.isInteger(target)).toBe(true);
         expect(wrap(target, 60)).toBe(value);
         expect(Math.abs(target - current)).toBeLessThanOrEqual(30.5);
+      }
+    }
+  });
+});
+
+describe('flingTarget', () => {
+  it('drops a slow release into the nearest detent, whichever way it was drifting', () => {
+    expect(flingTarget(10.4, 1)).toBe(10);
+    expect(flingTarget(10.6, -1)).toBe(11);
+    expect(flingTarget(10.49, 0)).toBe(10);
+  });
+
+  it('never snaps back against the direction of a throw', () => {
+    // Just past a detent and thrown forward: forward, not back to 10.
+    expect(flingTarget(10.1, 3)).toBe(11);
+    // Just before a detent and thrown backward: backward, not on to 11.
+    expect(flingTarget(10.9, -3)).toBe(10);
+  });
+
+  it('stays put when released exactly on a detent with a gentle throw', () => {
+    expect(flingTarget(10, 2.6)).toBe(10);
+    expect(flingTarget(10, -2.6)).toBe(10);
+  });
+
+  it('carries a harder throw further, in its own direction', () => {
+    expect(flingTarget(10, 20)).toBe(14);
+    expect(flingTarget(10, -20)).toBe(6);
+  });
+
+  it('caps a violent throw', () => {
+    expect(flingTarget(10, 10_000)).toBe(10 + 24);
+    expect(flingTarget(10, -10_000)).toBe(10 - 24);
+  });
+
+  it('always lands on a whole detent', () => {
+    for (const position of [-3.7, 0, 0.5, 12.25, 59.9]) {
+      for (const velocity of [-40, -3, -1, 0, 1, 3, 40]) {
+        expect(Number.isInteger(flingTarget(position, velocity))).toBe(true);
       }
     }
   });
