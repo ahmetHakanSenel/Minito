@@ -10,7 +10,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -474,6 +474,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function PlannerScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { projects, addProject, addTask, generateSubtasks } = useProjects();
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
@@ -577,8 +578,8 @@ export default function PlannerScreen() {
           ))}
         </View>
 
-        {/* Bottom padding for docked bar */}
-        <View style={{ height: 80 }} />
+        {/* Bottom padding for the docked bar and device gesture area */}
+        <View style={{ height: 80 + insets.bottom }} />
       </ScrollView>
 
       {/* Add Project Modal */}
@@ -705,6 +706,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 60,
+    paddingBottom: 0,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },

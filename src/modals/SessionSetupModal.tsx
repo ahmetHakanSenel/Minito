@@ -1,5 +1,14 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  TextInput,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Clock, VolumeX, CloudRain, Music, Waves, Target } from 'lucide-react-native';
@@ -12,11 +21,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
+
 import { useTranslation } from 'react-i18next';
+import { AUDIO_TRACKS, useAudioContext } from '../context';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
-const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
+
 
 // ============================================================================
 // TYPES
@@ -120,11 +130,26 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
   onStartSession,
 }) => {
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
   const [selectedDuration, setSelectedDuration] = useState(25);
   const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [customDuration, setCustomDuration] = useState('');
   const [selectedSound, setSelectedSound] = useState<SoundType>('mute');
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const { currentTrack, play, stop } = useAudioContext();
+  const previewTrackIdRef = useRef<string | null>(null);
+
+  // ========================================================================
+  // SOUND PREVIEW
+  // ========================================================================
+
+  const stopPreviewSound = useCallback(async () => {
+    // Previews use the same singleton audio player as the rest of the app.
+    // This prevents the planner and dashboard from creating overlapping sounds.
+    if (previewTrackIdRef.current && currentTrack?.id === previewTrackIdRef.current) {
+      await stop();
+    }
+    previewTrackIdRef.current = null;
+  }, [currentTrack, stop]);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -134,25 +159,9 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
       setCustomDuration('');
       setSelectedSound('mute');
     } else {
-      stopPreviewSound();
+      void stopPreviewSound();
     }
-  }, [visible]);
-
-  // ========================================================================
-  // SOUND PREVIEW
-  // ========================================================================
-
-  const stopPreviewSound = useCallback(async () => {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch (error) {
-        // Ignore errors during cleanup
-      }
-      soundRef.current = null;
-    }
-  }, []);
+  }, [visible, stopPreviewSound]);
 
   const playPreviewSound = useCallback(
     async (type: SoundType) => {
@@ -160,12 +169,20 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
 
       if (type === 'mute') return;
 
-      // TODO: Add audio files to assets/sounds/
-      // For now, just log and provide haptic feedback
-      console.log(`[SessionSetup] Sound preview: ${type}`);
+      const trackId =
+        type === 'brown-noise'
+          ? 'deep_brown'
+          : type === 'rain'
+            ? 'rushing_river'
+            : 'infinite_drift';
+      const track = AUDIO_TRACKS.find((candidate) => candidate.id === trackId);
+      if (!track) return;
+
+      await play(trackId);
+      previewTrackIdRef.current = trackId;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
-    [stopPreviewSound]
+    [stopPreviewSound, play]
   );
 
   // ========================================================================
@@ -206,12 +223,11 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
   );
 
   const handleStartSession = useCallback(() => {
-    stopPreviewSound();
     onStartSession({
       duration: selectedDuration,
       sound: selectedSound,
     });
-  }, [selectedDuration, selectedSound, onStartSession, stopPreviewSound]);
+  }, [selectedDuration, selectedSound, onStartSession]);
 
   const isValidDuration = selectedDuration > 0 && selectedDuration <= 180;
 
@@ -232,7 +248,15 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
 
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
           <View style={styles.container}>
-            <AnimatedView entering={FadeInDown.delay(100).springify()} style={styles.card}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <AnimatedView
+                entering={FadeInDown.delay(100).springify()}
+                style={[styles.card, { maxWidth: Math.min(width - 32, 520) }]}
+              >
               {/* Header */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
@@ -356,7 +380,8 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
               <View style={styles.actionSection}>
                 <StartButton onPress={handleStartSession} disabled={!isValidDuration} />
               </View>
-            </AnimatedView>
+              </AnimatedView>
+            </ScrollView>
           </View>
         </SafeAreaView>
       </AnimatedView>
@@ -378,12 +403,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   container: {
-    paddingHorizontal: 20,
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 16,
   },
   card: {
+    width: '100%',
+    alignSelf: 'center',
     backgroundColor: 'rgba(30, 30, 46, 0.98)',
     borderRadius: 28,
-    padding: 24,
+    padding: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     shadowColor: '#8B5CF6',
@@ -497,10 +530,11 @@ const styles = StyleSheet.create({
   },
   soundGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   soundOption: {
-    flex: 1,
+    width: '48%',
     alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 16,

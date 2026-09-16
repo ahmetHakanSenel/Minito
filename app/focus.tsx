@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StatusBar, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  StatusBar,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, SlideOutRight, LinearTransition } from 'react-native-reanimated';
+import { ArrowRight, Sparkles } from 'lucide-react-native';
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
 import { parseTimeFromStep } from '../src/lib/timeParser';
 import { normalizeSteps, type BreakdownStep } from '../src/lib/breakdownSteps';
@@ -30,6 +39,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 export default function FocusModeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { setCompletionPulse } = useAuroraContext();
   const params = useLocalSearchParams<{
     steps: string;
@@ -104,9 +114,9 @@ export default function FocusModeScreen() {
     syncProgress(Math.max(0, currentStepIndex));
   }, [currentStepIndex, completedSteps, steps.length]);
 
-  // Sync timer completion state with Aurora background pulse
+  // Timer completion state with Aurora background pulse. The timer owns its
+  // local loop; FocusMode is the only owner of the global Aurora state.
   useEffect(() => {
-    // Use requestAnimationFrame to defer the update and avoid "Cannot update a component" warning
     const rafId = requestAnimationFrame(() => {
       setCompletionPulse(timerCompletionLoop);
     });
@@ -245,8 +255,8 @@ export default function FocusModeScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <StatusBar barStyle="light-content" />
         <View style={styles.emptyContainer}>
-          <View className="bg-surface rounded-2xl p-6">
-            <Text className="text-textMain text-lg text-center">{t('home.noSteps')}</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>{t('home.noSteps')}</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -294,31 +304,49 @@ export default function FocusModeScreen() {
           entering={FadeInDown.springify().damping(12).mass(0.8).stiffness(150)}
           style={styles.contentContainer}
         >
-          <View style={styles.empathyContainer}>
-            {/* Empathy Bridge */}
-            {empathyBridge && (
-              <View style={styles.empathyCard}>
-                <Text style={styles.empathyText}>{empathyBridge}</Text>
+          <ScrollView
+            contentContainerStyle={[
+              styles.introScrollContent,
+              { paddingHorizontal: Math.max(20, Math.min(32, width * 0.08)) },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.empathyContainer}>
+              <View style={styles.introKicker}>
+                <Sparkles size={15} color="#C4B5FD" strokeWidth={2} />
+                <Text style={styles.introKickerText}>{t('focus.startWith')}</Text>
               </View>
-            )}
+              {empathyBridge ? (
+                <View style={styles.empathyCard}>
+                  <Text style={styles.empathyText}>{empathyBridge}</Text>
+                </View>
+              ) : null}
 
-            {/* First Step Hook */}
-            {firstStepHook && (
-              <View style={styles.hookCard}>
-                <Text style={styles.hookLabel}>{t('focus.startWith')}</Text>
-                <Text style={styles.hookText}>{firstStepHook}</Text>
-              </View>
-            )}
+              {firstStepHook ? (
+                <View style={styles.hookCard}>
+                  <Text style={styles.hookLabel}>{t('focus.next')}</Text>
+                  <Text style={styles.hookText}>{firstStepHook}</Text>
+                </View>
+              ) : null}
 
-            {/* Ready Button */}
-            <Animated.View entering={FadeInDown.delay(300).springify()}>
-              <View style={styles.readyButton}>
-                <Text style={styles.readyButtonText} onPress={handleNext}>
-                  {t('focus.ready')}
+              <View style={styles.introHint}>
+                <Text style={styles.introHintText}>
+                  {t('focus.step', { current: 1, total: totalSteps })}
                 </Text>
               </View>
-            </Animated.View>
-          </View>
+
+              <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.readyButtonWrap}>
+                <Pressable
+                  onPress={handleNext}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.readyButton, pressed && styles.readyButtonPressed]}
+                >
+                  <Text style={styles.readyButtonText}>{t('focus.ready')}</Text>
+                  <ArrowRight size={19} color="#FFFFFF" strokeWidth={2.5} />
+                </Pressable>
+              </Animated.View>
+            </View>
+          </ScrollView>
         </AnimatedView>
       ) : (
         /* Regular Step Card */
@@ -329,8 +357,12 @@ export default function FocusModeScreen() {
           layout={LinearTransition.duration(220)}
           style={styles.contentContainer}
         >
-          <View style={styles.stepWrapper}>
-            <FocusCard
+          <ScrollView
+            contentContainerStyle={styles.stepScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.stepWrapper}>
+              <FocusCard
               step={currentStep}
               stoppingPoint={isFinalStep ? stoppingPoint : undefined}
               stepNumber={currentStepIndex + 1}
@@ -351,8 +383,9 @@ export default function FocusModeScreen() {
                   />
                 ) : undefined
               }
-            />
-          </View>
+              />
+            </View>
+          </ScrollView>
         </AnimatedView>
       )}
     </SafeAreaView>
@@ -377,67 +410,123 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     zIndex: 10,
   },
-  // Empathy/Hook Screen Styles
-  empathyContainer: {
-    flex: 1,
+  emptyCard: {
+    width: '100%',
+    maxWidth: 420,
+    padding: 24,
+    borderRadius: 24,
+    backgroundColor: 'rgba(18,18,30,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  emptyText: {
+    color: '#E5E5E5',
+    fontSize: 17,
+    lineHeight: 25,
+    textAlign: 'center',
+  },
+  introScrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  empathyContainer: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    alignItems: 'stretch',
+    gap: 14,
+  },
+  introKicker: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    gap: 24,
+    justifyContent: 'center',
+    gap: 7,
+    marginBottom: 8,
+  },
+  introKickerText: {
+    color: '#C4B5FD',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
   },
   empathyCard: {
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    borderRadius: 20,
-    padding: 24,
+    padding: 22,
+    borderRadius: 24,
+    backgroundColor: 'rgba(139,92,246,0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderColor: 'rgba(167,139,250,0.28)',
   },
   empathyText: {
-    color: '#E5E5E5',
-    fontSize: 18,
-    lineHeight: 28,
+    color: '#F4F4F5',
+    fontSize: 21,
+    lineHeight: 30,
     textAlign: 'center',
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
   hookCard: {
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    padding: 20,
     borderRadius: 20,
-    padding: 24,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   hookLabel: {
-    color: '#34D399',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '700',
     marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
+    textAlign: 'center',
   },
   hookText: {
-    color: '#E5E5E5',
-    fontSize: 20,
-    lineHeight: 30,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 27,
     textAlign: 'center',
     fontWeight: '500',
   },
+  introHint: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  introHintText: {
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: 13,
+  },
+  readyButtonWrap: {
+    marginTop: 8,
+  },
   readyButton: {
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    borderRadius: 16,
-    marginTop: 16,
+    minHeight: 56,
+    borderRadius: 18,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#7C3AED',
+  },
+  readyButtonPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
   },
   readyButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    textAlign: 'center',
   },
-  // Step wrapper for FocusCard + InlineTimer
-  stepWrapper: {
-    flex: 1,
+  stepScrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingVertical: 22,
+  },
+  stepWrapper: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
   },
 });
