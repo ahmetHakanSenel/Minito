@@ -203,6 +203,9 @@
     "version": "Minito v{{version}}"
   },
   "planner": {
+    "deleteTitle": "Delete this project?",
+    "deleteMessage": "Delete “{{title}}” and its steps from all your devices?",
+    "deleteHint": "Long press to delete",
     "emptyTitle": "No projects yet",
     "emptyText": "Group bigger goals into projects and Minito keeps the next step in view.",
     "emptyAction": "Add a project",

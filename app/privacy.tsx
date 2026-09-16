@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { deleteUserAccount, exportUserData } from '../src/lib/api/userData';
+import { clearPlannerState } from '../src/features/planner/plannerStorage';
 import { LanguageSelector } from '../src/components';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -89,7 +90,10 @@ export default function PrivacyScreen() {
               setDeleting(true);
               haptics.commit();
 
+              const deletedUserId = user?.id;
               await deleteUserAccount();
+              // The server copy is gone; the device copy of the planner goes with it.
+              if (deletedUserId) await clearPlannerState(deletedUserId);
               await signOut();
 
               haptics.success();

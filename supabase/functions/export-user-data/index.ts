@@ -8,8 +8,8 @@ import {
 /**
  * Edge Function: export-user-data (right of access and portability)
  *
- * Returns everything stored about the caller: the account, the saved breakdown history, and the
- * AI request log. The request log is included because it is linked to the account and holds the
+ * Returns everything stored about the caller: the account, the saved breakdown history, the
+ * planner, and the AI request log. The request log is included because it is linked to the account and holds the
  * generated plans; the task text itself was never stored, only its HMAC, which is omitted as it
  * means nothing without the server's secret.
  */
@@ -19,6 +19,11 @@ const CORS = corsHeaders(METHODS);
 
 const BREAKDOWN_COLUMNS =
   'title, empathy_bridge, first_step_hook, stopping_point, steps, completed_step_count, completed_at, created_at';
+
+const PROJECT_COLUMNS = 'id, title, color, due_date, deleted_at, created_at, updated_at';
+
+const PLANNER_TASK_COLUMNS =
+  'id, project_id, title, is_completed, position, deleted_at, created_at, updated_at';
 
 const REQUEST_LOG_COLUMNS =
   'request_id, created_at, prompt_version, ai_model, breakdown_source, fallback_reason, steps, feedback_score, feedback_at';
@@ -35,7 +40,7 @@ Deno.serve(async (req) => {
     }
 
     // The service role bypasses RLS, so both queries scope themselves to the verified user.
-    const [breakdowns, requests] = await Promise.all([
+    const [breakdowns, requests, projects, plannerTasks] = await Promise.all([
       admin
         .from('task_breakdowns')
         .select(BREAKDOWN_COLUMNS)
@@ -46,9 +51,11 @@ Deno.serve(async (req) => {
         .select(REQUEST_LOG_COLUMNS)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
+      admin.from('planner_projects').select(PROJECT_COLUMNS).eq('user_id', user.id),
+      admin.from('planner_tasks').select(PLANNER_TASK_COLUMNS).eq('user_id', user.id),
     ]);
 
-    const failure = breakdowns.error ?? requests.error;
+    const failure = breakdowns.error ?? requests.error ?? projects.error ?? plannerTasks.error;
     if (failure) {
       console.error(
         JSON.stringify({ level: 'error', event: 'export_user_data.failed', error: failure.message })
@@ -65,6 +72,8 @@ Deno.serve(async (req) => {
       },
       task_breakdowns: breakdowns.data ?? [],
       ai_requests: requests.data ?? [],
+      // Deleted items are kept briefly as tombstones so other devices learn about the deletion.
+      planner: { projects: projects.data ?? [], tasks: plannerTasks.data ?? [] },
       metadata: {
         export_date: new Date().toISOString(),
         note: 'Includes your saved breakdowns and the log of your AI requests. Task text is never stored on the server.',

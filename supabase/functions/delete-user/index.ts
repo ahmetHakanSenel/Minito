@@ -8,7 +8,7 @@ import {
 /**
  * Edge Function: delete-user (right to erasure)
  *
- * Deletes the caller's auth account. Every user-owned row (`task_breakdowns`, `tasks`) references
+ * Deletes the caller's auth account. Every user-owned row (`task_breakdowns`, `tasks`, `planner_*`) references
  * `auth.users` with ON DELETE CASCADE, so the database removes them in the same transaction.
  * Rate-limit counters are deliberately not user-owned: deleting an account must not reset them.
  */
