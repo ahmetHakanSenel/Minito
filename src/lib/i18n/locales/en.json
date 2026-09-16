@@ -144,15 +144,22 @@
     "reset": "Reset",
     "back": "Back",
     "stop": "Stop",
-    "tapToStop": "Tap to stop"
+    "tapToStop": "Tap to stop",
+    "editHint": "Opens a dial to set minutes and seconds",
+    "tapToSet": "Tap to set",
+    "done": "Done",
+    "increase": "Add a minute",
+    "decrease": "Remove a minute"
   },
   "focusMode": {
-    "warning": "Focus!",
-    "gentleWarning": "Seems like you're getting distracted...",
-    "remainingMinutes": "{{minutes}} min left",
+    "gentleWarning": "Phone down, back to focus",
     "focusLabel": "Focus",
     "pause": "Pause",
-    "resume": "Resume"
+    "resume": "Resume",
+    "paused": "Paused",
+    "end": "End session",
+    "remainingA11y": "{{time}} remaining",
+    "pickupsA11y": "Picked up: {{count}}"
   },
   "dashboard": {
     "guest": "Guest",
@@ -283,13 +290,34 @@
     "sectionTitle": "Background sounds",
     "sectionSubtitle": "Pick a sound to deepen your focus",
     "tracks": {
-      "deep_brown": { "name": "Deep brown", "description": "Low, steady focus" },
-      "infinite_drift": { "name": "Infinite drift", "description": "Soft ambient space" },
-      "rushing_river": { "name": "Rushing river", "description": "Flowing water" },
-      "theta_focus": { "name": "Theta focus", "description": "Slow, spacious pulse" },
-      "slow_binaural": { "name": "Slow binaural", "description": "Quiet deep focus" },
-      "ambient_pulse": { "name": "Ambient pulse", "description": "Steady focus rhythm" },
-      "modern_classical": { "name": "Modern classical", "description": "Calm instrumental focus" }
+      "deep_brown": {
+        "name": "Deep brown",
+        "description": "Low, steady focus"
+      },
+      "infinite_drift": {
+        "name": "Infinite drift",
+        "description": "Soft ambient space"
+      },
+      "rushing_river": {
+        "name": "Rushing river",
+        "description": "Flowing water"
+      },
+      "theta_focus": {
+        "name": "Theta focus",
+        "description": "Slow, spacious pulse"
+      },
+      "slow_binaural": {
+        "name": "Slow binaural",
+        "description": "Quiet deep focus"
+      },
+      "ambient_pulse": {
+        "name": "Ambient pulse",
+        "description": "Steady focus rhythm"
+      },
+      "modern_classical": {
+        "name": "Modern classical",
+        "description": "Calm instrumental focus"
+      }
     }
   },
   "stats": {
@@ -325,13 +353,9 @@
     "focusSession": "FOCUS SESSION",
     "duration": "DURATION",
     "ambience": "AMBIENCE",
-    "customDuration": "Custom duration...",
-    "minutes": "minutes",
     "mute": "Mute",
-    "brownNoise": "Brown Noise",
-    "rain": "Rain",
-    "lofi": "Lo-Fi",
-    "durationOption": "{{count}}m"
+    "durationOption": "{{count}}m",
+    "minDuration": "Pick at least 10 seconds."
   },
   "sessionComplete": {
     "title": "Great job!",
@@ -348,7 +372,9 @@
     "minutes": "{{count}} min",
     "hours": "{{count}} h",
     "hoursMinutes": "{{hours}} h {{minutes}} min",
-    "minutesShort": "{{count}} min"
+    "minutesShort": "{{count}} min",
+    "seconds": "{{count}} sec",
+    "minutesSeconds": "{{minutes}} min {{seconds}} sec"
   },
   "offlineSteps": {
     "cleaning": [
@@ -414,5 +440,13 @@
       "Take breaks when needed",
       "Celebrate small wins along the way"
     ]
+  },
+  "wheel": {
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "seconds": "Seconds",
+    "hoursShort": "h",
+    "minutesShort": "min",
+    "secondsShort": "sec"
   }
 }

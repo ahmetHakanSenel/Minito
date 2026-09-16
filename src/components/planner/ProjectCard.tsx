@@ -16,14 +16,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Project, Task, formatDueDate, useProjects } from '../../context/ProjectContext';
-import {
-  FocusMode,
-  SessionCompletionModal,
-  SessionSetupModal,
-  SessionConfig,
-  SoundType,
-} from '../../modals';
+import { FocusMode, SessionCompletionModal, SessionSetupModal, SessionConfig } from '../../modals';
 import { recordFocusSession } from '../../lib/stats/sessionStore';
+import { useAudioContext } from '../../context/AudioContext';
 import { useTranslation } from 'react-i18next';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -211,9 +206,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const [focusModeVisible, setFocusModeVisible] = useState(false);
   const [sessionModalVisible, setSessionModalVisible] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const { endAudioSession } = useAudioContext();
   const [sessionConfig, setSessionConfig] = useState<SessionConfig>({
-    duration: 25,
-    sound: 'mute',
+    durationSec: 25 * 60,
+    trackId: null,
   });
   const [sessionData, setSessionData] = useState({
     duration: 0,
@@ -275,7 +271,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const handleFocusModeClose = useCallback(() => {
     setFocusModeVisible(false);
     setActiveTask(null);
-  }, []);
+    // The session is over either way: whatever was playing before it comes back.
+    void endAudioSession();
+  }, [endAudioSession]);
 
   const handleSessionComplete = useCallback(
     (data: {
@@ -286,9 +284,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       taskId?: string;
     }) => {
       setFocusModeVisible(false);
-      // Convert seconds to minutes for display
+      void endAudioSession();
       setSessionData({
-        duration: Math.ceil(data.duration / 60),
+        duration: data.duration,
         pickupCount: data.pickupCount,
       });
       // Feed the Insights screen with real behavior (fire-and-forget)
@@ -303,7 +301,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       // Show session completion modal
       setSessionModalVisible(true);
     },
-    []
+    [endAudioSession]
   );
 
   const handleTaskCompleted = useCallback(() => {
@@ -434,7 +432,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       <FocusMode
         visible={focusModeVisible}
         onClose={handleFocusModeClose}
-        duration={sessionConfig.duration * 60} // Convert minutes to seconds
+        duration={sessionConfig.durationSec}
         taskTitle={activeTask?.title || ''}
         projectId={project.id}
         taskId={activeTask?.id}

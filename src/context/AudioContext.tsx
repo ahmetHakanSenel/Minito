@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback, ReactNode } from 'react';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import { Audio } from 'expo-av';
 import type { AVPlaybackSource } from 'expo-av';
 
 // Audio tracks available
@@ -59,7 +59,18 @@ interface AudioContextType {
   stop: () => Promise<void>;
   setVolume: (volume: number) => Promise<void>;
   selectTrack: (trackId: string) => void;
+  /**
+   * Remembers what was playing before a focus session. Idempotent within one session, so the
+   * setup sheet and the timer can both call it.
+   */
+  beginAudioSession: () => void;
+  /** Switches the session's ambience; `null` is silence. The pre-session track is not lost. */
+  setSessionTrack: (trackId: string | null) => Promise<void>;
+  /** Puts back exactly what was playing (or paused) before the session began. */
+  endAudioSession: () => Promise<void>;
 }
+
+type SessionSnapshot = { trackId: string | null; wasPlaying: boolean };
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
 
@@ -70,6 +81,19 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isLoading, setIsLoading] = useState(false);
 
   const soundRef = useRef<Audio.Sound | null>(null);
+  // Mirrors of the state above, for session calls that run after an await and must not read a
+  // stale closure.
+  const currentTrackRef = useRef<AudioTrack | null>(null);
+  const isPlayingRef = useRef(false);
+  const sessionSnapshotRef = useRef<SessionSnapshot | null>(null);
+
+  React.useEffect(() => {
+    currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
+
+  React.useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Initialize audio mode on mount
   React.useEffect(() => {
@@ -87,7 +111,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
     setupAudio();
 
-      // Cleanup on unmount
+    // Cleanup on unmount
     return () => {
       if (soundRef.current) {
         void soundRef.current.unloadAsync();
@@ -202,6 +226,59 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, []);
 
+  // --------------------------------------------------------------------------
+  // Focus sessions borrow the player and hand it back.
+  //
+  // A session may pick its own ambience, or silence. Whatever the person was listening to on the
+  // home screen is paused for the session rather than thrown away, and restored when it ends.
+  // --------------------------------------------------------------------------
+
+  const beginAudioSession = useCallback(() => {
+    if (sessionSnapshotRef.current) return;
+    sessionSnapshotRef.current = {
+      trackId: currentTrackRef.current?.id ?? null,
+      wasPlaying: isPlayingRef.current,
+    };
+  }, []);
+
+  const setSessionTrack = useCallback(
+    async (trackId: string | null) => {
+      if (!trackId) {
+        if (isPlayingRef.current) await pause();
+        return;
+      }
+      if (currentTrackRef.current?.id === trackId && soundRef.current) {
+        // Same track: keep its position instead of restarting it.
+        if (!isPlayingRef.current) await resume();
+        return;
+      }
+      await play(trackId);
+    },
+    [pause, resume, play]
+  );
+
+  const endAudioSession = useCallback(async () => {
+    const snapshot = sessionSnapshotRef.current;
+    sessionSnapshotRef.current = null;
+    if (!snapshot) return;
+
+    if (snapshot.wasPlaying && snapshot.trackId) {
+      await setSessionTrack(snapshot.trackId);
+      return;
+    }
+
+    if (snapshot.trackId && currentTrackRef.current?.id === snapshot.trackId) {
+      // Same track as before, which was paused before: pause it again, position intact.
+      if (isPlayingRef.current) await pause();
+      return;
+    }
+
+    // The session replaced the track. Release it, and leave the previous one selected but silent,
+    // exactly as it was; resuming it later reloads it on demand.
+    await stop();
+    if (snapshot.trackId) selectTrack(snapshot.trackId);
+  }, [setSessionTrack, pause, stop, selectTrack]);
+
   return (
     <AudioContext.Provider
       value={{
@@ -215,6 +292,9 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         stop,
         setVolume,
         selectTrack,
+        beginAudioSession,
+        setSessionTrack,
+        endAudioSession,
       }}
     >
       {children}
