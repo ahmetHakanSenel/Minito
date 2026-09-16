@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, processLock } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 import type { Database } from './database.types';
 import { secureSessionStorage } from './secureSessionStorage';
@@ -27,6 +27,9 @@ const client: MinitoSupabaseClient | null =
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: false,
+          // React Native has no Web Locks API, so without this the client runs unlocked and two
+          // token refreshes can interleave their storage writes.
+          lock: processLock,
         },
       })
     : null;

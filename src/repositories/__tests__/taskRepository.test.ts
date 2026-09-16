@@ -9,9 +9,6 @@ jest.mock('../../data/supabase/client', () => {
   return { getSupabase: jest.fn(() => client) };
 });
 jest.mock('../../lib/api/breakTask', () => ({ breakTask: jest.fn() }));
-jest.mock('../../lib/guestIdentity', () => ({
-  getOrCreateGuestId: jest.fn(async () => 'guest-1'),
-}));
 
 const mockedFrom = jest.mocked(getSupabase().from);
 const mockedGetSupabase = jest.mocked(getSupabase);

@@ -8,7 +8,8 @@
     "save": "Kaydet",
     "delete": "Sil",
     "edit": "Düzenle",
-    "close": "Kapat"
+    "close": "Kapat",
+    "ok": "Tamam"
   },
   "home": {
     "title": "Minito'ya Hoş Geldiniz",
@@ -135,6 +136,7 @@
     "signOutFailed": "Çıkış yapılamadı",
     "exportFailed": "Veri dışa aktarılamadı",
     "deleteFailed": "Hesap silinemedi",
+    "sessionExpired": "Oturumunun süresi doldu. Lütfen yeniden giriş yap.",
     "cancelled": "İşlem iptal edildi"
   },
   "timer": {

@@ -8,7 +8,8 @@
     "save": "Save",
     "delete": "Delete",
     "edit": "Edit",
-    "close": "Close"
+    "close": "Close",
+    "ok": "OK"
   },
   "home": {
     "title": "Welcome to Minito",
@@ -135,6 +136,7 @@
     "signOutFailed": "Failed to sign out",
     "exportFailed": "Failed to export data",
     "deleteFailed": "Failed to delete account",
+    "sessionExpired": "Your session has expired. Please sign in again.",
     "cancelled": "Operation was cancelled"
   },
   "timer": {
