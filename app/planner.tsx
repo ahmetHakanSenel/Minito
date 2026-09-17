@@ -15,7 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
+import { ArrowLeft, Check, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInUp, Easing } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useProjects } from '../src/context/ProjectContext';
@@ -267,16 +267,39 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
             {suggestedTasks.length > 0 && (
               <AnimatedView entering={FadeIn.duration(200)} style={modalStyles.suggestedContainer}>
                 <Text style={modalStyles.suggestedTitle}>{t('planner.suggestionsTitle')}</Text>
-                {suggestedTasks.map((task, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={modalStyles.suggestedTaskButton}
-                    onPress={() => handleAddSuggestedToManual(task)}
-                  >
-                    <Plus size={14} color="#8B5CF6" />
-                    <Text style={modalStyles.suggestedTask}>{task}</Text>
-                  </TouchableOpacity>
-                ))}
+                {suggestedTasks.map((task) => {
+                  const alreadyAdded = manualTasks.some((existing) => existing.title === task);
+                  return (
+                    <TouchableOpacity
+                      key={task}
+                      style={[
+                        modalStyles.suggestedTaskButton,
+                        alreadyAdded && modalStyles.suggestedTaskButtonAdded,
+                      ]}
+                      onPress={() => handleAddSuggestedToManual(task)}
+                      disabled={alreadyAdded}
+                      accessibilityRole="button"
+                      accessibilityLabel={task}
+                      accessibilityState={{ disabled: alreadyAdded }}
+                    >
+                      {/* Tapping an already-added suggestion did nothing, and looked no
+                          different from one that would. */}
+                      {alreadyAdded ? (
+                        <Check size={14} color="rgba(255,255,255,0.35)" />
+                      ) : (
+                        <Plus size={14} color="#8B5CF6" />
+                      )}
+                      <Text
+                        style={[
+                          modalStyles.suggestedTask,
+                          alreadyAdded && modalStyles.suggestedTaskAdded,
+                        ]}
+                      >
+                        {task}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </AnimatedView>
             )}
 
@@ -476,6 +499,13 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
     flex: 1,
+  },
+  suggestedTaskButtonAdded: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  suggestedTaskAdded: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    textDecorationLine: 'line-through',
   },
   manualTaskSection: {
     marginBottom: 16,

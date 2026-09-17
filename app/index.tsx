@@ -79,9 +79,12 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      loadActiveSession().then((session) => {
-        if (!cancelled) setResumableSession(session);
-      });
+      loadActiveSession()
+        .then((session) => {
+          if (!cancelled) setResumableSession(session);
+        })
+        // No crumb is the same as no session to resume.
+        .catch(() => {});
       refresh();
       refreshHealth();
       return () => {
@@ -249,7 +252,6 @@ export default function HomeScreen() {
         visible={isDashboardVisible}
         onClose={() => setIsDashboardVisible(false)}
         userName={menuName}
-        isPremium={false}
         onNavigate={handleDashboardNavigate}
       />
 

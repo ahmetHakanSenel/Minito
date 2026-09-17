@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   Modal,
   Platform,
   Pressable,
@@ -67,6 +68,9 @@ const SENSOR_INTERVAL_MS = 100;
 // A grace period after starting, resuming or turning the phone: settling it is not a pickup.
 const PICKUP_ARM_DELAY_MS = 3_000;
 const WARNING_VISIBLE_MS = 3_500;
+// Below this, leaving is a change of mind rather than a session; recording it would only add
+// noise to the history.
+const MIN_RECORDED_SESSION_SEC = 60;
 const CONTROLS_HIDE_MS = 4_000;
 const TICK_MS = 250;
 
@@ -220,6 +224,21 @@ export const FocusMode: React.FC<FocusModeProps> = ({
     };
   }, [visible, duration, progress, warningOpacity, revealControls]);
 
+  // Returning from the background: the digits are already right, the ring is not.
+  useEffect(() => {
+    if (!visible || isPaused) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const leftMs = Math.max(0, endAtRef.current - Date.now());
+      cancelAnimation(progress);
+      progress.value = duration > 0 ? 1 - leftMs / (duration * 1000) : 1;
+      if (leftMs > 0) {
+        progress.value = withTiming(1, { duration: leftMs, easing: Easing.linear });
+      }
+    });
+    return () => subscription.remove();
+  }, [visible, isPaused, duration, progress]);
+
   // The countdown: derived from the end timestamp on every tick.
   useEffect(() => {
     if (!visible || isPaused) return;
@@ -277,8 +296,21 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
   const handleClose = useCallback(() => {
     haptics.tap();
+    const elapsed = Math.max(0, duration - remaining);
+    if (!finishedRef.current && elapsed >= MIN_RECORDED_SESSION_SEC) {
+      // Time spent is time spent. It is reported as unfinished, so nothing celebrates it.
+      finishedRef.current = true;
+      onSessionComplete({
+        duration: elapsed,
+        pickupCount: pickupsRef.current,
+        completed: false,
+        projectId,
+        taskId,
+      });
+      return;
+    }
     onClose();
-  }, [onClose]);
+  }, [onClose, onSessionComplete, duration, remaining, projectId, taskId]);
 
   // --------------------------------------------------------------------------
   // Pickup detection

@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, BarChart3 } from 'lucide-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -39,9 +40,12 @@ export default function AnalyticsScreen() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getFocusSessions().then((loaded) => {
-        if (!cancelled) setSessions(loaded);
-      });
+      getFocusSessions()
+        .then((loaded) => {
+          if (!cancelled) setSessions(loaded);
+        })
+        // An unreadable history leaves the empty state, which is the honest thing to show.
+        .catch(() => {});
       return () => {
         cancelled = true;
       };
@@ -79,12 +83,17 @@ export default function AnalyticsScreen() {
   };
 
   return (
-    <View style={[styles.safeArea, { paddingTop: 40 }]}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={1.8} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('stats.title')}</Text>
@@ -140,7 +149,7 @@ export default function AnalyticsScreen() {
         {/* Bottom padding */}
         <View style={{ height: 100 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

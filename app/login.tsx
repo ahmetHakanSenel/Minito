@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -118,8 +119,13 @@ export default function LoginScreen() {
 
   const hasSocialProviders = providers.google || providers.apple;
 
+  // On Android the window is already resized for the keyboard; padding on top of that moves
+  // the form twice.
   return (
-    <KeyboardAvoidingView className="flex-1" behavior="padding">
+    <KeyboardAvoidingView
+      className="flex-1"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StatusBar barStyle="light-content" />
       <ScrollView
         ref={scrollRef}
@@ -238,7 +244,12 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={toggleMode} disabled={isBusy} className="mt-4 py-1">
+          <TouchableOpacity
+            onPress={toggleMode}
+            disabled={isBusy}
+            className="mt-4 py-1"
+            accessibilityRole="button"
+          >
             <Text className="text-textMuted text-center text-sm">
               {isSignUp ? t('login.switchToSignIn') : t('login.switchToSignUp')}
             </Text>
