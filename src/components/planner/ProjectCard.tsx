@@ -292,11 +292,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     }) => {
       setFocusModeVisible(false);
       void endAudioSession();
-      setSessionData({
-        duration: data.duration,
-        pickupCount: data.pickupCount,
-      });
-      // Feed the Insights screen with real behavior (fire-and-forget)
+
+      // Insights are fed by what happened, finished or not (fire and forget).
       recordFocusSession({
         durationSec: data.duration,
         pickupCount: data.pickupCount,
@@ -305,7 +302,15 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         projectId: data.projectId,
         taskId: data.taskId,
       });
-      // Show session completion modal
+
+      // A session someone walked out of is not something to congratulate them for. It is
+      // counted, and the screen simply goes back to the plan.
+      if (!data.completed) {
+        setActiveTask(null);
+        return;
+      }
+
+      setSessionData({ duration: data.duration, pickupCount: data.pickupCount });
       setSessionModalVisible(true);
     },
     [endAudioSession]

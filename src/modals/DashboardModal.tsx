@@ -1,10 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Calendar, Headphones, BarChart3, Settings, Crown, User } from 'lucide-react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { X, Calendar, Headphones, BarChart3, Settings, User } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../features/auth/controller/AuthContext';
 import { haptics } from '../lib/ui/haptics';
@@ -15,7 +14,6 @@ interface DashboardModalProps {
   visible: boolean;
   onClose: () => void;
   userName?: string;
-  isPremium?: boolean;
   onNavigate?: (screen: string) => void;
 }
 
@@ -39,6 +37,8 @@ const QuickActionCard: React.FC<QuickActionCardProps> = ({ icon, label, bgColor,
       style={[styles.actionCard, { backgroundColor: bgColor }]}
       onPress={handlePress}
       activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
       <View style={styles.actionIconContainer}>{icon}</View>
       <Text style={styles.actionLabel}>{label}</Text>
@@ -50,14 +50,16 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
   visible,
   onClose,
   userName,
-  isPremium = false,
   onNavigate,
 }) => {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { displayName, user } = useAuth();
 
   // Screens that do not pass a name still show the signed-in user's handle.
   const name = userName ?? displayName ?? user?.email ?? t('dashboard.guest');
+  // Only when it says something the name does not already.
+  const subtitle = user?.email && user.email !== name ? user.email : null;
 
   const handleClose = () => {
     haptics.tap();
@@ -91,12 +93,14 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
             style={styles.content}
           >
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
               <Text style={styles.headerTitle}>{t('dashboard.controlCenter')}</Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={handleClose}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close')}
               >
                 <X size={24} color="#FFFFFF" strokeWidth={2} />
               </TouchableOpacity>
@@ -109,20 +113,14 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
                   <User size={28} color="#FFFFFF" strokeWidth={2} />
                 </View>
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{name}</Text>
-                  {isPremium ? (
-                    <LinearGradient
-                      colors={['#F59E0B', '#D97706']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.premiumBadge}
-                    >
-                      <Crown size={12} color="#FFFFFF" strokeWidth={2.5} />
-                      <Text style={styles.premiumText}>{t('dashboard.premiumPlan')}</Text>
-                    </LinearGradient>
-                  ) : (
-                    <Text style={styles.freeText}>{t('dashboard.freePlan')}</Text>
-                  )}
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {name}
+                  </Text>
+                  {subtitle ? (
+                    <Text style={styles.userSubtitle} numberOfLines={1}>
+                      {subtitle}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
 
@@ -181,7 +179,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingBottom: 16,
     marginBottom: 8,
   },
@@ -229,23 +226,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 6,
   },
-  premiumBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  premiumText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  freeText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
+  userSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   sectionTitle: {
     fontSize: 16,

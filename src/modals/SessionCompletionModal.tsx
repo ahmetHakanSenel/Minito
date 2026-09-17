@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -10,7 +10,7 @@ import {
   ArrowRight,
   Target,
   ThumbsUp,
-  Flame,
+  Sprout,
 } from 'lucide-react-native';
 import Animated, {
   FadeIn,
@@ -134,9 +134,11 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
     return t('duration.seconds', { count: seconds });
   };
 
-  // Calculate focus score (less pickups = better)
+  // Fewer pickups, higher score. It is a summary, not a verdict: the icon and the wording stay
+  // encouraging at the bottom of the range, because being told off is what stops people coming
+  // back to a session at all.
   const focusScore = Math.max(0, 100 - pickupCount * 10);
-  const FocusIcon = focusScore >= 80 ? Target : focusScore >= 50 ? ThumbsUp : Flame;
+  const FocusIcon = focusScore >= 80 ? Target : focusScore >= 50 ? ThumbsUp : Sprout;
 
   return (
     <Modal
@@ -153,7 +155,11 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
         <ConfettiAnimation visible={showConfetti} onComplete={() => {}} />
 
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <View style={styles.content}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
             {/* Celebration Icon */}
             <AnimatedView
               entering={FadeInDown.delay(100).springify()}
@@ -215,7 +221,13 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
               style={styles.focusScoreContainer}
             >
               <Text style={styles.focusScoreLabel}>{t('sessionComplete.focusScore')}</Text>
-              <Text style={styles.focusScoreValue}>{focusScore}</Text>
+              {/* A bare number leaves people guessing what it is out of. */}
+              <View style={styles.focusScoreRow}>
+                <Text style={styles.focusScoreValue}>{focusScore}</Text>
+                <Text style={styles.focusScoreOutOf}>
+                  {t('sessionComplete.outOf', { max: 100 })}
+                </Text>
+              </View>
             </AnimatedView>
 
             {/* Action Buttons */}
@@ -230,6 +242,8 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                   onPressIn={handlePressInA}
                   onPressOut={handlePressOutA}
                   activeOpacity={1}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('sessionComplete.taskDone')}
                 >
                   <LinearGradient
                     colors={['#34D399', '#10B981']}
@@ -251,6 +265,8 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                   onPressOut={handlePressOutB}
                   activeOpacity={1}
                   style={styles.buttonSecondary}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('sessionComplete.justSession')}
                 >
                   <Text style={styles.buttonSecondaryText}>{t('sessionComplete.justSession')}</Text>
                   <ArrowRight size={18} color="rgba(255,255,255,0.7)" strokeWidth={2} />
@@ -260,7 +276,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
             {/* Helper Text */}
             <Text style={styles.helperText}>{t('sessionComplete.helper')}</Text>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </AnimatedView>
     </Modal>
@@ -280,9 +296,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  focusScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  focusScoreOutOf: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
   content: {
+    // Centred while it fits, scrollable once it does not.
+    flexGrow: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 24,
   },
   iconContainer: {
     marginBottom: 24,

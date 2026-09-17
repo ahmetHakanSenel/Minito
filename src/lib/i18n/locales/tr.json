@@ -22,7 +22,9 @@
     "resumeTitle": "Kaldığın yerden devam et",
     "resumeFallbackLabel": "Görevin",
     "resumeDismiss": "Yarım kalan oturumu kapat",
-    "backHome": "Ana ekrana dön"
+    "backHome": "Ana ekrana dön",
+    "inputLabel": "Neyi erteliyorsun?",
+    "charactersLeft": "{{count}} karakter kaldı"
   },
   "focus": {
     "step": "Adım {{current}} / {{total}}",
@@ -174,8 +176,6 @@
     "coreFeatureTitle": "Temel Minito Özelliği",
     "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl.",
     "controlCenter": "Kontrol Merkezi",
-    "premiumPlan": "Premium plan",
-    "freePlan": "Ücretsiz plan",
     "quickAccess": "Hızlı erişim"
   },
   "errorBoundary": {
@@ -343,7 +343,9 @@
         "name": "Modern klasik",
         "description": "Sakin enstrümantal odak"
       }
-    }
+    },
+    "playHint": "Bu ambiyansı çalar",
+    "pauseHint": "Bu ambiyansı duraklatır"
   },
   "stats": {
     "title": "İçgörüler",
@@ -391,7 +393,8 @@
     "focusScore": "Odak skoru",
     "taskDone": "Görev tamamlandı",
     "justSession": "Sadece oturum",
-    "helper": "“Sadece oturum” seçersen görev daha sonrası için açık kalır."
+    "helper": "“Sadece oturum” seçersen görev daha sonrası için açık kalır.",
+    "outOf": "/ {{max}}"
   },
   "duration": {
     "minutes": "{{count}} dakika",

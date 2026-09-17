@@ -7,7 +7,6 @@ export { MinitoMark } from './brand/MinitoMark';
 export { PremiumStepAnimation } from './PremiumStepAnimation';
 export { ConfettiAnimation } from './ConfettiAnimation';
 export { SuccessIcon } from './SuccessIcon';
-export { LanguageSelector } from './LanguageSelector';
 export { AuroraBackground } from './AuroraBackground';
 export { InlineTimer } from './InlineTimer';
 

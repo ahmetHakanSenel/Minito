@@ -22,7 +22,9 @@
     "resumeTitle": "Pick up where you left off",
     "resumeFallbackLabel": "Your task",
     "resumeDismiss": "Dismiss the unfinished session",
-    "backHome": "Back to home"
+    "backHome": "Back to home",
+    "inputLabel": "What are you putting off?",
+    "charactersLeft": "{{count}} characters left"
   },
   "focus": {
     "step": "Step {{current}} of {{total}}",
@@ -174,8 +176,6 @@
     "coreFeatureTitle": "Core Minito Feature",
     "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps.",
     "controlCenter": "Control Center",
-    "premiumPlan": "Premium plan",
-    "freePlan": "Free plan",
     "quickAccess": "Quick access"
   },
   "errorBoundary": {
@@ -343,7 +343,9 @@
         "name": "Modern classical",
         "description": "Calm instrumental focus"
       }
-    }
+    },
+    "playHint": "Plays this ambience",
+    "pauseHint": "Pauses this ambience"
   },
   "stats": {
     "title": "Insights",
@@ -391,7 +393,8 @@
     "focusScore": "Focus score",
     "taskDone": "Task done",
     "justSession": "Just the session",
-    "helper": "Choose “Just the session” to keep the task open for later."
+    "helper": "Choose “Just the session” to keep the task open for later.",
+    "outOf": "/ {{max}}"
   },
   "duration": {
     "minutes": "{{count}} min",

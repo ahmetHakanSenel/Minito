@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 
@@ -61,9 +61,21 @@ export const FlowStateVisualizer: React.FC<FlowStateVisualizerProps> = ({
 
   return (
     <Animated.View entering={FadeIn.duration(800)} style={styles.container}>
-      <Pressable onLongPress={handleLongPress} delayLongPress={400} style={styles.orbContainer}>
-        <LivingAuraOrb state={currentState} />
-      </Pressable>
+      {/* In a release build there is nothing to press, so it is not a button: the orb is a
+          picture of what the two lines under it already say. */}
+      {enableDebugMode ? (
+        <Pressable onLongPress={handleLongPress} delayLongPress={400} style={styles.orbContainer}>
+          <LivingAuraOrb state={currentState} />
+        </Pressable>
+      ) : (
+        <View
+          style={styles.orbContainer}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          <LivingAuraOrb state={currentState} />
+        </View>
+      )}
 
       <Animated.Text
         entering={FadeIn.delay(300).duration(600)}

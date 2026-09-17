@@ -8,12 +8,13 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { deleteUserAccount, exportUserData } from '../src/lib/api/userData';
 import { clearPlannerState } from '../src/features/planner/plannerStorage';
-import { LanguageSelector } from '../src/components';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -36,22 +37,28 @@ const Button = ({
   loading?: boolean;
   disabled?: boolean;
 }) => {
-  const pressed = useSharedValue(0);
-  const buttonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withSpring(pressed.value ? 0.96 : 1, { damping: 10, stiffness: 200 }) }],
-  }));
+  const scale = useSharedValue(1);
+  const buttonStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const spring = { damping: 10, stiffness: 200 };
 
   const bgColor =
     variant === 'danger' ? 'bg-red-600' : variant === 'secondary' ? 'bg-gray-800' : 'bg-primary';
 
   return (
     <AnimatedTouchableOpacity
-      onPressIn={() => (pressed.value = 1)}
-      onPressOut={() => (pressed.value = 0)}
+      onPressIn={() => {
+        scale.value = withSpring(0.96, spring);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, spring);
+      }}
       onPress={onPress}
       disabled={disabled || loading}
       className={`${bgColor} rounded-xl py-4 px-6 mb-4`}
       style={buttonStyle}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator size="small" color="white" />
@@ -100,10 +107,10 @@ export default function PrivacyScreen() {
       } else {
         Alert.alert(t('common.error'), t('errors.exportFailed'));
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Export error:', error);
       haptics.error();
-      Alert.alert(t('common.error'), error.message || t('errors.exportFailed'));
+      Alert.alert(t('common.error'), t('errors.exportFailed'));
     } finally {
       setExporting(false);
     }
@@ -150,10 +157,10 @@ export default function PrivacyScreen() {
                   },
                 ]
               );
-            } catch (error: any) {
+            } catch (error) {
               console.error('Delete error:', error);
               haptics.error();
-              Alert.alert(t('common.error'), error.message || t('errors.deleteFailed'));
+              Alert.alert(t('common.error'), t('errors.deleteFailed'));
             } finally {
               setDeleting(false);
             }
@@ -168,86 +175,101 @@ export default function PrivacyScreen() {
       haptics.press();
       await signOut();
       router.replace('/');
-    } catch (error: any) {
-      Alert.alert(t('common.error'), error.message || t('errors.signOutFailed'));
+    } catch (error) {
+      console.error('Sign out error:', error);
+      Alert.alert(t('common.error'), t('errors.signOutFailed'));
     }
   };
 
   return (
-    <ScrollView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <StatusBar barStyle="light-content" />
-      <View className="flex-1 px-6 py-8">
-        <Text className="text-textMain text-3xl font-bold mb-2">{t('privacy.title')}</Text>
-        <Text className="text-textMuted text-base mb-8">{t('privacy.subtitle')}</Text>
 
-        {/* Language Selector */}
-        <View className="bg-surface rounded-2xl p-6 mb-6">
-          <LanguageSelector />
-        </View>
-
-        {/* User Info */}
-        {user && (
-          <View className="bg-surface rounded-2xl p-6 mb-6">
-            <Text className="text-textMuted text-sm mb-2">{t('privacy.signedInAs')}</Text>
-            <Text className="text-textMain text-lg font-semibold mb-1">{user.email || 'User'}</Text>
-            <Text className="text-textMuted text-xs">
-              {t('privacy.userId')}: {user.id.substring(0, 8)}...
-            </Text>
-          </View>
-        )}
-
-        {/* GDPR Section */}
-        <View className="mb-8">
-          <Text className="text-textMain text-xl font-semibold mb-4">{t('privacy.gdpr')}</Text>
-
-          <View className="bg-surface rounded-2xl p-6 mb-4">
-            <Text className="text-textMain text-base font-medium mb-2">
-              {t('privacy.exportData.title')}
-            </Text>
-            <Text className="text-textMuted text-sm mb-4">
-              {t('privacy.exportData.description')}
-            </Text>
-            <Button
-              onPress={handleExportData}
-              title={t('privacy.exportData.button')}
-              variant="secondary"
-              loading={exporting}
-              disabled={!user}
-            />
-          </View>
-
-          <View className="bg-surface rounded-2xl p-6">
-            <Text className="text-textMain text-base font-medium mb-2">
-              {t('privacy.deleteAccount.title')}
-            </Text>
-            <Text className="text-textMuted text-sm mb-4">
-              {t('privacy.deleteAccount.description')}
-            </Text>
-            <Button
-              onPress={handleDeleteAccount}
-              title={t('privacy.deleteAccount.button')}
-              variant="danger"
-              loading={deleting}
-              disabled={!user}
-            />
-          </View>
-        </View>
-
-        {/* Sign Out */}
-        {user && (
-          <View className="mb-8">
-            <Button onPress={handleSignOut} title={t('privacy.signOut')} variant="secondary" />
-          </View>
-        )}
-
-        {/* Privacy Notice */}
-        <View className="bg-surface/50 rounded-2xl p-6">
-          <Text className="text-textMuted text-xs leading-5">
-            <Text className="font-semibold">{t('privacy.privacyNotice.title')}</Text>{' '}
-            {t('privacy.privacyNotice.text')}
-          </Text>
-        </View>
+      <View className="flex-row items-center px-2 pt-2">
+        <TouchableOpacity
+          onPress={() => {
+            haptics.tap();
+            router.back();
+          }}
+          className="w-11 h-11 items-center justify-center"
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
+          <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
+        </TouchableOpacity>
       </View>
-    </ScrollView>
+
+      <ScrollView className="flex-1">
+        <View className="flex-1 px-6 pb-8 pt-2">
+          <Text className="text-textMain text-3xl font-bold mb-2">{t('privacy.title')}</Text>
+          <Text className="text-textMuted text-base mb-8">{t('privacy.subtitle')}</Text>
+
+          {/* User Info */}
+          {user && (
+            <View className="bg-surface rounded-2xl p-6 mb-6">
+              <Text className="text-textMuted text-sm mb-2">{t('privacy.signedInAs')}</Text>
+              <Text className="text-textMain text-lg font-semibold mb-1">
+                {user.email || 'User'}
+              </Text>
+              <Text className="text-textMuted text-xs">
+                {t('privacy.userId')}: {user.id.substring(0, 8)}...
+              </Text>
+            </View>
+          )}
+
+          {/* GDPR Section */}
+          <View className="mb-8">
+            <Text className="text-textMain text-xl font-semibold mb-4">{t('privacy.gdpr')}</Text>
+
+            <View className="bg-surface rounded-2xl p-6 mb-4">
+              <Text className="text-textMain text-base font-medium mb-2">
+                {t('privacy.exportData.title')}
+              </Text>
+              <Text className="text-textMuted text-sm mb-4">
+                {t('privacy.exportData.description')}
+              </Text>
+              <Button
+                onPress={handleExportData}
+                title={t('privacy.exportData.button')}
+                variant="secondary"
+                loading={exporting}
+                disabled={!user}
+              />
+            </View>
+
+            <View className="bg-surface rounded-2xl p-6">
+              <Text className="text-textMain text-base font-medium mb-2">
+                {t('privacy.deleteAccount.title')}
+              </Text>
+              <Text className="text-textMuted text-sm mb-4">
+                {t('privacy.deleteAccount.description')}
+              </Text>
+              <Button
+                onPress={handleDeleteAccount}
+                title={t('privacy.deleteAccount.button')}
+                variant="danger"
+                loading={deleting}
+                disabled={!user}
+              />
+            </View>
+          </View>
+
+          {/* Sign Out */}
+          {user && (
+            <View className="mb-8">
+              <Button onPress={handleSignOut} title={t('privacy.signOut')} variant="secondary" />
+            </View>
+          )}
+
+          {/* Privacy Notice */}
+          <View className="bg-surface/50 rounded-2xl p-6">
+            <Text className="text-textMuted text-xs leading-5">
+              <Text className="font-semibold">{t('privacy.privacyNotice.title')}</Text>{' '}
+              {t('privacy.privacyNotice.text')}
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

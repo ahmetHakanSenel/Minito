@@ -26,6 +26,10 @@ const SoundCard: React.FC<SoundCardProps> = ({ track, isActive, isPlaying, onPre
         style={[styles.soundCard, isActive && styles.soundCardActive]}
         onPress={onPress}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={t(`audio.tracks.${track.id}.name`)}
+        accessibilityState={{ selected: isActive }}
+        accessibilityHint={isActive && isPlaying ? t('audio.pauseHint') : t('audio.playHint')}
       >
         <View style={[styles.soundIcon, { backgroundColor: `${track.color}20` }]}>
           <Volume2 size={24} color={track.color} strokeWidth={2} />
@@ -84,7 +88,12 @@ export default function SoundsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('audio.title')}</Text>
@@ -107,7 +116,7 @@ export default function SoundsScreen() {
               track={track}
               isActive={currentTrack?.id === track.id}
               isPlaying={currentTrack?.id === track.id && isPlaying}
-              onPress={() => handleTrackPress(track.id)}
+              onPress={() => void handleTrackPress(track.id)}
               index={index}
             />
           ))}

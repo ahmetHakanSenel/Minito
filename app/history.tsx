@@ -125,7 +125,7 @@ export default function HistoryScreen() {
           }}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel={t('common.close')}
+          accessibilityLabel={t('common.back')}
         >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
