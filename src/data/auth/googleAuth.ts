@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import type { IdTokenCredential } from './idTokenCredential';
 
 type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
 
@@ -40,7 +41,7 @@ export async function isGoogleSignInAvailable(): Promise<boolean> {
 }
 
 /** Resolves to Google's ID token, or null when the user cancels. */
-export async function requestGoogleIdToken(): Promise<string | null> {
+export async function requestGoogleCredential(): Promise<IdTokenCredential | null> {
   const googleModule = await loadGoogleSignin();
   if (!googleModule) {
     throw new Error('Google Sign-In is not configured or its native module is unavailable');
@@ -57,7 +58,7 @@ export async function requestGoogleIdToken(): Promise<string | null> {
     if (!response.data.idToken) {
       throw new Error('Google did not return an ID token');
     }
-    return response.data.idToken;
+    return { token: response.data.idToken };
   } catch (error) {
     if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
       return null;
