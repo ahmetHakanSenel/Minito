@@ -3,9 +3,6 @@
 *.zip
 *.7z
 
-# Temporary directories
-minito-temp/
-
 # Documentation not needed for build
 docs/
 *.md
