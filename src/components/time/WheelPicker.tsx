@@ -226,6 +226,7 @@ export function WheelPicker({
     const pan = Gesture.Pan()
       .activeOffsetY([-4, 4])
       .failOffsetX([-14, 14])
+      // eslint-disable-next-line react-hooks/refs -- read inside a gesture worklet, not during render
       .onBegin(() => {
         cancelAnimation(position);
         runOnJS(releaseExternal)();
@@ -250,6 +251,7 @@ export function WheelPicker({
     // A tap above or below the window steps once, for anyone who would rather not drag.
     const tap = Gesture.Tap()
       .maxDuration(250)
+      // eslint-disable-next-line react-hooks/refs -- read inside a gesture worklet, not during render
       .onEnd((event, success) => {
         if (!success) return;
         const rows = (event.y - CENTER_OFFSET - ROW_HEIGHT / 2) / ROW_HEIGHT;

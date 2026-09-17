@@ -85,6 +85,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   // A new step brings a new estimate: start over from it.
   useEffect(() => {
     stopAlarm();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a new step brings a new estimate, so the timer restarts from it
     setPlannedTotal(initialTotal);
     setRemaining(initialTotal);
     setPhase('ready');

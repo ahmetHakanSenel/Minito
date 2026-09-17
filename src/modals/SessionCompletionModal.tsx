@@ -65,6 +65,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
   useEffect(() => {
     if (visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the celebration belongs to the modal opening
       setShowConfetti(true);
       celebrationScale.value = withSequence(
         withTiming(1.2, { duration: 300, easing: Easing.out(Easing.back(2)) }),

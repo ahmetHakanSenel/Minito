@@ -201,6 +201,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
     finishedRef.current = false;
     pickupsRef.current = 0;
     endAtRef.current = Date.now() + duration * 1000;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a session starts from zero every time it opens
     setPickupCount(0);
     setIsPaused(false);
     setIsWarning(false);

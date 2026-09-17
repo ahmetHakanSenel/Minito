@@ -125,6 +125,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     stateRef.current = EMPTY_PLANNER_STATE;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the planner empties while the next account loads its own state
     setState(EMPTY_PLANNER_STATE);
     saveRef.current = null;
     earlyChangesRef.current = null;

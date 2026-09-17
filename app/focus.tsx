@@ -66,6 +66,7 @@ export default function FocusModeScreen() {
   // stop — it would otherwise drive the Aurora background forever. Leaving
   // a step is always the authoritative "pulse over" signal.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the pulse when the step changes is what this effect is for
     setTimerCompletionLoop(false);
   }, [currentStepIndex]);
 
@@ -122,6 +123,7 @@ export default function FocusModeScreen() {
 
     // If no empathy screen, start at step 0
     if (!hasEmpathyScreen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- with no empathy screen, the first step is where the screen starts
       setCurrentStepIndex(0);
     }
   }, [hasEmpathyScreen]);

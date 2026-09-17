@@ -1,26 +1,22 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
 
 /**
- * Minimal file-backed JSON store.
+ * Minimal file-backed JSON store, on the app's own document directory.
  *
- * Uses expo-file-system (already a dependency) instead of AsyncStorage so no
- * new native module is required — existing dev-client builds keep working.
- * All operations fail soft: a storage error must never crash a screen.
+ * Files are small (a planner, a saved session), so the synchronous API is the right one: it
+ * avoids a round trip per read and keeps callers simple. Every operation fails soft, because a
+ * storage error must never crash a screen.
  */
 
-const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? '';
-
-function pathFor(key: string): string {
-  return `${baseDir}minito-${key}.json`;
+function fileFor(key: string): File {
+  return new File(Paths.document, `minito-${key}.json`);
 }
 
 export async function readJson<T>(key: string): Promise<T | null> {
-  if (!baseDir) return null;
   try {
-    const info = await FileSystem.getInfoAsync(pathFor(key));
-    if (!info.exists) return null;
-    const raw = await FileSystem.readAsStringAsync(pathFor(key));
-    return JSON.parse(raw) as T;
+    const file = fileFor(key);
+    if (!file.exists) return null;
+    return JSON.parse(file.textSync()) as T;
   } catch (error) {
     console.warn(`jsonStore: failed to read "${key}"`, error);
     return null;
@@ -28,9 +24,10 @@ export async function readJson<T>(key: string): Promise<T | null> {
 }
 
 export async function writeJson(key: string, data: unknown): Promise<boolean> {
-  if (!baseDir) return false;
   try {
-    await FileSystem.writeAsStringAsync(pathFor(key), JSON.stringify(data));
+    const file = fileFor(key);
+    file.create({ overwrite: true, intermediates: true });
+    file.write(JSON.stringify(data));
     return true;
   } catch (error) {
     console.warn(`jsonStore: failed to write "${key}"`, error);
@@ -39,9 +36,9 @@ export async function writeJson(key: string, data: unknown): Promise<boolean> {
 }
 
 export async function removeJson(key: string): Promise<void> {
-  if (!baseDir) return;
   try {
-    await FileSystem.deleteAsync(pathFor(key), { idempotent: true });
+    const file = fileFor(key);
+    if (file.exists) file.delete();
   } catch (error) {
     console.warn(`jsonStore: failed to remove "${key}"`, error);
   }

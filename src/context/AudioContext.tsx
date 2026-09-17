@@ -78,8 +78,22 @@ interface AudioContextType {
 
 type SessionSnapshot = { trackId: string | null; wasPlaying: boolean };
 
+/**
+ * `AudioPlayer` inherits `addListener` from expo-modules-core, which TypeScript cannot see here:
+ * the package ships nested inside `expo` and is not meant to be installed directly. The shape is
+ * declared locally instead of pulling in a dependency that Expo tells apps not to depend on.
+ */
+type StatusSubscription = { remove: () => void };
+
+type ListeningPlayer = AudioPlayer & {
+  addListener(
+    event: 'playbackStatusUpdate',
+    listener: (status: AudioStatus) => void
+  ): StatusSubscription;
+};
+
 /** A native player plus its status subscription; both are released together. */
-type LoadedPlayer = { player: AudioPlayer; subscription: { remove: () => void } };
+type LoadedPlayer = { player: AudioPlayer; subscription: StatusSubscription };
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
 
@@ -150,8 +164,8 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       releasePlayer();
       setIsLoading(true);
       try {
-        const player = createAudioPlayer(track.source, { updateInterval: 1000 });
-        const subscription = player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
+        const player = createAudioPlayer(track.source, { updateInterval: 1000 }) as ListeningPlayer;
+        const subscription = player.addListener('playbackStatusUpdate', (status) => {
           if (status.isLoaded) setIsLoading(false);
         });
         loadedRef.current = { player, subscription };

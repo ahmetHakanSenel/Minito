@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="Expo SDK 54" src="https://img.shields.io/badge/Expo-SDK_54-000020?style=flat-square&logo=expo&logoColor=white">
+  <img alt="Expo SDK 57" src="https://img.shields.io/badge/Expo-SDK_57-000020?style=flat-square&logo=expo&logoColor=white">
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres_·_RLS-3ECF8E?style=flat-square&logo=supabase&logoColor=white">
   <img alt="Deno Edge Functions" src="https://img.shields.io/badge/Deno-Edge_Functions-000000?style=flat-square&logo=deno&logoColor=white">
 </p>
@@ -260,7 +260,7 @@ probes quietly and speaks only when something is down.
 
 | Area | Choices |
 | ---- | ------- |
-| App | Expo SDK 54, React Native 0.81 (New Architecture), React 19, TypeScript strict, Expo Router 6, Reanimated 4, Skia, expo-audio |
+| App | Expo SDK 57, React Native 0.86, React 19.2, TypeScript 6 (strict), Expo Router 6, Reanimated 4, Skia, expo-audio |
 | Backend | Supabase Auth, Postgres (RLS, `pg_cron`, `pg_net`), Deno Edge Functions |
 | Security | XChaCha20-Poly1305 via `@noble/ciphers`, Keychain/Keystore via `expo-secure-store`, HMAC-SHA256, nonce-bound Apple sign-in |
 | AI | OpenAI `gpt-4o-mini` or Gemini, switchable by secret; OpenAI moderation |
