@@ -1,7 +1,8 @@
 import { isAuthError, isAuthRetryableFetchError, type Session } from '@supabase/supabase-js';
 import { BackendUnavailableError, getSupabase, isBackendConfigured } from '../data/supabase/client';
-import { isAppleSignInAvailable, requestAppleIdToken } from '../data/auth/appleAuth';
-import { isGoogleSignInAvailable, requestGoogleIdToken } from '../data/auth/googleAuth';
+import { isAppleSignInAvailable, requestAppleCredential } from '../data/auth/appleAuth';
+import { isGoogleSignInAvailable, requestGoogleCredential } from '../data/auth/googleAuth';
+import type { IdTokenCredential } from '../data/auth/idTokenCredential';
 
 export type AuthErrorCode =
   | 'invalid_credentials'
@@ -114,19 +115,24 @@ async function signUpWithEmail(
 
 async function signInWithProvider(
   provider: 'google' | 'apple',
-  requestIdToken: () => Promise<string | null>
+  requestCredential: () => Promise<IdTokenCredential | null>
 ): Promise<void> {
   const supabaseAuth = auth();
-  let token: string | null;
+  let credential: IdTokenCredential | null;
   try {
-    token = await requestIdToken();
+    credential = await requestCredential();
   } catch (error) {
     throw new AuthRepositoryError('provider_unavailable', error);
   }
-  if (token === null) {
+  if (credential === null) {
     throw new AuthRepositoryError('cancelled');
   }
-  const { error } = await supabaseAuth.signInWithIdToken({ provider, token });
+  // With a nonce, Supabase checks that the token was issued for this very sign-in attempt.
+  const { error } = await supabaseAuth.signInWithIdToken({
+    provider,
+    token: credential.token,
+    ...(credential.nonce ? { nonce: credential.nonce } : {}),
+  });
   if (error) {
     throw toRepositoryError(error);
   }
@@ -152,8 +158,8 @@ export const authRepository = {
   onSessionChange,
   signInWithEmail,
   signUpWithEmail,
-  signInWithGoogle: (): Promise<void> => signInWithProvider('google', requestGoogleIdToken),
-  signInWithApple: (): Promise<void> => signInWithProvider('apple', requestAppleIdToken),
+  signInWithGoogle: (): Promise<void> => signInWithProvider('google', requestGoogleCredential),
+  signInWithApple: (): Promise<void> => signInWithProvider('apple', requestAppleCredential),
   signOut,
   updateDisplayName,
   isGoogleSignInAvailable: (): Promise<boolean> => isGoogleSignInAvailable().catch(() => false),
