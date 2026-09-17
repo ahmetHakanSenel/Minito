@@ -112,6 +112,7 @@ export const SessionSetupModal: React.FC<SessionSetupModalProps> = ({
   useEffect(() => {
     if (!visible) return;
     beginAudioSession();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the sheet opens with defaults, not with the last session
     setDurationSec(DEFAULT_DURATION_SEC);
     setTrackId(isPlaying ? (currentTrack?.id ?? null) : null);
     // Read once per opening: later changes are the user's own choices in this sheet.

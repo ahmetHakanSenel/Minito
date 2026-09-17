@@ -155,6 +155,7 @@ export default function HomeScreen() {
   // Open DashboardModal when coming back from sub-screens with openDashboard param
   useEffect(() => {
     if (params.openDashboard === 'true') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- arriving with the param is the request to open the dashboard
       setIsDashboardVisible(true);
       router.setParams({ openDashboard: undefined });
     }

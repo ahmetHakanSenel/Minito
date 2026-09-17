@@ -4,7 +4,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { SplashScreen, Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import * as NavigationBar from 'expo-navigation-bar';
+import { NavigationBar } from 'expo-navigation-bar';
 import { AuthProvider, useAuth } from '../src/features/auth/controller/AuthContext';
 import { I18nProvider } from '../src/lib/i18n/I18nProvider';
 import { AuroraBackground } from '../src/components';
@@ -64,7 +64,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
-      NavigationBar.setButtonStyleAsync('light');
+      NavigationBar.setStyle('light');
     }
     // Until this resolves haptics stay on, which is also the default.
     loadPreferences()

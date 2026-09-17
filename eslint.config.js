@@ -8,6 +8,13 @@ module.exports = defineConfig([
   // Formatting is Prettier's job (checked separately); turn off rules that would fight it.
   prettierConfig,
   {
+    rules: {
+      // React Compiler's immutability rule does not know about Reanimated shared values, whose
+      // documented API is `sharedValue.value = ...` inside effects and worklets.
+      'react-hooks/immutability': 'off',
+    },
+  },
+  {
     ignores: [
       'dist/*',
       '.expo/*',

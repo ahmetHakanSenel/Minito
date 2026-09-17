@@ -26,6 +26,7 @@ export function DurationWheels({ value, onChange, maxHours }: DurationWheelsProp
   // Two dials can report in the same tick; each must merge into the other's latest value, not
   // into the one this render started with.
   const latestRef = useRef(value);
+  // eslint-disable-next-line react-hooks/refs -- the ref only carries the latest value between two dials in one tick
   latestRef.current = value;
 
   const update = useCallback(

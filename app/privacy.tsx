@@ -21,6 +21,47 @@ import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
+/** One button style for the whole screen. Declared here, not in render, so its press
+ * animation keeps its state between renders. */
+const Button = ({
+  onPress,
+  title,
+  variant = 'primary',
+  loading = false,
+  disabled = false,
+}: {
+  onPress: () => void;
+  title: string;
+  variant?: 'primary' | 'danger' | 'secondary';
+  loading?: boolean;
+  disabled?: boolean;
+}) => {
+  const pressed = useSharedValue(0);
+  const buttonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(pressed.value ? 0.96 : 1, { damping: 10, stiffness: 200 }) }],
+  }));
+
+  const bgColor =
+    variant === 'danger' ? 'bg-red-600' : variant === 'secondary' ? 'bg-gray-800' : 'bg-primary';
+
+  return (
+    <AnimatedTouchableOpacity
+      onPressIn={() => (pressed.value = 1)}
+      onPressOut={() => (pressed.value = 0)}
+      onPress={onPress}
+      disabled={disabled || loading}
+      className={`${bgColor} rounded-xl py-4 px-6 mb-4`}
+      style={buttonStyle}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color="white" />
+      ) : (
+        <Text className="text-white text-center font-semibold text-lg">{title}</Text>
+      )}
+    </AnimatedTouchableOpacity>
+  );
+};
+
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
 
 export default function PrivacyScreen() {
@@ -130,45 +171,6 @@ export default function PrivacyScreen() {
     } catch (error: any) {
       Alert.alert(t('common.error'), error.message || t('errors.signOutFailed'));
     }
-  };
-
-  const Button = ({
-    onPress,
-    title,
-    variant = 'primary',
-    loading = false,
-    disabled = false,
-  }: {
-    onPress: () => void;
-    title: string;
-    variant?: 'primary' | 'danger' | 'secondary';
-    loading?: boolean;
-    disabled?: boolean;
-  }) => {
-    const pressed = useSharedValue(0);
-    const buttonStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: withSpring(pressed.value ? 0.96 : 1, { damping: 10, stiffness: 200 }) }],
-    }));
-
-    const bgColor =
-      variant === 'danger' ? 'bg-red-600' : variant === 'secondary' ? 'bg-gray-800' : 'bg-primary';
-
-    return (
-      <AnimatedTouchableOpacity
-        onPressIn={() => (pressed.value = 1)}
-        onPressOut={() => (pressed.value = 0)}
-        onPress={onPress}
-        disabled={disabled || loading}
-        className={`${bgColor} rounded-xl py-4 px-6 mb-4`}
-        style={buttonStyle}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color="white" />
-        ) : (
-          <Text className="text-white text-center font-semibold text-lg">{title}</Text>
-        )}
-      </AnimatedTouchableOpacity>
-    );
   };
 
   return (

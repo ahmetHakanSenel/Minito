@@ -47,6 +47,7 @@ export const FlowStateVisualizer: React.FC<FlowStateVisualizerProps> = ({
 
   useEffect(() => {
     if (!isDebugOverride) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the shown state follows the calculated one unless a demo overrides it
       setCurrentState(calculatedState);
     }
   }, [calculatedState, isDebugOverride]);

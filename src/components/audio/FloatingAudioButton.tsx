@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   sheet: {
