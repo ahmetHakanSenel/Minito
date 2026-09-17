@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ChevronDown, Circle, CheckCircle2, Play } from 'lucide-react-native';
+import { ChevronDown, Circle, CheckCircle2, Play, Trash2 } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
   FadeInRight,
@@ -60,8 +60,6 @@ const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({ progress, col
 
 interface TaskItemProps {
   task: Task;
-  projectId: string;
-  projectTitle: string;
   onToggle: () => void;
   onStartFocus: (task: Task) => void;
   isNextStep?: boolean;
@@ -69,12 +67,11 @@ interface TaskItemProps {
 
 const TaskItem: React.FC<TaskItemProps> = ({
   task,
-  projectId,
-  projectTitle,
   onToggle,
   onStartFocus,
   isNextStep = false,
 }) => {
+  const { t } = useTranslation();
   const handleStartFocus = useCallback(() => {
     haptics.press();
     onStartFocus(task);
@@ -94,6 +91,9 @@ const TaskItem: React.FC<TaskItemProps> = ({
         onPress={handleToggle}
         style={styles.taskCheckbox}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="checkbox"
+        accessibilityLabel={task.title}
+        accessibilityState={{ checked: task.isCompleted }}
       >
         {task.isCompleted ? (
           <CheckCircle2 size={20} color="#34D399" strokeWidth={2} />
@@ -106,6 +106,9 @@ const TaskItem: React.FC<TaskItemProps> = ({
         style={styles.taskTextContainer}
         onPress={handleStartFocus}
         disabled={task.isCompleted}
+        accessibilityRole="button"
+        accessibilityLabel={t('planner.startFocusOn', { title: task.title })}
+        accessibilityState={{ disabled: task.isCompleted }}
       >
         <Text
           style={[
@@ -124,6 +127,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
           onPress={handleStartFocus}
           style={[styles.taskPlayButton, isNextStep && styles.taskPlayButtonActive]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('planner.startFocusOn', { title: task.title })}
         >
           <Play
             size={14}
@@ -142,17 +147,10 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
 interface NextStepPreviewProps {
   task: Task;
-  projectId: string;
-  projectTitle: string;
   onStartFocus: (task: Task) => void;
 }
 
-const NextStepPreview: React.FC<NextStepPreviewProps> = ({
-  task,
-  projectId,
-  projectTitle,
-  onStartFocus,
-}) => {
+const NextStepPreview: React.FC<NextStepPreviewProps> = ({ task, onStartFocus }) => {
   const { t } = useTranslation();
   const handleStartFocus = useCallback(() => {
     haptics.press();
@@ -164,6 +162,8 @@ const NextStepPreview: React.FC<NextStepPreviewProps> = ({
       style={styles.nextStepContainer}
       onPress={handleStartFocus}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={t('planner.startFocusOn', { title: task.title })}
     >
       <View style={styles.nextStepLabelRow}>
         <Text style={styles.nextStepLabel}>{t('planner.nextStep')}</Text>
@@ -342,6 +342,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   }));
 
   const nextStep = getNextStep(project);
+  // Found once, rather than once per row inside the map.
+  const nextStepIndex = project.tasks.findIndex((task) => !task.isCompleted);
   const formattedDueDate = formatDueDate(project.dueDate);
 
   return (
@@ -362,6 +364,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           style={[styles.projectCard, cardAnimatedStyle]}
           onPress={handlePress}
           onLongPress={handleLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={project.title}
+          accessibilityState={{ expanded: isExpanded }}
           accessibilityHint={t('planner.deleteHint')}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -388,12 +393,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
           {/* Next Step (Collapsed) or All Tasks (Expanded) */}
           {!isExpanded && nextStep && (
-            <NextStepPreview
-              task={nextStep}
-              projectId={project.id}
-              projectTitle={project.title}
-              onStartFocus={handleStartFocus}
-            />
+            <NextStepPreview task={nextStep} onStartFocus={handleStartFocus} />
           )}
 
           {/* Due Date */}
@@ -410,11 +410,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 <TaskItem
                   key={task.id}
                   task={task}
-                  projectId={project.id}
-                  projectTitle={project.title}
                   onToggle={() => handleToggleTask(task.id)}
                   onStartFocus={handleStartFocus}
-                  isNextStep={taskIndex === project.tasks.findIndex((t) => !t.isCompleted)}
+                  isNextStep={taskIndex === nextStepIndex}
                 />
               ))}
 
@@ -424,6 +422,18 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                   {t('planner.due', { date: formattedDueDate })}
                 </Text>
               )}
+
+              {/* Long-pressing the card deletes it too, but nothing on screen said so. */}
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={handleLongPress}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('planner.deleteTitle')}
+              >
+                <Trash2 size={14} color="rgba(255,255,255,0.35)" strokeWidth={2} />
+                <Text style={styles.deleteButtonText}>{t('common.delete')}</Text>
+              </TouchableOpacity>
             </AnimatedView>
           )}
         </AnimatedTouchableOpacity>
@@ -451,7 +461,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       {/* Session Completion Modal */}
       <SessionCompletionModal
         visible={sessionModalVisible}
-        onClose={() => setSessionModalVisible(false)}
+        onClose={handleJustSession}
         sessionDuration={sessionData.duration}
         pickupCount={sessionData.pickupCount}
         taskTitle={activeTask?.title || ''}
@@ -628,6 +638,20 @@ const styles = StyleSheet.create({
     // Only the next step gets the accent color
     backgroundColor: 'rgba(139, 92, 246, 0.15)',
   },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.35)',
+  },
 });
-
-export default ProjectCard;

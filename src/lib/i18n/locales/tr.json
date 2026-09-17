@@ -9,7 +9,8 @@
     "delete": "Sil",
     "edit": "Düzenle",
     "close": "Kapat",
-    "ok": "Tamam"
+    "ok": "Tamam",
+    "back": "Geri"
   },
   "home": {
     "title": "Minito'ya Hoş Geldiniz",
@@ -19,7 +20,9 @@
     "breaking": "Minito'luyor...",
     "noSteps": "Adım bulunamadı. Lütfen geri dönüp tekrar deneyin.",
     "resumeTitle": "Kaldığın yerden devam et",
-    "resumeFallbackLabel": "Görevin"
+    "resumeFallbackLabel": "Görevin",
+    "resumeDismiss": "Yarım kalan oturumu kapat",
+    "backHome": "Ana ekrana dön"
   },
   "focus": {
     "step": "Adım {{current}} / {{total}}",
@@ -254,7 +257,18 @@
         "Uygulamaya başla",
         "Nasıl gittiğini değerlendir"
       ]
-    }
+    },
+    "addSubtask": "Alt görev ekle",
+    "removeSubtask": "{{title}} görevini kaldır",
+    "colors": {
+      "purple": "Mor",
+      "green": "Yeşil",
+      "blue": "Mavi",
+      "pink": "Pembe",
+      "amber": "Kehribar",
+      "red": "Kırmızı"
+    },
+    "startFocusOn": "{{title}} için odak oturumu başlat"
   },
   "profile": {
     "namePrompt": "Sana nasıl hitap edelim?",

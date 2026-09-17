@@ -9,7 +9,8 @@
     "delete": "Delete",
     "edit": "Edit",
     "close": "Close",
-    "ok": "OK"
+    "ok": "OK",
+    "back": "Back"
   },
   "home": {
     "title": "Welcome to Minito",
@@ -19,7 +20,9 @@
     "breaking": "Minitizing...",
     "noSteps": "No steps available. Please go back and try again.",
     "resumeTitle": "Pick up where you left off",
-    "resumeFallbackLabel": "Your task"
+    "resumeFallbackLabel": "Your task",
+    "resumeDismiss": "Dismiss the unfinished session",
+    "backHome": "Back to home"
   },
   "focus": {
     "step": "Step {{current}} of {{total}}",
@@ -254,7 +257,18 @@
         "Start doing it",
         "Review how it went"
       ]
-    }
+    },
+    "addSubtask": "Add subtask",
+    "removeSubtask": "Remove {{title}}",
+    "colors": {
+      "purple": "Purple",
+      "green": "Green",
+      "blue": "Blue",
+      "pink": "Pink",
+      "amber": "Amber",
+      "red": "Red"
+    },
+    "startFocusOn": "Start a focus session on {{title}}"
   },
   "profile": {
     "namePrompt": "What should we call you?",
