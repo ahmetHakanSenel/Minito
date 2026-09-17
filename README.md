@@ -38,7 +38,7 @@ system fails safely, how every claim is tested, and how it is operated.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/numbers-en-dark.svg">
-    <img src="docs/assets/numbers-en-light.svg" alt="233 automated tests, 20 of 60 parallel calls granted under a quota of 20, 99% availability SLO, 6.5 s p95 model latency, 23 threats modeled, 0 lint warnings" width="100%">
+    <img src="docs/assets/numbers-en-light.svg" alt="246 automated tests, 20 of 60 parallel calls granted under a quota of 20, 99% availability SLO, 6.5 s p95 model latency, 25 threats modeled, 0 lint warnings" width="100%">
   </picture>
 </p>
 
@@ -52,7 +52,7 @@ system fails safely, how every claim is tested, and how it is operated.
 | **Offline-first sync that survives stale devices** | [`syncEngine.ts`](src/features/planner/syncEngine.ts) and [`016_planner_sync.sql`](supabase/migrations/016_planner_sync.sql): idempotent pushes, tombstones, a server-side guard against stale writes |
 | **RLS and grants are verified, not assumed** | Migrations run on real Postgres with Supabase's default grants reproduced ([`bootstrap.sql`](supabase/tests/bootstrap.sql)). Schema-wide checks fail on any table without RLS or any function without a pinned `search_path` |
 | **The system is operable** | [`RUNBOOK.md`](docs/RUNBOOK.md): SLOs, an error budget, log events, alert rules, playbooks, expand/contract deploys. The SQL behind it runs in CI |
-| **Security is reasoned about** | [`THREAT_MODEL.md`](docs/THREAT_MODEL.md): 23 threats, each mapped to its control and to the test that proves it, plus accepted risks with revisit triggers |
+| **Security is reasoned about** | [`THREAT_MODEL.md`](docs/THREAT_MODEL.md): 25 threats, each mapped to its control and to the test that proves it, plus accepted risks with revisit triggers |
 | **Prompt changes are judged by measurement** | [`scripts/eval.ts`](scripts/eval.ts) and a committed [baseline](docs/eval/README.md#baseline) |
 
 ---
@@ -182,10 +182,16 @@ The essentials are below. The full analysis is in [`THREAT_MODEL.md`](docs/THREA
   - Task text is stored only as an HMAC.
   - Logs carry ids, counts and durations.
   - Unused personal data (IP hashes, guest ids) was removed from the schema.
-- **Crash-safe encrypted sessions.**
-  - AES-256 with a key per write, kept in the Keychain or Keystore.
-  - Writes are ordered so a crash at any step leaves a readable session.
-  - A process lock serializes token refreshes.
+- **Authenticated, crash-safe session storage.**
+  - XChaCha20-Poly1305 (AEAD) with a fresh key and nonce per write; the key stays in the
+    Keychain or Keystore.
+  - The ciphertext is bound to its storage slot and key id. A flipped bit, a truncated blob or a
+    blob moved elsewhere fails to decrypt, and the user signs in again instead.
+  - Writes are ordered so a crash at any step leaves a readable session, and a process lock
+    serializes token refreshes.
+- **Replay-resistant Apple sign-in.**
+  - Each attempt uses a fresh 256-bit nonce. Apple receives only its SHA-256, and Supabase checks
+    the raw value against the token, so a captured token cannot be replayed.
 - **Privacy rights.**
   - Export covers the account, the history, the planner and the AI request log.
   - Deleting the account removes the server data by cascade and the device copy too.
@@ -197,7 +203,7 @@ The essentials are below. The full analysis is in [`THREAT_MODEL.md`](docs/THREA
 
 | Suite | Tests | What it proves |
 | ----- | ----: | -------------- |
-| App (Jest) | 120 | The planner model, sync engine and scheduler; the API client's degradation per status; crash-safe session storage; locale parity, including every static `t()` key |
+| App (Jest) | 133 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; locale parity, including every static `t()` key |
 | Edge functions (Deno) | 76 | Request-path ordering and failure rules, the AI contract and repair, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
 | Database (Postgres) | 37 | Cross-user RLS, grants under Supabase's defaults, quota concurrency, cascades, planner sync guards, schema-wide invariants, the runbook's SQL |
 | Schema drift | | The committed TypeScript types equal what the migrations produce |
@@ -256,6 +262,7 @@ probes quietly and speaks only when something is down.
 | ---- | ------- |
 | App | Expo SDK 54, React Native 0.81 (New Architecture), React 19, TypeScript strict, Expo Router 6, Reanimated 4, Skia, expo-audio |
 | Backend | Supabase Auth, Postgres (RLS, `pg_cron`, `pg_net`), Deno Edge Functions |
+| Security | XChaCha20-Poly1305 via `@noble/ciphers`, Keychain/Keystore via `expo-secure-store`, HMAC-SHA256, nonce-bound Apple sign-in |
 | AI | OpenAI `gpt-4o-mini` or Gemini, switchable by secret; OpenAI moderation |
 | Quality | Jest, Deno test, `node:test` on Postgres, ESLint (zero warnings), Prettier |
 | Operations | Structured JSON logs, SQL SLIs and error budget, `ops-alerts`, Sentry (opaque ids only) |
@@ -287,11 +294,17 @@ docs/                             RUNBOOK, THREAT_MODEL, ops SQL, evaluation set
 
 </details>
 
-## Known limitations
+## Deliberate trade-offs
 
-- **iOS** is not release-configured yet: no bundle identifier, no Apple sign-in entitlement, and
-  Apple ID tokens are used without a nonce.
-- **Planner conflicts** resolve by last write per row, not by merging fields.
-- **Session encryption** uses AES-CTR: confidentiality without an integrity tag.
+These are design choices, not open vulnerabilities. Each one is written down in the
+[threat model](docs/THREAT_MODEL.md#accepted-risks), together with the condition that would
+change it.
+
+- **Planner conflicts** resolve by last write per row, not by merging fields. A planner row is a
+  title or a checkbox, so merging would add complexity without value.
+- **Quota and moderation fail open**, so a database hiccup never locks out someone who is
+  struggling to start. The provider's spend limit is the hard ceiling.
 - **Log-based alerts** (such as `quota_check_failed`) rely on the platform's log explorer. The
   scheduled rules cover only what the database records.
+- **iOS** is configured (bundle identifier, Sign in with Apple), but only the Android build has
+  been exercised on a device so far.

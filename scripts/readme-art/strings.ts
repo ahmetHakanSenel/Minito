@@ -118,13 +118,13 @@ const en: Strings = {
     footer: 'model · task-breakdown-v2 · 3.5 s · 1,381 tokens',
   },
   numbers: {
-    alt: '233 automated tests; 20 of 60 parallel calls granted under a quota of 20; 99% availability SLO; 6.5 s p95 model latency; 23 threats modeled; zero lint warnings',
+    alt: '246 automated tests; 20 of 60 parallel calls granted under a quota of 20; 99% availability SLO; 6.5 s p95 model latency; 25 threats modeled; zero lint warnings',
     items: [
-      ['233', 'automated tests', '3 suites, all in CI'],
+      ['246', 'automated tests', '3 suites, all in CI'],
       ['20 / 60', 'parallel calls granted', 'quota of 20, never more'],
       ['99%', 'availability SLO', '28-day error budget'],
       ['6.5 s', 'p95 model latency', '20/20 valid first try'],
-      ['23', 'threats modeled', 'each tied to a test'],
+      ['25', 'threats modeled', 'each tied to a test'],
       ['0', 'lint warnings', 'enforced in CI'],
     ],
   },
@@ -164,7 +164,7 @@ const en: Strings = {
     sync: ['Sync engine', 'queue · backoff'],
     repositories: ['Repositories', 'typed errors'],
     local: ['Local state', 'per account'],
-    session: ['Session', 'AES-256 · Keystore'],
+    session: ['Session', 'AEAD · Keystore'],
     auth: ['Auth', 'email · Google'],
     breakTask: ['break-task', 'Edge Function · Deno · handler + pipeline'],
     postgres: [
@@ -233,13 +233,13 @@ const tr: Strings = {
     footer: 'model · task-breakdown-v2 · 3,5 sn · 1.381 jeton',
   },
   numbers: {
-    alt: '233 otomatik test; 20 kotasında 60 paralel çağrıdan 20 kabul; yüzde 99 erişilebilirlik hedefi; 6,5 sn p95 model gecikmesi; 23 modellenmiş tehdit; sıfır lint uyarısı',
+    alt: '246 otomatik test; 20 kotasında 60 paralel çağrıdan 20 kabul; yüzde 99 erişilebilirlik hedefi; 6,5 sn p95 model gecikmesi; 25 modellenmiş tehdit; sıfır lint uyarısı',
     items: [
-      ['233', 'otomatik test', "3 paket, hepsi CI'da"],
+      ['246', 'otomatik test', "3 paket, hepsi CI'da"],
       ['20 / 60', 'kabul edilen çağrı', 'kota 20, fazlası yok'],
       ['%99', 'erişilebilirlik hedefi', '28 günlük hata bütçesi'],
       ['6,5 sn', 'p95 model gecikmesi', '20/20 ilk seferde'],
-      ['23', 'modellenmiş tehdit', 'her biri teste bağlı'],
+      ['25', 'modellenmiş tehdit', 'her biri teste bağlı'],
       ['0', 'lint uyarısı', "CI'da zorunlu"],
     ],
   },
@@ -279,7 +279,7 @@ const tr: Strings = {
     sync: ['Senkronizasyon', 'kuyruk · bekleme'],
     repositories: ['Depolar', 'tipli hatalar'],
     local: ['Yerel durum', 'hesap başına'],
-    session: ['Oturum', 'AES-256 · Keystore'],
+    session: ['Oturum', 'AEAD · Keystore'],
     auth: ['Auth', 'e-posta · Google'],
     breakTask: ['break-task', 'Edge Function · Deno · işleyici + hat'],
     postgres: [

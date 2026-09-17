@@ -40,7 +40,7 @@ canlıda nasıl işletiliyor.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/numbers-tr-dark.svg">
-    <img src="assets/numbers-tr-light.svg" alt="233 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, yüzde 99 erişilebilirlik hedefi, 6,5 sn p95 model gecikmesi, 23 modellenmiş tehdit, 0 lint uyarısı" width="100%">
+    <img src="assets/numbers-tr-light.svg" alt="246 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, yüzde 99 erişilebilirlik hedefi, 6,5 sn p95 model gecikmesi, 25 modellenmiş tehdit, 0 lint uyarısı" width="100%">
   </picture>
 </p>
 
@@ -54,7 +54,7 @@ canlıda nasıl işletiliyor.
 | **Eski kalmış cihazlara dayanıklı, çevrimdışı öncelikli senkronizasyon** | [`syncEngine.ts`](../src/features/planner/syncEngine.ts) ve [`016_planner_sync.sql`](../supabase/migrations/016_planner_sync.sql): tekrarlanabilir gönderimler, silme işaretleri, eski yazmaları reddeden sunucu tarafı koruma |
 | **RLS ve yetkiler varsayılmaz, doğrulanır** | Migration'lar, Supabase'in varsayılan yetkileri birebir kurulmuş gerçek bir Postgres üzerinde çalıştırılır ([`bootstrap.sql`](../supabase/tests/bootstrap.sql)). Şema geneli kontroller, RLS'siz tabloda ya da `search_path`'i sabitlenmemiş fonksiyonda testi kırar |
 | **Sistem işletilebilir** | [`RUNBOOK.md`](RUNBOOK.md): SLO'lar, hata bütçesi, günlük olayları, uyarı kuralları, olay senaryoları, genişlet/daralt yayınları. Arkasındaki SQL CI'da çalışır |
-| **Güvenlik üzerine düşünülmüştür** | [`THREAT_MODEL.md`](THREAT_MODEL.md): her biri kendi önlemine ve onu kanıtlayan teste bağlanmış 23 tehdit; ayrıca ne zaman yeniden ele alınacağı belli, bilinçli olarak kabul edilmiş riskler |
+| **Güvenlik üzerine düşünülmüştür** | [`THREAT_MODEL.md`](THREAT_MODEL.md): her biri kendi önlemine ve onu kanıtlayan teste bağlanmış 25 tehdit; ayrıca ne zaman yeniden ele alınacağı belli, bilinçli olarak kabul edilmiş riskler |
 | **İstem değişiklikleri ölçümle değerlendirilir** | [`scripts/eval.ts`](../scripts/eval.ts) ve kayıtlı [temel ölçüm](eval/README.md#baseline) |
 
 ---
@@ -185,11 +185,16 @@ Temel noktalar aşağıda. Ayrıntılı analiz [`THREAT_MODEL.md`](THREAT_MODEL.
   - Görev metni yalnızca HMAC özeti olarak tutulur.
   - Günlüklerde yalnızca kimlikler, sayılar ve süreler bulunur.
   - Kullanılmayan kişisel veri (IP özetleri, misafir kimlikleri) şemadan kaldırıldı.
-- **Çökmeye dayanıklı, şifreli oturum.**
-  - AES-256; her yazmada yeni anahtar, anahtar Keychain/Keystore'da.
+- **Kimliği doğrulanan, çökmeye dayanıklı oturum deposu.**
+  - XChaCha20-Poly1305 (AEAD); her yazmada yeni anahtar ve nonce, anahtar Keychain/Keystore'da.
+  - Şifreli veri, yazıldığı depolama yuvasına ve anahtar kimliğine bağlıdır. Tek bir bitin
+    değişmesi, verinin kısaltılması ya da başka yere taşınması çözmeyi başarısız kılar; kullanıcı
+    değiştirilmiş veriyle değil, yeniden girişle karşılaşır.
   - Yazma sırası, herhangi bir adımda çökme olsa bile oturumun okunabilir kalacağı biçimde
-    düzenlenmiştir.
-  - Bir süreç kilidi, jeton yenilemelerini sıraya sokar.
+    düzenlenmiştir; bir süreç kilidi de jeton yenilemelerini sıraya sokar.
+- **Tekrar oynatmaya dayanıklı Apple girişi.**
+  - Her denemede yeni bir 256 bitlik nonce üretilir. Apple yalnızca SHA-256 özetini alır; Supabase
+    ham değeri jetonla karşılaştırır. Ele geçirilmiş bir jeton yeniden kullanılamaz.
 - **Gizlilik hakları.**
   - Dışa aktarım hesabı, geçmişi, planlayıcıyı ve yapay zekâ istek kaydını kapsar.
   - Hesap silindiğinde sunucudaki veri zincirleme silinir; cihazdaki kopya da temizlenir.
@@ -201,7 +206,7 @@ Temel noktalar aşağıda. Ayrıntılı analiz [`THREAT_MODEL.md`](THREAT_MODEL.
 
 | Paket | Test | Neyi kanıtlar |
 | ----- | ---: | ------------- |
-| Uygulama (Jest) | 120 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; çökmeye dayanıklı oturum depolama; her statik `t()` anahtarı dahil çeviri eşitliği |
+| Uygulama (Jest) | 133 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; her statik `t()` anahtarı dahil çeviri eşitliği |
 | Edge Functions (Deno) | 76 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
 | Veritabanı (Postgres) | 37 | Kullanıcılar arası RLS, Supabase varsayılanları altında yetkiler, kota eş zamanlılığı, zincirleme silmeler, planlayıcı korumaları, şema geneli kurallar, el kitabındaki SQL |
 | Şema sapması | | Kayıtlı TypeScript tipleri, migration'ların ürettiğiyle birebir aynı |
@@ -263,6 +268,7 @@ konuşur.
 | ---- | -------- |
 | Uygulama | Expo SDK 54, React Native 0.81 (New Architecture), React 19, katı TypeScript, Expo Router 6, Reanimated 4, Skia, expo-audio |
 | Arka uç | Supabase Auth, Postgres (RLS, `pg_cron`, `pg_net`), Deno Edge Functions |
+| Güvenlik | `@noble/ciphers` ile XChaCha20-Poly1305, `expo-secure-store` ile Keychain/Keystore, HMAC-SHA256, nonce'a bağlı Apple girişi |
 | Yapay zekâ | OpenAI `gpt-4o-mini` ya da Gemini (bir gizli değerle değiştirilebilir); OpenAI denetimi |
 | Kalite | Jest, Deno test, Postgres üzerinde `node:test`, ESLint (sıfır uyarı), Prettier |
 | Operasyon | Yapılandırılmış JSON günlükleri, SQL ile SLO göstergeleri ve hata bütçesi, `ops-alerts`, Sentry (yalnızca anonim kimlikler) |
@@ -294,11 +300,16 @@ docs/                             RUNBOOK, THREAT_MODEL, operasyon SQL'i, değer
 
 </details>
 
-## Bilinen sınırlamalar
+## Bilinçli ödünleşimler
 
-- **iOS** henüz yayına hazır değil: paket kimliği ve Apple ile giriş yetkisi tanımlı değil, Apple
-  kimlik jetonları nonce olmadan kullanılıyor.
-- **Planlayıcıdaki çakışmalar** alan birleştirmeyle değil, satır başına son yazmayla çözülüyor.
-- **Oturum şifrelemesi** AES-CTR kullanıyor: gizlilik sağlıyor ama bütünlük etiketi yok.
-- **Günlük tabanlı uyarılar** (örneğin `quota_check_failed`) platformun günlük gezginine dayanıyor.
-  Zamanlanmış kurallar yalnızca veritabanına yazılanı görüyor.
+Bunlar açık güvenlik sorunları değil, tasarım kararları. Her biri, onu değiştirecek koşulla
+birlikte [tehdit modelinde](THREAT_MODEL.md#accepted-risks) yazılı.
+
+- **Planlayıcıdaki çakışmalar** alan birleştirmeyle değil, satır başına son yazmayla çözülür. Bir
+  planlayıcı satırı bir başlık ya da bir onay kutusu; birleştirme değer katmadan karmaşıklık ekler.
+- **Kota ve denetim hata durumunda açık kalır.** Bir veritabanı aksaklığı, başlamakta zorlanan
+  birini kapıda bırakmamalı; kesin üst sınırı sağlayıcıdaki harcama limiti çizer.
+- **Günlük tabanlı uyarılar** (örneğin `quota_check_failed`) platformun günlük gezginine dayanır.
+  Zamanlanmış kurallar yalnızca veritabanına yazılanı görür.
+- **iOS** yapılandırıldı (paket kimliği, Apple ile giriş), ancak şimdiye dek cihazda yalnızca
+  Android derlemesi denendi.

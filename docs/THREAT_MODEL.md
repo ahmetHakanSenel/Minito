@@ -43,7 +43,7 @@ data. Its reply is validated as untrusted input on the server and again in the a
 | T11 | **Search-path hijacking** of privileged functions | Every function in `public` pins `search_path`, and the privileged ones pin it to empty | `database.test.mjs`: a schema-wide check fails on any function without one |
 | T12 | **Supabase default grants** re-opening what a migration meant to close | Migrations revoke from `anon` and `authenticated` explicitly, not only from `PUBLIC` | `bootstrap.sql` reproduces Supabase's default grants. Deleting the explicit revoke makes two tests fail (checked by hand) |
 | T13 | **Sensitive text in logs or analytics** | Task text is stored only as an HMAC. Logs carry ids, counts and durations. Validation messages are rewritten so they never quote model output. Provider error bodies are truncated | `handler.test.ts`: neither the stored record nor the logs contain the task; `pipeline.test.ts`: issues never quote the model's value |
-| T14 | **Session theft from device storage** | The session is AES-256 encrypted with a fresh key per write. The key lives in the Keychain or Keystore | `secureSessionStorage.test.ts` |
+| T14 | **Session theft or tampering on the device** | XChaCha20-Poly1305 (AEAD) with a fresh key and nonce per write; the key lives in the Keychain or Keystore. Associated data binds the ciphertext to its storage slot and key id, so an altered, truncated or relocated blob fails to decrypt and is discarded. Sessions in the earlier AES-CTR formats are never trusted | `secureSessionStorage.test.ts`: flipped ciphertext and tag bits, truncation, a changed nonce, a copied slot and a swapped key id are all rejected |
 | T15 | **Losing the session through a crash or a race** between the two stores | Ordered writes, where the envelope names its own key, plus the Supabase client's process lock | `secureSessionStorage.test.ts`: a crash at each step leaves a readable session |
 | T16 | **Mass sign-out during an Auth outage** | Only a token that Auth rejects yields `401`. An unreachable Auth yields `503` | `supabase.test.ts`, `handler.test.ts` |
 | T17 | **Harmful content** | OpenAI moderation, with safety ranked above quota. A deployment without a moderation key refuses to serve unless it opts out explicitly | `handler.test.ts`, `moderation.test.ts` |
@@ -53,6 +53,8 @@ data. Its reply is validated as untrusted input on the server and again in the a
 | T21 | **Attaching a planner task to someone else's project** | A composite foreign key `(project_id, user_id)` on top of RLS | `database.test.mjs`. Replacing the composite key with a plain one makes the test fail (checked by hand) |
 | T22 | **Overwriting another user's planner row with an upsert** | Upserts are subject to the update policy on the existing row | `database.test.mjs` |
 | T23 | **A stale or badly clocked device overwriting newer edits** | A trigger skips older writes and clamps device clocks to server time plus one minute | `database.test.mjs` |
+| T24 | **Replaying a captured Apple identity token** | Each sign-in creates a fresh 256-bit nonce from the platform CSPRNG. Apple embeds its SHA-256 in the token, and Supabase compares it with the raw nonce the app sends | `appleAuth.test.ts`, `authRepository.test.ts` |
+| T25 | **A tampered session silently becoming a different session** | Authentication failure is never repaired or partially used: the blob and its key are deleted, and the user signs in again | `secureSessionStorage.test.ts` |
 
 ## Accepted risks
 
@@ -63,8 +65,7 @@ These are known, deliberate and documented. Each has a trigger for when it shoul
 | **Quota and moderation fail open** | A database or safety-service hiccup should not lock out someone who is struggling to start. The provider account's spend limit is the hard backstop | Spend limits are unavailable, or the app serves minors |
 | **Fixed quota window** | At a window boundary, up to twice the limit can pass in a short burst. One row and one statement per identifier is worth that | Abuse shows up at window boundaries in Q6 |
 | **Client IP is best-effort** | The first `x-forwarded-for` hop is caller-controlled when the platform's own headers are missing. The per-user quota does not depend on it | The per-IP quota becomes the main defense |
-| **AES-CTR without an integrity tag** | It protects confidentiality. An attacker who can already write the app's private storage has more direct attacks available | The platform offers authenticated encryption for this pattern |
-| **No nonce on Apple ID tokens** | Tokens are short-lived and bound to the app's client ID | Apple sign-in ships to production (iOS is not release-configured yet) |
+| **No nonce on Google ID tokens** | The free native Google Sign-In API cannot set one. The tokens are short-lived and bound to the app's client ID | Moving to Android Credential Manager, which accepts a nonce |
 | **Plans are kept in telemetry** | Judging a prompt version means reading what it produced. The rows are closed to clients, exported on request, deleted with the account, and expire after 90 days | A plan could identify a person more than its task hash can |
 | **Last write wins in the planner** | Concurrent edits to the same row from two devices resolve by edit time, not by merging fields. A planner row is a title or a checkbox, so a merge would not add much | Planner items gain richer fields |
 | **Moderation needs OpenAI even with Gemini** | One moderation implementation, applied whichever model writes the plan | A second provider's moderation is needed |
