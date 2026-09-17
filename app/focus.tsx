@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StatusBar, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 // Gesture-aware, so the step timer's dial can take a vertical drag from the page.
 import { ScrollView } from 'react-native-gesture-handler';
@@ -57,7 +57,6 @@ export default function FocusModeScreen() {
   const [showStepAnimation, setShowStepAnimation] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [timerCompletionLoop, setTimerCompletionLoop] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const nextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // A timer's completion pulse belongs to the step that produced it. If the
@@ -70,8 +69,8 @@ export default function FocusModeScreen() {
     setTimerCompletionLoop(false);
   }, [currentStepIndex]);
 
-  // A malformed param must degrade to the empty state, never crash the screen
-  const steps: BreakdownStep[] = (() => {
+  // A malformed param must degrade to the empty state, never crash the screen.
+  const steps: BreakdownStep[] = useMemo(() => {
     if (!params.steps) return [];
     try {
       return normalizeSteps(JSON.parse(params.steps));
@@ -79,7 +78,7 @@ export default function FocusModeScreen() {
       console.warn('focus: failed to parse steps param', error);
       return [];
     }
-  })();
+  }, [params.steps]);
   const empathyBridge = params.empathyBridge || '';
   const firstStepHook = params.firstStepHook || '';
   const stoppingPoint = params.stoppingPoint || '';
@@ -90,7 +89,7 @@ export default function FocusModeScreen() {
   // the core use case) never loses the session
   useEffect(() => {
     if (steps.length === 0) return;
-    saveActiveSession({
+    void saveActiveSession({
       input: params.input || '',
       steps,
       empathyBridge,
@@ -100,7 +99,8 @@ export default function FocusModeScreen() {
       currentStepIndex: Math.max(0, currentStepIndex),
       completedSteps: [...completedSteps],
       taskId: params.taskId,
-    });
+      // Losing the crumb is not worth an unhandled rejection: the session is still on screen.
+    }).catch(() => {});
     // Standing on step N means steps 0..N-1 are done.
     syncProgress(Math.max(0, currentStepIndex));
     // Saves on progress only. `steps` and the texts are parsed from route params on every render,
@@ -143,15 +143,11 @@ export default function FocusModeScreen() {
         nextTimeoutRef.current = null;
       }
 
-      // Mark current step as completed
-      setCompletedSteps(new Set([...completedSteps, currentStepIndex]));
+      setCompletedSteps((previous) => new Set(previous).add(currentStepIndex));
 
-      // Ensure previous animation is cleared before starting new one
-      // PremiumStepAnimation will handle cleanup when visible becomes false
+      // Clear the previous celebration first; PremiumStepAnimation cleans itself up when
+      // `visible` goes false, and a frame later it is safe to start the next one.
       setShowStepAnimation(false);
-
-      // Use requestAnimationFrame to ensure state update is processed
-      // before starting new animation
       requestAnimationFrame(() => {
         setShowStepAnimation(true);
         haptics.success();
@@ -160,7 +156,7 @@ export default function FocusModeScreen() {
         // flashes back in between.
         nextTimeoutRef.current = setTimeout(() => {
           setShowStepAnimation(false);
-          setCurrentStepIndex(currentStepIndex + 1);
+          setCurrentStepIndex((index) => index + 1);
           haptics.selection();
           nextTimeoutRef.current = null;
         }, STEP_CELEBRATION_MS);
@@ -176,8 +172,7 @@ export default function FocusModeScreen() {
   };
 
   const handleComplete = () => {
-    // Mark as completed
-    setCompletedSteps(new Set([...completedSteps, currentStepIndex]));
+    setCompletedSteps((previous) => new Set(previous).add(currentStepIndex));
 
     // For final step: NO tick animation, only confetti
     setShowStepAnimation(false); // Don't show tick animation
@@ -190,12 +185,11 @@ export default function FocusModeScreen() {
     // after both cannons finish their animations
   };
 
-  const handleConfettiComplete = async () => {
-    // Navigate to success screen when confetti animation completes
+  const handleConfettiComplete = () => {
     setShowConfetti(false);
 
-    // Session finished — nothing left to restore
-    clearActiveSession();
+    // Session finished: there is nothing left to restore.
+    void clearActiveSession().catch(() => {});
     markCompleted(totalSteps);
 
     // Log the completed step-flow for the Insights screen
@@ -222,17 +216,11 @@ export default function FocusModeScreen() {
     }
   };
 
-  // Cleanup timeouts on unmount. These refs hold timer ids, not nodes: reading them at unmount
-  // is the point, because the latest pending timer is the one to cancel.
+  // The ref holds a timer id, not a node: reading it at unmount is the point, because the
+  // pending celebration is exactly what has to be cancelled.
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        clearTimeout(timeoutRef.current);
-      }
-      if (nextTimeoutRef.current) {
-        clearTimeout(nextTimeoutRef.current);
-      }
+      if (nextTimeoutRef.current) clearTimeout(nextTimeoutRef.current);
     };
   }, []);
 
@@ -243,6 +231,14 @@ export default function FocusModeScreen() {
         <View style={styles.emptyContainer}>
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>{t('home.noSteps')}</Text>
+            {/* Without this the screen is a dead end: no steps, no header, nothing to press. */}
+            <Pressable
+              onPress={() => router.replace('/')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.emptyAction, pressed && styles.readyButtonPressed]}
+            >
+              <Text style={styles.readyButtonText}>{t('home.backHome')}</Text>
+            </Pressable>
           </View>
         </View>
       </SafeAreaView>
@@ -265,14 +261,7 @@ export default function FocusModeScreen() {
       <StatusBar barStyle="light-content" />
       {/* Confetti animation for final step only - triggers on Focus Screen */}
       {isFinalStep && (
-        <ConfettiAnimation
-          visible={showConfetti}
-          onAnimationStart={() => {
-            // Haptics are already triggered in handleComplete
-            // This callback is here for potential future use
-          }}
-          onComplete={handleConfettiComplete}
-        />
+        <ConfettiAnimation visible={showConfetti} onComplete={handleConfettiComplete} />
       )}
       {/* Premium step completion animation - NOT for final step */}
       {!isFinalStep && (
@@ -416,6 +405,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 25,
     textAlign: 'center',
+  },
+  emptyAction: {
+    marginTop: 20,
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: 'rgba(139, 92, 246, 0.9)',
   },
   introScrollContent: {
     flexGrow: 1,

@@ -4,14 +4,13 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -65,7 +64,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ openDashboard?: string }>();
   const insets = useSafeAreaInsets();
-  const lastHapticTime = useRef<number>(0);
   const scrollRef = useRef<ScrollView>(null);
   const nameEditorRef = useRef<View>(null);
   const taskInputAreaRef = useRef<View>(null);
@@ -148,7 +146,7 @@ export default function HomeScreen() {
 
   const handleDismissSession = () => {
     haptics.tap();
-    clearActiveSession();
+    void clearActiveSession().catch(() => {});
     setResumableSession(null);
   };
 
@@ -160,16 +158,6 @@ export default function HomeScreen() {
       router.setParams({ openDashboard: undefined });
     }
   }, [params.openDashboard, router]);
-
-  // Selection haptic on scroll, debounced to avoid spam
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    keyboardScroll.onScroll(event);
-    const now = Date.now();
-    if (now - lastHapticTime.current > 300) {
-      haptics.selection();
-      lastHapticTime.current = now;
-    }
-  };
 
   const handleBreakdownFailure = (reason: FallbackReason) => {
     console.warn('Failed to break task:', reason);
@@ -265,7 +253,10 @@ export default function HomeScreen() {
         onNavigate={handleDashboardNavigate}
       />
 
-      <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <ScrollView
           ref={scrollRef}
           style={styles.screen}
@@ -276,7 +267,7 @@ export default function HomeScreen() {
             paddingHorizontal: 20,
           }}
           keyboardShouldPersistTaps="handled"
-          onScroll={handleScroll}
+          onScroll={keyboardScroll.onScroll}
           onLayout={keyboardScroll.onLayout}
           scrollEventThrottle={16}
         >
@@ -363,6 +354,8 @@ export default function HomeScreen() {
                     style={styles.resumeCard}
                     onPress={handleResumeSession}
                     activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.resumeTitle')}
                   >
                     <View style={styles.resumeTextContainer}>
                       <Text style={styles.resumeTitle}>{t('home.resumeTitle')}</Text>
@@ -380,6 +373,8 @@ export default function HomeScreen() {
                       onPress={handleDismissSession}
                       style={styles.resumeDismiss}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('home.resumeDismiss')}
                     >
                       <X size={16} color="#A1A1AA" />
                     </TouchableOpacity>

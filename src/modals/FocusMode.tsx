@@ -29,6 +29,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Accelerometer } from 'expo-sensors';
+import { createPickupDetector, magnitude } from '../lib/focus/pickupDetector';
 import { useTranslation } from 'react-i18next';
 import { haptics } from '../lib/ui/haptics';
 import { formatCountdown, formatWallClock } from '../lib/time/duration';
@@ -59,13 +60,11 @@ export interface FocusSessionResult {
 // TUNING
 // ============================================================================
 
-// At rest the accelerometer reads 1 g whichever way the phone faces: turning it to landscape
-// moves gravity to another axis without changing its size. Picking the phone up, or fiddling
-// with it, is what makes the magnitude spike. Measuring the deviation from 1 g therefore ignores
-// rotation, which the previous per-axis delta counted as a distraction every time.
-const PICKUP_THRESHOLD_G = 0.35;
-const PICKUP_COOLDOWN_MS = 8_000;
-// A grace period after starting, resuming or rotating: settling the phone is not a pickup.
+// How the phone decides it has been picked up lives in lib/focus/pickupDetector, where the rule
+// can be tested against a stream of samples. Ten readings a second is enough for a rule measured
+// in seconds, and cheap enough to run for an hour.
+const SENSOR_INTERVAL_MS = 100;
+// A grace period after starting, resuming or turning the phone: settling it is not a pickup.
 const PICKUP_ARM_DELAY_MS = 3_000;
 const WARNING_VISIBLE_MS = 3_500;
 const CONTROLS_HIDE_MS = 4_000;
@@ -285,8 +284,10 @@ export const FocusMode: React.FC<FocusModeProps> = ({
   // Pickup detection
   // --------------------------------------------------------------------------
 
+  // Deliberately silent. The phone is already in the reader's hand when this fires, so the
+  // message is seen without a buzz, and a vibration at that moment lands as a telling-off —
+  // the opposite of what an app for people who struggle to start should do.
   const flashWarning = useCallback(() => {
-    haptics.tap();
     setIsWarning(true);
     warningOpacity.value = withTiming(1, { duration: 400 });
     if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
@@ -298,24 +299,22 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
   useEffect(() => {
     if (!visible || isPaused) return;
-    // Re-armed whenever orientation changes (this effect depends on it): turning the phone is
-    // handling it, but it is not a distraction.
     const armedAt = Date.now() + PICKUP_ARM_DELAY_MS;
-    let lastCountedAt = 0;
+    const detector = createPickupDetector(Date.now());
 
-    Accelerometer.setUpdateInterval(200);
-    const subscription = Accelerometer.addListener(({ x, y, z }) => {
-      const deviation = Math.abs(Math.sqrt(x * x + y * y + z * z) - 1);
-      if (deviation < PICKUP_THRESHOLD_G) return;
+    Accelerometer.setUpdateInterval(SENSOR_INTERVAL_MS);
+    const subscription = Accelerometer.addListener((reading) => {
       const now = Date.now();
-      if (now < armedAt || now - lastCountedAt < PICKUP_COOLDOWN_MS) return;
-      lastCountedAt = now;
+      // Samples before the grace period still feed the detector, so putting the phone down
+      // during it drains the budget rather than leaving it primed to fire straight after.
+      const pickedUp = detector.sample(magnitude(reading), now);
+      if (!pickedUp || now < armedAt) return;
       pickupsRef.current += 1;
       setPickupCount(pickupsRef.current);
       flashWarning();
     });
     return () => subscription.remove();
-  }, [visible, isPaused, isLandscape, flashWarning]);
+  }, [visible, isPaused, flashWarning]);
 
   // --------------------------------------------------------------------------
   // Device state: orientation, immersive bars, keep-awake

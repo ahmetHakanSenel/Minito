@@ -6,6 +6,7 @@ import {
   type AudioSource,
   type AudioStatus,
 } from 'expo-audio';
+import { FADE_IN_MS, FADE_OUT_MS, FADE_STEP_MS, FADE_SWITCH_MS, volumeAt } from '../lib/audio/fade';
 
 // Audio tracks available
 export interface AudioTrack {
@@ -110,6 +111,12 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const isPlayingRef = useRef(false);
   const volumeRef = useRef(0.7);
   const sessionSnapshotRef = useRef<SessionSnapshot | null>(null);
+  // The ramp in flight, with the promise waiting on it. Cancelling has to settle that promise:
+  // a caller awaiting a fade it no longer owns must still be let go.
+  const fadeRef = useRef<{
+    timer: ReturnType<typeof setInterval>;
+    settle: (reachedTarget: boolean) => void;
+  } | null>(null);
 
   React.useEffect(() => {
     currentTrackRef.current = currentTrack;
@@ -119,8 +126,61 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  const cancelFade = useCallback((reachedTarget = false) => {
+    const fade = fadeRef.current;
+    fadeRef.current = null;
+    if (!fade) return;
+    clearInterval(fade.timer);
+    fade.settle(reachedTarget);
+  }, []);
+
+  /**
+   * Walks a player's volume to `target`, resolving true when it arrives.
+   *
+   * It always resolves. When the ramp is cut short — the player released, another track taking
+   * over, a hand on the volume slider — it resolves false instead of leaving the caller waiting
+   * on a fade that will never finish, and false is the caller's cue that someone else now owns
+   * this player and it should keep its hands off.
+   */
+  const fadeTo = useCallback(
+    (player: AudioPlayer, target: number, durationMs: number) =>
+      new Promise<boolean>((resolve) => {
+        cancelFade();
+        const from = player.volume;
+        if (durationMs <= 0 || Math.abs(from - target) < 0.01) {
+          try {
+            player.volume = target;
+          } catch {
+            // Already released: there is nothing left to set it on.
+          }
+          resolve(true);
+          return;
+        }
+
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+          // Another track has taken over: this ramp is writing to a player nobody can hear.
+          if (loadedRef.current?.player !== player) {
+            cancelFade();
+            return;
+          }
+          const elapsed = Date.now() - startedAt;
+          try {
+            player.volume = volumeAt(from, target, elapsed, durationMs);
+          } catch {
+            cancelFade();
+            return;
+          }
+          if (elapsed >= durationMs) cancelFade(true);
+        }, FADE_STEP_MS);
+        fadeRef.current = { timer, settle: resolve };
+      }),
+    [cancelFade]
+  );
+
   // Players are native objects that live until released; nothing may outlive the provider.
   const releasePlayer = useCallback(() => {
+    cancelFade();
     const loaded = loadedRef.current;
     loadedRef.current = null;
     if (!loaded) return;
@@ -131,7 +191,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } catch (error) {
       console.warn('Error releasing audio player:', error);
     }
-  }, []);
+  }, [cancelFade]);
 
   React.useEffect(() => {
     // Ambience keeps playing while the person is off doing the step, which is the whole point.
@@ -161,17 +221,33 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
+      // Changing tracks: let the outgoing one leave rather than cutting it off mid-note.
+      const outgoing = loadedRef.current;
+      if (outgoing && isPlayingRef.current) {
+        await fadeTo(outgoing.player, 0, FADE_SWITCH_MS);
+      }
+
       releasePlayer();
       setIsLoading(true);
       try {
         const player = createAudioPlayer(track.source, { updateInterval: 1000 }) as ListeningPlayer;
+        // The fade-in waits for the first loaded status. Ramping a player that has not started
+        // yet would spend the fade in silence, and the track would still arrive at full volume.
+        let fadedIn = false;
         const subscription = player.addListener('playbackStatusUpdate', (status) => {
-          if (status.isLoaded) setIsLoading(false);
+          if (!status.isLoaded) return;
+          setIsLoading(false);
+          if (fadedIn) return;
+          fadedIn = true;
+          void fadeTo(player, volumeRef.current, FADE_IN_MS);
         });
         loadedRef.current = { player, subscription };
 
+        // An ambience shorter than the session simply comes round again: a four-minute track
+        // under a forty-minute session repeats ten times, seamlessly, from the same decoded
+        // asset. Nothing in the app needs to know how long a track is.
         player.loop = true;
-        player.volume = volumeRef.current;
+        player.volume = 0;
         // Playback starts as soon as the asset has loaded.
         player.play();
 
@@ -185,17 +261,25 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.warn('Error playing audio:', error);
       }
     },
-    [releasePlayer]
+    [releasePlayer, fadeTo]
   );
 
   const pause = useCallback(async () => {
+    const loaded = loadedRef.current;
+    if (!loaded) {
+      setIsPlaying(false);
+      return;
+    }
     try {
-      loadedRef.current?.player.pause();
+      // Cut short means something else — a new track, a stop — is already handling this player.
+      if (!(await fadeTo(loaded.player, 0, FADE_OUT_MS))) return;
+      if (loadedRef.current !== loaded) return;
+      loaded.player.pause();
       setIsPlaying(false);
     } catch (error) {
       console.warn('Error pausing audio:', error);
     }
-  }, []);
+  }, [fadeTo]);
 
   const resume = useCallback(async () => {
     const loaded = loadedRef.current;
@@ -204,33 +288,46 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
     try {
+      // From silence, so coming back sounds like the fade that paused it, in reverse.
+      loaded.player.volume = 0;
       loaded.player.play();
       setIsPlaying(true);
+      await fadeTo(loaded.player, volumeRef.current, FADE_IN_MS);
     } catch (error) {
       setIsPlaying(false);
       console.warn('Error resuming audio:', error);
     }
-  }, [play]);
+  }, [play, fadeTo]);
 
   const stop = useCallback(async () => {
+    const loaded = loadedRef.current;
+    if (loaded && isPlayingRef.current) {
+      // The long fade. This is a session ending, and it should sound like one.
+      await fadeTo(loaded.player, 0, FADE_OUT_MS);
+    }
     releasePlayer();
     setIsLoading(false);
     setIsPlaying(false);
     setCurrentTrack(null);
-  }, [releasePlayer]);
+  }, [releasePlayer, fadeTo]);
 
-  const setVolume = useCallback(async (newVolume: number) => {
-    const clampedVolume = Math.max(0, Math.min(1, newVolume));
-    volumeRef.current = clampedVolume;
-    setVolumeState(clampedVolume);
-    try {
-      if (loadedRef.current) {
-        loadedRef.current.player.volume = clampedVolume;
+  const setVolume = useCallback(
+    async (newVolume: number) => {
+      const clampedVolume = Math.max(0, Math.min(1, newVolume));
+      volumeRef.current = clampedVolume;
+      setVolumeState(clampedVolume);
+      // A hand on the slider outranks a fade still running underneath it.
+      cancelFade();
+      try {
+        if (loadedRef.current) {
+          loadedRef.current.player.volume = clampedVolume;
+        }
+      } catch (error) {
+        console.warn('Error setting volume:', error);
       }
-    } catch (error) {
-      console.warn('Error setting volume:', error);
-    }
-  }, []);
+    },
+    [cancelFade]
+  );
 
   // --------------------------------------------------------------------------
   // Focus sessions borrow the player and hand it back.
