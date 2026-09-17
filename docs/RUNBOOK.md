@@ -228,11 +228,37 @@ A migration that removes something the running function still uses must ship in 
 
 After a deploy:
 
-- An anonymous probe returns `401` (see [SETUP.md](./SETUP.md#5-checking-the-deployment)).
+- An anonymous probe returns `401`. A `503` means the function is deployed but misconfigured,
+  and its body names the reason:
+
+  ```bash
+  curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/break-task"     -H "apikey: <anon-key>" -H "Authorization: Bearer <anon-key>" -d '{}'
+  ```
+
 - One real breakdown appears in Q1 under the expected `prompt_version` and `ai_model`.
 - No `misconfigured` event appears in the logs.
 
+## Scheduled jobs
+
+Retention and cleanup are plain SQL functions, scheduled with `pg_cron`:
+
+```sql
+SELECT cron.schedule('cleanup-old-tasks', '0 3 * * *', 'SELECT public.cleanup_old_tasks();');
+SELECT cron.schedule('cleanup-rate-limits', '17 * * * *', 'SELECT public.cleanup_rate_limits();');
+SELECT cron.schedule('cleanup-planner-tombstones', '40 3 * * *', 'SELECT public.cleanup_planner_tombstones();');
+```
+
 ## Secrets
+
+| Secret | Required | Purpose |
+| ------ | -------- | ------- |
+| `HMAC_SECRET` | Yes | Key for every stored hash; the function refuses to start without it |
+| `OPENAI_API_KEY` | Unless `ALLOW_UNMODERATED=true` | Plan generation with OpenAI, and moderation whichever provider writes the plan |
+| `AI_PROVIDER`, `OPENAI_MODEL`, `GEMINI_API_KEY`, `GEMINI_MODEL` | No | Provider and model selection |
+| `ALLOW_UNMODERATED` | No | `true` serves requests without moderation; otherwise a deployment without an OpenAI key answers `503 MOD_DOWN` |
+| `OPS_ALERTS_SECRET`, `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_FORMAT` | No | [Alert delivery](#alert-delivery) |
+
+Rotation:
 
 | Secret | How to rotate | Side effects |
 | ------ | ------------- | ------------ |
@@ -260,7 +286,7 @@ instead (`src/features/planner/__tests__`, and the planner block of `database.te
 - **Erasure:** `delete-user` deletes the auth user, and every owned row cascades with it. Quota
   counters are kept on purpose: they are keyed by id, hold no content, and expire within a day
   once the cleanup job runs.
-- **Retention:** Once scheduled (see [SETUP.md](./SETUP.md#4-scheduled-jobs)):
+- **Retention:** Once scheduled (see [Scheduled jobs](#scheduled-jobs)):
   - `cleanup_old_tasks()` deletes request telemetry older than 90 days.
   - `cleanup_planner_tombstones()` purges planner deletions after 30 days.
 - **Planner:** It is part of the export. Deleting the account removes the server copy through the

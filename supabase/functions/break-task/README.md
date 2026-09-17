@@ -1,8 +1,8 @@
 # break-task
 
 Turns one overwhelming task into a validated, structured plan of micro-steps. Only signed-in users
-can call it. Setup and secrets are covered in [`docs/SETUP.md`](../../../docs/SETUP.md), and
-operations in [`docs/RUNBOOK.md`](../../../docs/RUNBOOK.md).
+can call it. Operations, secrets and deploys are covered in
+[`docs/RUNBOOK.md`](../../../docs/RUNBOOK.md).
 
 ## Files
 
