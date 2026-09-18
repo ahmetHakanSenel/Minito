@@ -43,7 +43,7 @@ Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında senkronize olur, 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/numbers-tr-dark.svg">
-    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 293 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
+    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 302 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
   </picture>
 </p>
 
@@ -233,7 +233,7 @@ varsayılana bırakılmaz, açıkça çizilir. Aşağıdaki her madde bir teste 
 
 | Paket | Test | Neyi kanıtlar |
 | ----- | ---: | ------------- |
-| Uygulama (Jest) | 169 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
+| Uygulama (Jest) | 178 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
 | Edge Functions (Deno) | 87 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, planın hangi dilde döndüğü, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
 | Veritabanı (Postgres) | 37 | Kullanıcılar arası RLS, Supabase varsayılanları altında yetkiler, kota eş zamanlılığı, zincirleme silmeler, planlayıcı korumaları, şema geneli kurallar, el kitabındaki SQL |
 | Şema sapması | | Kayıtlı TypeScript tipleri, migration'ların ürettiğiyle birebir aynı |
