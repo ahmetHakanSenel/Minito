@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import i18n from '../i18n/config';
 import { newRequestId, tracedAxios } from '../requestTracing';
 import { getSupabase } from '../../data/supabase/client';
 import { FallbackReason } from '../../safety';
@@ -43,6 +44,8 @@ export interface BreakTaskRequest {
   input: string;
   /** The client's tracing id, so server logs can be matched with client logs. */
   request_id?: string;
+  /** The language the app is running in; the server uses it only when the task is ambiguous. */
+  language?: 'tr' | 'en';
 }
 
 export type BreakTaskResult =
@@ -96,6 +99,18 @@ function safeRequestId(): string | undefined {
   }
 }
 
+/**
+ * The language the app is running in, for the server to fall back on.
+ *
+ * The server can only guess at the language of a short task, and it used to guess English
+ * whenever it could not tell — so a Turkish task with no Turkish letters in it came back in
+ * English. The app has never had to guess: this is the language its own interface is in.
+ */
+function appLanguage(): 'tr' | 'en' | undefined {
+  const current = i18n.language?.split('-')[0];
+  return current === 'tr' || current === 'en' ? current : undefined;
+}
+
 function edgeFunctionUrl(): string | undefined {
   return (
     process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_URL ||
@@ -130,7 +145,11 @@ export async function breakTask(input: string): Promise<BreakTaskResult> {
 
     // The Supabase gateway still expects the anon key as `apikey`; identity comes from the JWT.
     const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-    const payload: BreakTaskRequest = { input: task, request_id: clientRequestId };
+    const payload: BreakTaskRequest = {
+      input: task,
+      request_id: clientRequestId,
+      language: appLanguage(),
+    };
     const response = await tracedAxios.post<BreakTaskResponse>(url, payload, {
       timeout: REQUEST_TIMEOUT_MS,
       headers: {

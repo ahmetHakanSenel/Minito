@@ -346,6 +346,60 @@ Deno.test('an unusable model reply still yields a plan, marked as the fallback',
   assertEquals(h.persisted[0].language_match, null);
 });
 
+// A short task the server cannot read used to fall back to English whatever the app was set
+// to, which is how a Turkish user ended up with an English plan.
+Deno.test('a fallback for an unreadable task follows the language the app declared', async () => {
+  const h = harness({}, { reply: '{"nope": true}' });
+  const { status, body } = await call(h, post({ input: 'kargo', language: 'tr' }));
+
+  assertEquals(status, 200);
+  assertEquals(body.meta.source, 'fallback');
+  assertEquals(body.breakdown.language, 'tr');
+});
+
+Deno.test('the app language never overrides a task that speaks for itself', async () => {
+  const h = harness({}, { reply: '{"nope": true}' });
+  const { body } = await call(h, post({ input: 'I need to clean the kitchen', language: 'tr' }));
+
+  assertEquals(body.breakdown.language, 'en');
+});
+
+// Declaring a language makes the model's choice measurable. Without one, an unreadable task
+// left nothing to hold the model to and the request went unscored.
+Deno.test('a model that ignores the declared language is scored as a mismatch', async () => {
+  const h = harness();
+  await call(h, post({ input: 'kargo', language: 'tr' }));
+
+  // The harness answers in English; the request asked for Turkish.
+  assertEquals(h.persisted[0].response_language, 'en');
+  assertEquals(h.persisted[0].language_match, false);
+});
+
+Deno.test('an unreadable task with no declared language is still not scored', async () => {
+  const h = harness();
+  await call(h, post({ input: 'kargo' }));
+
+  assertEquals(h.persisted[0].language_match, null);
+});
+
+Deno.test(
+  'a request without a declared language is accepted, as older clients send none',
+  async () => {
+    const h = harness();
+    const { status } = await call(h, post({ input: TASK }));
+
+    assertEquals(status, 200);
+  }
+);
+
+Deno.test('a language the server does not speak is rejected as a bad request', async () => {
+  const h = harness();
+  const { status, body } = await call(h, post({ input: TASK, language: 'de' }));
+
+  assertEquals(status, 400);
+  assertEquals(body.fallback_reason, 'VALIDATION');
+});
+
 Deno.test(
   'an unexpected failure returns a generic 500 and logs only the error summary',
   async () => {

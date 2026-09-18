@@ -128,10 +128,22 @@ export function neutralizeTags(text: string): string {
   return text.replace(/</g, '‹').replace(/>/g, '›');
 }
 
-export function buildUserPrompt(task: string, displayName: string | null): string {
+export function buildUserPrompt(
+  task: string,
+  displayName: string | null,
+  preferred?: BreakdownLanguage | null
+): string {
   const parts = [`<task_input>\n${neutralizeTags(task)}\n</task_input>`];
   if (displayName) {
     parts.push(`<user_name>${neutralizeTags(displayName)}</user_name>`);
+  }
+  // Only when the task itself settles nothing. A task written in one language is answered in
+  // that language, whatever the app is set to, so this never overrides what the person wrote.
+  if (preferred && languageEvidence(task) === null) {
+    parts.push(
+      `The task is too short to tell its language. The person's app is set to ` +
+        `${preferred === 'tr' ? 'Turkish' : 'English'}, so answer in that language.`
+    );
   }
   parts.push('Return the JSON object for this task, following the output contract.');
   return parts.join('\n\n');
@@ -272,9 +284,16 @@ const FALLBACK_BREAKDOWNS: Record<BreakdownLanguage, TaskBreakdown> = {
 };
 
 // Only letters no other common Latin-script language uses: ç, ö and ü alone would turn German
-// or French input Turkish. The words catch Turkish typed without Turkish characters. `\b` only
-// sees ASCII word characters, which is why no listed word contains a Turkish letter.
-const TURKISH_HINT = /[ğıİşĞŞ]|\b(?:ve|bir|icin|lazim|gerek|yapmam|bugun|yarin|nasil|cok)\b/i;
+// or French input Turkish. The rest catches Turkish typed without Turkish characters. `\b` only
+// sees ASCII word characters, which is why no listed pattern contains a Turkish letter.
+//
+// Turkish is agglutinative, so matching whole words misses most of the language: `gerek` does
+// not appear in "gerekiyor", which is how people actually write. Two patterns carry most of it:
+// a stem with anything after it, and the first-person necessitative ending -mem/-mam, which is
+// what nearly every "I have to do X" task ends its verb with — bitirmem, gitmem, aramam,
+// toplamam. Neither shape belongs to an English word.
+const TURKISH_HINT =
+  /[ğıİşĞŞ]|\b(?:ve|bir|icin|lazim|bugun|yarin|nasil|cok)\b|\b(?:gerek|yapma|almam|olmam)\w*\b|\b\w{3,}(?:mem|mam)\b/i;
 
 const ENGLISH_HINT =
   /\b(?:i|my|me|the|a|an|and|to|of|for|with|is|it|this|that|have|need|should|keep|can|do|how|what|before|too|much|today|like|feels?|everything)\b/i;
@@ -289,9 +308,19 @@ export function languageEvidence(text: string): BreakdownLanguage | null {
   return null;
 }
 
-/** The language to answer in when one must be chosen; English is the default. */
-export function detectLanguage(text: string): BreakdownLanguage {
-  return languageEvidence(text) ?? 'en';
+/**
+ * The language to answer in when one must be chosen.
+ *
+ * The text wins when it says anything, because someone writing an English task inside a Turkish
+ * app wants an English plan. When it says nothing — "kargo", "taxes" — the app's own language is
+ * a far better guess than a default, and the client knows it for certain. English remains the
+ * last resort, for a caller that sent no preference at all.
+ */
+export function detectLanguage(
+  text: string,
+  preferred?: BreakdownLanguage | null
+): BreakdownLanguage {
+  return languageEvidence(text) ?? preferred ?? 'en';
 }
 
 export function buildFallbackBreakdown(language: BreakdownLanguage): TaskBreakdown {
@@ -358,11 +387,11 @@ const MAX_ECHOED_REPLY_CHARS = 4000;
  */
 export async function runBreakdownPipeline(
   complete: Complete,
-  input: { task: string; displayName: string | null }
+  input: { task: string; displayName: string | null; language?: BreakdownLanguage | null }
 ): Promise<PipelineResult | null> {
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: buildUserPrompt(input.task, input.displayName) },
+    { role: 'user', content: buildUserPrompt(input.task, input.displayName, input.language) },
   ];
 
   const first = await complete(messages, { attempts: GENERATION_ATTEMPTS });
@@ -403,7 +432,7 @@ export async function runBreakdownPipeline(
   }
 
   return {
-    breakdown: buildFallbackBreakdown(detectLanguage(input.task)),
+    breakdown: buildFallbackBreakdown(detectLanguage(input.task, input.language)),
     source: 'fallback',
     tokens,
     finishReason,

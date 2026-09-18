@@ -43,7 +43,7 @@ Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında senkronize olur, 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/numbers-tr-dark.svg">
-    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 268 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
+    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 280 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
   </picture>
 </p>
 
@@ -105,6 +105,12 @@ iddia nasıl test ediliyor ve nasıl işletilecek.
 | **Doğrulama ve onarım** | Zod sözleşmesi: 3–7 adım, ilk adım `easy`, her adım 1–10 dakika. Sözleşmeyi bozan yanıta tam bir onarım isteği gider. Sorunlar günlüğe model çıktısını alıntılamayacak biçimde yeniden yazılır |
 | **Yedek plan** | Görevin dilinde deterministik bir plan. Modül yüklenirken doğrulanır; bozuk bir yedek plan kullanıcıyı değil, yayını durdurur |
 
+**Planın hangi dilde döndüğü.** Görevin kendisi karar verir: Türkçe bir uygulamada İngilizce
+yazan biri İngilizce plan alır. Görev dilini belli edemeyecek kadar kısaysa — "kargo", "taxes" —
+uygulamanın çalıştığı dil karar verir; çünkü istemci bunu kesin olarak bilir, sunucu ise bir avuç
+karakterden tahmin etmek zorunda kalır. Eskiden İngilizce tahmin ediyordu; içinde Türkçe harf
+geçmeyen bir Türkçe görevin İngilizce dönmesinin sebebi buydu.
+
 Yanıtlanan her istek, yanıt gönderildikten sonra bir telemetri satırı yazar. Satırda şunlar
 bulunur:
 
@@ -112,7 +118,7 @@ bulunur:
 - Model gecikmesi ve uçtan uca gecikme.
 - Önbellekten gelenler dahil jeton dağılımı.
 - Modelin neden durduğu ve varsa bozulan sözleşme kuralı.
-- Yanıtın görevin diliyle eşleşip eşleşmediği.
+- Yanıtın istenen dille eşleşip eşleşmediği.
 
 Kullanıcı bir planı tek dokunuşla puanlayabilir. Puan, yalnızca çağıranın kendi satırına yazabilen
 bir `SECURITY DEFINER` fonksiyonundan geçer.
@@ -227,8 +233,8 @@ varsayılana bırakılmaz, açıkça çizilir. Aşağıdaki her madde bir teste 
 
 | Paket | Test | Neyi kanıtlar |
 | ----- | ---: | ------------- |
-| Uygulama (Jest) | 155 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
-| Edge Functions (Deno) | 76 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
+| Uygulama (Jest) | 156 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
+| Edge Functions (Deno) | 87 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, planın hangi dilde döndüğü, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
 | Veritabanı (Postgres) | 37 | Kullanıcılar arası RLS, Supabase varsayılanları altında yetkiler, kota eş zamanlılığı, zincirleme silmeler, planlayıcı korumaları, şema geneli kurallar, el kitabındaki SQL |
 | Şema sapması | | Kayıtlı TypeScript tipleri, migration'ların ürettiğiyle birebir aynı |
 | Gizli bilgiler | | Tüm git geçmişinde gitleaks taraması |

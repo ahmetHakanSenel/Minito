@@ -43,7 +43,7 @@ History, progress and the project planner sync across devices, and keep working 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/numbers-en-dark.svg">
-    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 268 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
+    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 280 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
   </picture>
 </p>
 
@@ -103,11 +103,18 @@ tested, and how it would be operated.
 | **Fence** | Every `<` and `>` in user text becomes `‹ ›`. Stripping tag names is not enough: removing them once can assemble a new tag (`</task_</task_input>input>`) |
 | **Generate** | Provider JSON mode, 9 s per call, and one retry on network errors or 5xx. A `429` is never retried |
 | **Validate and repair** | A zod contract: 3–7 steps, a first step that is `easy`, 1–10 minutes each. A failing reply gets exactly one repair. The issues are rewritten so they never quote model output into logs |
-| **Fallback** | A deterministic plan in the task's language, validated at module load. A broken fallback fails the deploy, not a user |
+| **Fallback** | A deterministic plan, validated at module load. A broken fallback fails the deploy, not a user |
+
+**Which language a plan comes back in.** The task decides: someone writing in English inside a
+Turkish app gets an English plan. When the task is too short to tell — "kargo", "taxes" — the
+language the app is running in decides, because the client knows it for certain and the server
+would otherwise be guessing from a handful of characters. It used to guess English, which is how
+a Turkish task with no Turkish letters in it came back in English.
 
 Every answered request writes one telemetry row after the reply: the model and prompt version,
 model and end-to-end latency, the token split including cached tokens, the finish reason, the
-contract rule that broke if any, and whether the answer matched the task's language.
+contract rule that broke if any, and whether the answer came back in the language it was asked
+for.
 
 Users can rate a plan with one tap. The rating goes through a `SECURITY DEFINER` function that
 writes only to the caller's own row.
@@ -218,8 +225,8 @@ analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 | Suite | Tests | What it proves |
 | ----- | ----: | -------------- |
-| App (Jest) | 155 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
-| Edge functions (Deno) | 76 | Request-path ordering and failure rules, the AI contract and repair, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
+| App (Jest) | 156 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
+| Edge functions (Deno) | 87 | Request-path ordering and failure rules, the AI contract and repair, which language a plan comes back in, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
 | Database (Postgres) | 37 | Cross-user RLS, grants under Supabase's defaults, quota concurrency, cascades, planner sync guards, schema-wide invariants, the runbook's SQL |
 | Schema drift | | The committed TypeScript types equal what the migrations produce |
 | Secrets | | gitleaks over the full git history |

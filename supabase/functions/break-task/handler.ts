@@ -41,6 +41,9 @@ export const RequestBodySchema = z.object({
   // The client's own tracing id, kept for log correlation only. The id that feedback attaches
   // to is issued by the server, so no client can make two rows share one.
   request_id: z.string().uuid().optional(),
+  // The language the app is running in. A hint, not an instruction: it decides only what the
+  // task text leaves open. Optional, so an older client still works.
+  language: z.enum(['tr', 'en']).optional(),
 });
 
 export type FallbackReason =
@@ -246,6 +249,7 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
         client_request_id: clientRequestIdOf(req, parsed.data.request_id),
       };
       const task = parsed.data.input.replace(/\s+/g, ' ');
+      const appLanguage = parsed.data.language ?? null;
       const ip = deps.clientIp(req);
       // The domain prefix keeps IP hashes from ever colliding with input hashes.
       const [inputHash, ipHash] = await Promise.all([
@@ -298,7 +302,7 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
       const meter = createMeter();
       const result = await runBreakdownPipeline(
         withBudget(provider, startTime + REQUEST_BUDGET_MS, meter),
-        { task, displayName: displayNameOf(user) }
+        { task, displayName: displayNameOf(user), language: appLanguage }
       );
 
       // ai_latency_ms is model time only; latency_ms stays end-to-end, and the gap is our overhead.
@@ -339,9 +343,10 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
       const latencyMs = now() - startTime;
       // A fallback plan's language comes from our own heuristic, so comparing it with that same
       // heuristic would always agree. Only the model's own choice is worth scoring, and only
-      // against real evidence: a one-word task is not scored at all.
+      // against something we can hold it to: the evidence in the task, or the language we told
+      // it to use. A one-word task from a client that sent no preference is not scored at all.
       const responseLanguage = source === 'fallback' ? null : breakdown.language;
-      const expectedLanguage = languageEvidence(task);
+      const expectedLanguage = languageEvidence(task) ?? appLanguage;
       const languageMatch =
         responseLanguage === null || expectedLanguage === null
           ? null

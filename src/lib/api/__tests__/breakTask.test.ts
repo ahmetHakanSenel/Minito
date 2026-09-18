@@ -14,6 +14,10 @@ jest.mock('../../../data/supabase/client', () => {
   };
   return { getSupabase: jest.fn(() => client) };
 });
+jest.mock('../../i18n/config', () => ({
+  __esModule: true,
+  default: { language: 'tr-TR' },
+}));
 jest.mock('../../offlineFallback', () => ({
   getOfflineFallbackSteps: jest.fn(() => [
     {
@@ -54,6 +58,20 @@ beforeEach(() => {
 });
 
 describe('breakTask', () => {
+  // The server can only guess the language of a short task, and used to guess English. The app
+  // has never had to guess: this is the language its own interface is in.
+  it('tells the server what language the app is running in', async () => {
+    mockedPost.mockResolvedValue({ data: { success: true, breakdown: undefined } });
+
+    await breakTask('kargo');
+
+    expect(mockedPost).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ input: 'kargo', language: 'tr' }),
+      expect.anything()
+    );
+  });
+
   it('maps a structured response and keeps the server-issued request id for feedback', async () => {
     mockedPost.mockResolvedValue({
       data: {
@@ -107,7 +125,7 @@ describe('breakTask', () => {
     // One tracing id, in the body and the header alike, so client and server logs line up.
     expect(mockedPost).toHaveBeenCalledWith(
       'https://project.supabase.co/functions/v1/break-task',
-      { input: 'Clean the kitchen', request_id: 'client-trace-id' },
+      { input: 'Clean the kitchen', request_id: 'client-trace-id', language: 'tr' },
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer jwt',

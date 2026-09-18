@@ -32,6 +32,10 @@ jobs:
       - run: npm run format:check
       - run: npm test -- --ci
 
+      # The test counts printed in both READMEs and in the headline figure are claims like any
+      # other, and they went stale twice before this check existed.
+      - run: npm run docs:check
+
       # Bundling the app catches what unit tests cannot: a module that stopped resolving, or an
       # app config the native build would reject. It is the closest thing to a build in CI.
       - run: npx expo export --platform android --output-dir "${RUNNER_TEMP}/export"

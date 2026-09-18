@@ -17,6 +17,7 @@
     "gen:types": "npx -y supabase@2 gen types typescript --db-url postgres://postgres:postgres@localhost:54329/minito_migrations_test --schema public > src/data/supabase/database.types.ts",
     "test:db": "node --test \"supabase/tests/*.test.mjs\"",
     "test:edge": "npx -y deno test --no-lock --allow-read supabase/functions/ scripts/",
+    "docs:check": "node scripts/check-doc-numbers.mjs",
     "readme:art": "npx -y deno run --no-lock --node-modules-dir=none --allow-read --allow-write --allow-env --allow-ffi --allow-sys --allow-net scripts/readme-art/main.ts"
   },
   "dependencies": {
