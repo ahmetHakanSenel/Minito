@@ -5,6 +5,13 @@
   </picture>
 </p>
 
+<p align="center"><b>Gözünüzde büyüyen bir işi, gülünç derecede kolay tek bir ilk adıma çevirir.</b></p>
+
+<p align="center">
+  Minito, sağlamlaştırılmış bir Supabase arka ucu üzerinde çalışan, çevrimdışı öncelikli bir
+  React Native uygulaması; yapay zekâ hattı çitli, doğrulanmış ve ölçülmüş.
+</p>
+
 <p align="center">
   <a href="https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white">
@@ -15,40 +22,44 @@
 
 <p align="center"><a href="../README.md">English</a> · <b>Türkçe</b></p>
 
-Minito, DEHB dostu bir "başlama" uygulaması. Gözünüzde büyüyen bir görevi yazarsınız; uygulama size
-üç şey döndürür:
+## Ne yapar
 
-- Sizi anladığını gösteren bir cümle.
-- Gülünç derecede kolay bir ilk hareket.
-- Sakin bir odak ekranında teker teker gösterilen 3 ila 7 küçük adım.
+Gözünüzde büyüyen bir şeyi yazarsınız — "pazara kadar mutfağı toplamam lazım" — ve Minito üç şeyle
+karşılık verir: anladığını gösteren bir cümle, birkaç saniye süren bir ilk hareket ve sakin bir
+odak ekranında teker teker gösterilen 3 ila 7 küçük adım. Her adımın gerçekçi bir süresi vardır ve
+her adım, bırakmanın da sorun olmadığını açıkça söyleyerek biter.
 
-Uygulama React Native ile yazıldı ve Supabase üzerinde çalışıyor. Bu belge işin mühendislik
-tarafını anlatıyor: sistem arıza anında nasıl güvenli kalıyor, her iddia nasıl test ediliyor ve
-canlıda nasıl işletiliyor.
+Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında senkronize olur, çevrimdışıyken de
+çalışmaya devam eder.
 
-### Bir dakikada ürün
+<!--
+  Ürün ekran görüntüleri buraya. Dosyalar docs/assets/ içine konduktan sonra yorumu kaldırın:
 
-1. **Gözünüzde büyüyeni yazın.** Örneğin "pazara kadar mutfağı toplamam lazım".
-2. **Saçma derecede küçük başlayan bir plan alın.** Sizi anladığını gösteren bir cümle, birkaç
-   saniyelik bir ilk hareket ve gerçekçi süreleri olan kısa adımlar.
-3. **Her seferinde tek adım.** Odak ekranında yalnızca bir adım görünür; yanında sayaç, isteğe
-   bağlı ortam sesi ve dokunsal geri bildirim vardır. Her adım, bırakmanın da sorun olmadığını
-   açıkça söyleyerek biter.
-4. **Sonra kaldığınız yerden devam edin.** Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında
-   senkronize olur ve çevrimdışıyken de çalışır.
+<p align="center">
+  <img src="assets/screens-tr.png" alt="Minito: görev girişi, bir plan ve odak ekranı" width="100%">
+</p>
+-->
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/numbers-tr-dark.svg">
-    <img src="assets/numbers-tr-light.svg" alt="246 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, yüzde 99 erişilebilirlik hedefi, 6,5 sn p95 model gecikmesi, 25 modellenmiş tehdit, 0 lint uyarısı" width="100%">
+    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 268 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
   </picture>
 </p>
+
+> **Bu rakamlar ne.** Soldaki grup, her push'ta test paketlerinin ürettiği sonuçlar. Sağdaki grup,
+> gerçek hat üzerinde 20 görevle çalıştırılan ve depoya kaydedilmiş çevrimdışı ölçümden geliyor.
+> Aşağıdaki servis seviyesi hedefleri ise bir üretim yükü için tanımlanmış hedefler; ölçüm değil.
+> Bu depo hiçbir zaman üretim trafiği taşımadı.
+
+Belgenin geri kalanı mühendislik tarafını anlatıyor: sistem arıza anında nasıl güvenli kalıyor, her
+iddia nasıl test ediliyor ve nasıl işletilecek.
 
 ## İnceleyenler için: nereye bakmalı
 
 | İddia | Kanıt |
 | ----- | ----- |
-| **Yapay zekâ bütçesi boşaltılamaz**: ne eş zamanlı isteklerle ne de hesap silip yeniden açarak | [`014_atomic_rate_limits.sql`](../supabase/migrations/014_atomic_rate_limits.sql). Veritabanı testi, 20'lik bir kotaya aynı anda 60 çağrı gönderir ve her seferinde tam 20 izin alır |
+| **Eş zamanlı istekler tanımlı kotayı aşamaz**, hesap silip yeniden açmak da kotayı sıfırlamaz | [`014_atomic_rate_limits.sql`](../supabase/migrations/014_atomic_rate_limits.sql). Veritabanı testi, 20'lik bir kotaya aynı anda 60 çağrı gönderir ve her seferinde tam 20 izin alır |
 | **Modele iki yönde de güvenilmez** | [`pipeline.ts`](../supabase/functions/break-task/pipeline.ts): etiketlerle kırılamayan bir veri çiti, zod sözleşmesi, tek onarım ve deterministik yedek plan |
 | **İstek akışındaki her kural ağ olmadan test edilir** | [`handler.ts`](../supabase/functions/break-task/handler.ts) tüm yan etkileri bağımlılık olarak alır; [`handler.test.ts`](../supabase/functions/break-task/handler.test.ts) kimlik doğrulama, sıralama, hata durumunda açık kalma ve hata yollarını kapsar |
 | **Eski kalmış cihazlara dayanıklı, çevrimdışı öncelikli senkronizasyon** | [`syncEngine.ts`](../src/features/planner/syncEngine.ts) ve [`016_planner_sync.sql`](../supabase/migrations/016_planner_sync.sql): tekrarlanabilir gönderimler, silme işaretleri, eski yazmaları reddeden sunucu tarafı koruma |
@@ -113,6 +124,9 @@ bir istem ya da model değişikliği ölçümle değerlendirilir. Kayıtlı `gpt
 - Model gecikmesi: p50 3,5 sn, p95 6,5 sn.
 - Tüm çalıştırmanın maliyeti bir sentin altında.
 
+Yirmi görev bir kıyaslama değil, bir duman testi: iki istem sürümü arasındaki bir gerilemeyi
+yakalamak için var ve bunu söyleyecek kadar küçük.
+
 ---
 
 ## Güvenilirlik ve operasyon
@@ -130,14 +144,19 @@ zorlanan biri için, hata mesajı yerine hemen gelen sakin ve genel bir plan dah
 | Telemetri yazımı | Yanıttan sonra yeniden dener; ekleme tekrarlanabilir | Hiçbir şey |
 | Planlayıcı için ağ | Düzenlemeler cihazda sıraya girer, geri çekilerek yeniden denenir | Hiçbir şey; planlayıcı kullanılmaya devam eder |
 
-**SLO'lar (28 günlük pencere):**
+**Servis seviyesi hedefleri (28 günlük pencere).** Bunlar bir üretim yükü için tanımlanmış
+hedefler. Üretim trafiği hiç taşınmadığı için aşağıdakilerin hiçbiri bir ölçüm değil:
 
 - **Erişilebilirlik:** Uygun isteklerin %99'u bir planla yanıtlanır.
 - **Gecikme:** Planların %95'i 12 sn içinde gelir.
-- **Kalite:** Planların %97'si yedek plandan değil, modelden gelir.
+- **Model yanıt oranı:** Planların %97'si yedek plandan değil, modelden gelir. Bu, planın nereden
+  geldiğini sayar, ne kadar iyi olduğunu değil; plan kalitesi ayrıca ve çevrimdışı ölçülür.
 
-**Uyarılar.** `ops-alerts` 15 dakikada bir erişilebilirliği, kaliteyi, gecikmeyi, hata bütçesini ve
-harcamayı değerlendirir. Üç özelliği var:
+Gerçek olan, bunları değerlendirecek düzenek: SLI sorguları CI'da gerçek bir Postgres üzerinde
+çalışıyor, uyarı kuralları da birim testli.
+
+**Uyarılar.** `ops-alerts` 15 dakikada bir erişilebilirliği, model yanıt oranını, gecikmeyi, hata
+bütçesini ve harcamayı değerlendirir. Üç özelliği var:
 
 - **Düşük trafikte gürültü yok.** Her kural, tetiklenebilmek için en az belirli sayıda örnek ister.
 - **Yalnızca değişimde bildirim.** Bir kural tetiklendiğinde, tetikli kaldığı sürece 6 saatte bir
@@ -172,7 +191,9 @@ Hedeflerin nasıl seçildiği, günlük olayları kataloğu ve yukarıdaki her s
 
 ## Güvenlik
 
-Temel noktalar aşağıda. Ayrıntılı analiz [`THREAT_MODEL.md`](THREAT_MODEL.md) içinde.
+İstemciye güvenilmez. Modelin çıktısına güvenilmez. Ayrıcalıklı veritabanı fonksiyonlarının kapsamı
+varsayılana bırakılmaz, açıkça çizilir. Aşağıdaki her madde bir teste dayanıyor; ayrıntılı analiz
+[`THREAT_MODEL.md`](THREAT_MODEL.md) içinde.
 
 - **Veritabanında en az yetki.**
   - Her tabloda RLS açık; her fonksiyon `search_path`'ini sabitler.
@@ -206,7 +227,7 @@ Temel noktalar aşağıda. Ayrıntılı analiz [`THREAT_MODEL.md`](THREAT_MODEL.
 
 | Paket | Test | Neyi kanıtlar |
 | ----- | ---: | ------------- |
-| Uygulama (Jest) | 133 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; her statik `t()` anahtarı dahil çeviri eşitliği |
+| Uygulama (Jest) | 155 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
 | Edge Functions (Deno) | 76 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
 | Veritabanı (Postgres) | 37 | Kullanıcılar arası RLS, Supabase varsayılanları altında yetkiler, kota eş zamanlılığı, zincirleme silmeler, planlayıcı korumaları, şema geneli kurallar, el kitabındaki SQL |
 | Şema sapması | | Kayıtlı TypeScript tipleri, migration'ların ürettiğiyle birebir aynı |
@@ -258,7 +279,35 @@ görünür. Boş yere çalan alarm, insanlara alarmları görmezden almayı öğ
 gürültüdür. Uygulama arka planda sessizce kontrol eder ve yalnızca gerçekten bir sorun varsa
 konuşur.
 
+**Süre çarkı neden kendi momentumunu hesaplamıyor?** Eskiden hesaplıyordu: yayla oturma, elle
+yazılmış fırlatma hedefi, UI thread'de kaydırılan sonsuz bir şerit. Taklit ettiği her platform
+jesti, ayarlanmadığı bir cihazda sessizce yanlış davranabilecek bir şey daha demekti. Artık satıra
+oturan bir kaydırma görünümü: görsel olarak hiçbir şey kaybettirmiyor ve işletim sistemine karşı
+değil, onunla birlikte yaşlanıyor.
+
 </details>
+
+---
+
+## Bunlar iddia edilmiyor
+
+Bir inceleyenin zaten bulacağı boşluklar. O yüzden burada yazıyorlar.
+
+- **Üretim trafiği yok.** SLO'lar, hata bütçesi ve uyarı eşikleri birer tasarım hedefi. Arkalarındaki
+  sorgular ve kurallar test ediliyor; tarif ettikleri yük ise varsayımsal.
+- **Yapay zekâ değerlendirme kümesi 20 görev.** İstem sürümleri arasındaki bir gerilemeyi yakalamaya
+  yeter, model kalitesini nitelemeye yetmez.
+- **Android cihazda denendi, iOS denenmedi.** iOS yapılandırması var (paket kimliği, Apple ile
+  giriş) ve proje derleniyor, ama şimdiye dek hiçbir iOS cihazında çalıştırılmadı.
+- **Günlük tabanlı uyarılar** (örneğin `quota_check_failed`) platformun günlük gezginine dayanır.
+  Zamanlanmış kurallar yalnızca veritabanına yazılanı görür.
+- **Kota ve denetim hata durumunda açık kalır**; bu bilinçli. İkisinden birinde kesinti olduğunda
+  kesin üst sınırı sağlayıcıdaki harcama limiti çizer. Sabit pencere, pencere sınırında sınırın iki
+  katına kadar isteğin geçmesine de izin verebilir.
+- **Planlayıcıdaki çakışmalar** alan birleştirmeyle değil, satır başına son yazmayla çözülür.
+
+Son üçü bilinçli birer tercih. Her biri, onu değiştirecek koşulla birlikte
+[tehdit modelinde](THREAT_MODEL.md#accepted-risks) yazılı.
 
 ---
 
@@ -299,17 +348,3 @@ docs/                             RUNBOOK, THREAT_MODEL, operasyon SQL'i, değer
 ```
 
 </details>
-
-## Bilinçli ödünleşimler
-
-Bunlar açık güvenlik sorunları değil, tasarım kararları. Her biri, onu değiştirecek koşulla
-birlikte [tehdit modelinde](THREAT_MODEL.md#accepted-risks) yazılı.
-
-- **Planlayıcıdaki çakışmalar** alan birleştirmeyle değil, satır başına son yazmayla çözülür. Bir
-  planlayıcı satırı bir başlık ya da bir onay kutusu; birleştirme değer katmadan karmaşıklık ekler.
-- **Kota ve denetim hata durumunda açık kalır.** Bir veritabanı aksaklığı, başlamakta zorlanan
-  birini kapıda bırakmamalı; kesin üst sınırı sağlayıcıdaki harcama limiti çizer.
-- **Günlük tabanlı uyarılar** (örneğin `quota_check_failed`) platformun günlük gezginine dayanır.
-  Zamanlanmış kurallar yalnızca veritabanına yazılanı görür.
-- **iOS** yapılandırıldı (paket kimliği, Apple ile giriş), ancak şimdiye dek cihazda yalnızca
-  Android derlemesi denendi.

@@ -353,16 +353,37 @@ function hero(t: Theme, s: Strings): Figure {
 // ─── Numbers ────────────────────────────────────────────────────────────────────────────────────
 
 function numbers(t: Theme, s: Strings): Figure {
-  const f = new Figure(1280, 124, t, s.numbers.alt);
-  const columns = s.numbers.items.length;
-  const columnWidth = (1280 - 48) / columns;
-  s.numbers.items.forEach(([value, label, note], i) => {
-    const x = 24 + i * columnWidth;
-    if (i > 0) f.add(`<rect x="${r(x)}" y="30" width="1" height="64" fill="${t.line}"/>`);
-    const maxWidth = columnWidth - 44;
-    f.text(x + 24, 58, value, T.value, t.text, { maxWidth });
-    f.text(x + 24, 80, label, T.label, t.text, { maxWidth });
-    f.text(x + 24, 98, note, T.code, t.faint, { maxWidth });
+  const f = new Figure(1280, 168, t, s.numbers.alt);
+  const groups = s.numbers.groups;
+  const total = groups.reduce((n, group) => n + group.items.length, 0);
+  // Columns keep one width across both groups, so a wider group is wider on the page rather
+  // than more crowded, and the two never look like different kinds of measurement.
+  const columnWidth = (1280 - 48) / total;
+
+  let column = 0;
+  groups.forEach((group, groupIndex) => {
+    const groupX = 24 + column * columnWidth;
+    const groupWidth = group.items.length * columnWidth;
+
+    // The caption is what separates a number that CI proves from a number that came off a
+    // 20-task evaluation run.
+    f.text(groupX + 24, 34, group.caption, T.tag, t.accent, { maxWidth: groupWidth - 44 });
+
+    // A full-height rule between groups; a hairline between columns inside one.
+    if (groupIndex > 0) {
+      f.add(`<rect x="${r(groupX - 1)}" y="14" width="1" height="140" fill="${t.strong}"/>`);
+    }
+
+    group.items.forEach(([value, label, note], i) => {
+      const x = groupX + i * columnWidth;
+      if (i > 0) f.add(`<rect x="${r(x)}" y="72" width="1" height="64" fill="${t.line}"/>`);
+      const maxWidth = columnWidth - 44;
+      f.text(x + 24, 100, value, T.value, t.text, { maxWidth });
+      f.text(x + 24, 122, label, T.label, t.text, { maxWidth });
+      f.text(x + 24, 140, note, T.code, t.faint, { maxWidth });
+    });
+
+    column += group.items.length;
   });
   return f;
 }

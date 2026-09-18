@@ -5,6 +5,13 @@
   </picture>
 </p>
 
+<p align="center"><b>Turn a task that feels too big into one laughably easy first step.</b></p>
+
+<p align="center">
+  Minito is an offline-first React Native app on a hardened Supabase backend,
+  with an AI pipeline that is fenced, validated and measured.
+</p>
+
 <p align="center">
   <a href="https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ahmetHakanSenel/Minito/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white">
@@ -15,38 +22,44 @@
 
 <p align="center"><b>English</b> · <a href="docs/README.tr.md">Türkçe</a></p>
 
-Minito is an ADHD-friendly task starter. You type a task that feels too big, and it answers with
-three things:
+## What it does
 
-- An empathy line.
-- A laughably easy first action.
-- Three to seven atomic steps, shown one at a time in a calm focus mode.
+You type something that feels too big — "clean the kitchen before Sunday" — and Minito answers
+with three things: a line that shows it understood, a first action that takes seconds, and three
+to seven atomic steps shown one at a time in a calm focus mode, each with an honest time estimate
+and explicit permission to stop.
 
-It is a React Native app on Supabase. This README is about the engineering behind it: how the
-system fails safely, how every claim is tested, and how it is operated.
+History, progress and the project planner sync across devices, and keep working offline.
 
-### The product in one minute
+<!--
+  Product screenshots go here, once they have been captured from a device. Drop the files in
+  docs/assets/ and uncomment:
 
-1. **Say what feels too big.** For example, "clean the kitchen before Sunday".
-2. **Get a plan that starts absurdly small.** It has one line that shows the app understands, a
-   first action that takes seconds, and short steps with honest time estimates.
-3. **Do one step at a time.** Focus mode shows a single step, with a timer, optional ambient
-   sound and haptic feedback. Every step ends with explicit permission to stop.
-4. **Come back later.** History, progress and the project planner sync across devices, and keep
-   working offline.
+<p align="center">
+  <img src="docs/assets/screens-en.png" alt="Minito: the task input, a plan, and focus mode" width="100%">
+</p>
+-->
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/numbers-en-dark.svg">
-    <img src="docs/assets/numbers-en-light.svg" alt="246 automated tests, 20 of 60 parallel calls granted under a quota of 20, 99% availability SLO, 6.5 s p95 model latency, 25 threats modeled, 0 lint warnings" width="100%">
+    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 268 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
   </picture>
 </p>
+
+> **What these numbers are.** The left group is produced by the test suites on every push. The
+> right group comes from a committed offline evaluation over 20 tasks, run against the real
+> pipeline. The service-level objectives further down are targets defined for a production
+> workload, not measurements of one. This repository has never served production traffic.
+
+The rest of this README is about the engineering: how the system fails safely, how every claim is
+tested, and how it would be operated.
 
 ## For reviewers: where to look
 
 | Claim | Evidence |
 | ----- | -------- |
-| **The AI budget cannot be drained** by concurrency or by cycling accounts | [`014_atomic_rate_limits.sql`](supabase/migrations/014_atomic_rate_limits.sql). The database suite fires 60 parallel calls at a quota of 20 and gets exactly 20 grants |
+| **Concurrent requests cannot exceed the configured quota**, and cycling accounts does not reset it | [`014_atomic_rate_limits.sql`](supabase/migrations/014_atomic_rate_limits.sql). The database suite fires 60 parallel calls at a quota of 20 and gets exactly 20 grants |
 | **The model is untrusted in both directions** | [`pipeline.ts`](supabase/functions/break-task/pipeline.ts): a data fence that tags cannot break, a zod contract, one repair, a deterministic fallback |
 | **Every request-path rule is tested without a network** | [`handler.ts`](supabase/functions/break-task/handler.ts) takes its side effects as dependencies; [`handler.test.ts`](supabase/functions/break-task/handler.test.ts) covers auth, ordering, fail-open and error paths |
 | **Offline-first sync that survives stale devices** | [`syncEngine.ts`](src/features/planner/syncEngine.ts) and [`016_planner_sync.sql`](supabase/migrations/016_planner_sync.sql): idempotent pushes, tombstones, a server-side guard against stale writes |
@@ -92,23 +105,18 @@ system fails safely, how every claim is tested, and how it is operated.
 | **Validate and repair** | A zod contract: 3–7 steps, a first step that is `easy`, 1–10 minutes each. A failing reply gets exactly one repair. The issues are rewritten so they never quote model output into logs |
 | **Fallback** | A deterministic plan in the task's language, validated at module load. A broken fallback fails the deploy, not a user |
 
-Every answered request writes one telemetry row after the reply. The row records:
-
-- The model and the prompt version.
-- Model latency and end-to-end latency.
-- The token split, including cached tokens.
-- The finish reason and the contract rule that broke, if any.
-- Whether the answer matched the task's language.
+Every answered request writes one telemetry row after the reply: the model and prompt version,
+model and end-to-end latency, the token split including cached tokens, the finish reason, the
+contract rule that broke if any, and whether the answer matched the task's language.
 
 Users can rate a plan with one tap. The rating goes through a `SECURITY DEFINER` function that
 writes only to the caller's own row.
 
 **Offline evaluation.** A fixed set of 20 Turkish and English tasks runs through the real pipeline,
-so a prompt or model change is judged by measurement. The committed `gpt-4o-mini` baseline:
-
-- 20/20 valid on the first try, and 20/20 in the right language.
-- Model latency: p50 3.5 s, p95 6.5 s.
-- Under one cent for the whole run.
+so a prompt or model change is judged by measurement rather than by impression. The committed
+`gpt-4o-mini` baseline: 20/20 valid on the first try, 20/20 in the right language, model latency
+p50 3.5 s and p95 6.5 s, under one cent for the whole run. Twenty tasks is a smoke test, not a
+benchmark — it is there to catch a regression, and it is small enough to say so.
 
 ---
 
@@ -127,14 +135,19 @@ to start, a calm generic plan now beats an error message.
 | Telemetry write | Retries after the reply; the insert is idempotent | Nothing |
 | Network, for the planner | Edits queue on the device and retry with backoff | Nothing; the planner stays usable |
 
-**SLOs, over 28 days:**
+**Service-level objectives, over 28 days.** These are targets defined for a production workload.
+No production traffic has been served, so nothing below is a measurement:
 
 - **Availability:** 99% of eligible requests are answered with a plan.
 - **Latency:** 95% of plans arrive within 12 s.
-- **Quality:** 97% of plans come from the model rather than the fallback.
+- **Model response rate:** 97% of plans come from the model rather than the fallback. This counts
+  where a plan came from, not how good it was; plan quality is measured separately and offline.
 
-**Alerting.** `ops-alerts` evaluates availability, quality, latency, the error budget and spend
-every 15 minutes, with three properties:
+What is real is the machinery that would evaluate them: the SLI queries run in CI against a real
+Postgres, and the alert rules are unit-tested.
+
+**Alerting.** `ops-alerts` evaluates availability, model response rate, latency, the error budget
+and spend every 15 minutes, with three properties:
 
 - **No noise at low traffic.** Each rule needs a minimum sample before it can fire.
 - **Notifications on change.** A person hears about a rule when it fires, every 6 hours while it
@@ -169,7 +182,9 @@ playbook for every row above.
 
 ## Security
 
-The essentials are below. The full analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+The client is untrusted. The model's output is untrusted. Privileged database functions are
+scoped explicitly rather than by default. Every claim below is backed by a test, and the full
+analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 - **Least privilege in the database.**
   - RLS is on every table, and every function pins its `search_path`.
@@ -203,7 +218,7 @@ The essentials are below. The full analysis is in [`THREAT_MODEL.md`](docs/THREA
 
 | Suite | Tests | What it proves |
 | ----- | ----: | -------------- |
-| App (Jest) | 133 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; locale parity, including every static `t()` key |
+| App (Jest) | 155 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
 | Edge functions (Deno) | 76 | Request-path ordering and failure rules, the AI contract and repair, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
 | Database (Postgres) | 37 | Cross-user RLS, grants under Supabase's defaults, quota concurrency, cascades, planner sync guards, schema-wide invariants, the runbook's SQL |
 | Schema drift | | The committed TypeScript types equal what the migrations produce |
@@ -252,7 +267,34 @@ alert that cries wolf teaches people to ignore alerts.
 **Why no always-on status indicator?** For this audience, a blinking status pill is noise. The app
 probes quietly and speaks only when something is down.
 
+**Why does the duration wheel not model its own momentum?** It used to: a spring settle, a
+hand-rolled fling target, an endless strip translated on the UI thread. Every platform gesture it
+reimplemented was one more thing to get subtly wrong on a device it had not been tuned on. It is
+now a snapping scroll view, which costs nothing visually and ages with the OS instead of against
+it.
+
 </details>
+
+## What this does not claim
+
+These are the gaps a reviewer would find anyway, so they are written down here.
+
+- **No production traffic.** The SLOs, the error budget and the alert thresholds are design
+  targets. The queries and rules behind them are tested; the workload they describe is
+  hypothetical.
+- **The AI evaluation set is 20 tasks.** Enough to catch a regression between prompt versions,
+  not enough to characterise model quality.
+- **Android has been exercised on a device. iOS has not.** The iOS configuration exists (bundle
+  identifier, Sign in with Apple) and the project builds, but no iOS device run has happened.
+- **Log-based alerts** (such as `quota_check_failed`) rely on the platform's log explorer. The
+  scheduled rules cover only what the database records.
+- **Quota and moderation fail open** by design, so an outage in either leaves the provider's spend
+  limit as the hard ceiling. A fixed window can also let up to twice the limit through at a window
+  boundary.
+- **Planner conflicts** resolve by last write per row, not by merging fields.
+
+The last three are deliberate. Each is recorded in the
+[threat model](docs/THREAT_MODEL.md#accepted-risks) with the condition that would change it.
 
 ---
 
@@ -293,18 +335,3 @@ docs/                             RUNBOOK, THREAT_MODEL, ops SQL, evaluation set
 ```
 
 </details>
-
-## Deliberate trade-offs
-
-These are design choices, not open vulnerabilities. Each one is written down in the
-[threat model](docs/THREAT_MODEL.md#accepted-risks), together with the condition that would
-change it.
-
-- **Planner conflicts** resolve by last write per row, not by merging fields. A planner row is a
-  title or a checkbox, so merging would add complexity without value.
-- **Quota and moderation fail open**, so a database hiccup never locks out someone who is
-  struggling to start. The provider's spend limit is the hard ceiling.
-- **Log-based alerts** (such as `quota_check_failed`) rely on the platform's log explorer. The
-  scheduled rules cover only what the database records.
-- **iOS** is configured (bundle identifier, Sign in with Apple), but only the Android build has
-  been exercised on a device so far.

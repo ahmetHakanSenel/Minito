@@ -22,7 +22,13 @@ export type Strings = {
     steps: [string, string, boolean][];
     footer: string;
   };
-  numbers: { alt: string; items: [string, string, string][] };
+  // Grouped, because a number means nothing without knowing where it came from: a figure that
+  // puts a measured test count next to a design target invites the reader to take both as
+  // production fact.
+  numbers: {
+    alt: string;
+    groups: { caption: string; items: [string, string, string][] }[];
+  };
   pipeline: {
     alt: string;
     tag: string;
@@ -118,14 +124,24 @@ const en: Strings = {
     footer: 'model · task-breakdown-v2 · 3.5 s · 1,381 tokens',
   },
   numbers: {
-    alt: '246 automated tests; 20 of 60 parallel calls granted under a quota of 20; 99% availability SLO; 6.5 s p95 model latency; 25 threats modeled; zero lint warnings',
-    items: [
-      ['246', 'automated tests', '3 suites, all in CI'],
-      ['20 / 60', 'parallel calls granted', 'quota of 20, never more'],
-      ['99%', 'availability SLO', '28-day error budget'],
-      ['6.5 s', 'p95 model latency', '20/20 valid first try'],
-      ['25', 'threats modeled', 'each tied to a test'],
-      ['0', 'lint warnings', 'enforced in CI'],
+    alt: 'Verified in CI: 268 automated tests across 3 suites; 20 of 60 parallel calls granted under a quota of 20; 25 threats modeled, each tied to a test; zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and in the right language; 6.5 s p95 model latency, 3.5 s p50',
+    groups: [
+      {
+        caption: 'Verified in CI',
+        items: [
+          ['268', 'automated tests', '3 suites, every push'],
+          ['20 / 60', 'parallel calls granted', 'quota of 20, never more'],
+          ['25', 'threats modeled', 'each tied to a test'],
+          ['0', 'lint warnings', 'enforced in CI'],
+        ],
+      },
+      {
+        caption: 'Offline AI baseline · 20 tasks',
+        items: [
+          ['20 / 20', 'valid on first try', 'and language-matched'],
+          ['6.5 s', 'p95 model latency', 'p50 3.5 s'],
+        ],
+      },
     ],
   },
   pipeline: {
@@ -233,14 +249,24 @@ const tr: Strings = {
     footer: 'model · task-breakdown-v2 · 3,5 sn · 1.381 jeton',
   },
   numbers: {
-    alt: '246 otomatik test; 20 kotasında 60 paralel çağrıdan 20 kabul; yüzde 99 erişilebilirlik hedefi; 6,5 sn p95 model gecikmesi; 25 modellenmiş tehdit; sıfır lint uyarısı',
-    items: [
-      ['246', 'otomatik test', "3 paket, hepsi CI'da"],
-      ['20 / 60', 'kabul edilen çağrı', 'kota 20, fazlası yok'],
-      ['%99', 'erişilebilirlik hedefi', '28 günlük hata bütçesi'],
-      ['6,5 sn', 'p95 model gecikmesi', '20/20 ilk seferde'],
-      ['25', 'modellenmiş tehdit', 'her biri teste bağlı'],
-      ['0', 'lint uyarısı', "CI'da zorunlu"],
+    alt: "CI'da doğrulanmış: 3 pakette 268 otomatik test; 20 kotasında 60 paralel çağrıdan 20'si kabul; her biri bir teste bağlı 25 modellenmiş tehdit; sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli; 6,5 sn p95 model gecikmesi, 3,5 sn p50",
+    groups: [
+      {
+        caption: "CI'da doğrulanmış",
+        items: [
+          ['268', 'otomatik test', '3 paket, her push'],
+          ['20 / 60', 'kabul edilen çağrı', 'kota 20, fazlası yok'],
+          ['25', 'modellenmiş tehdit', 'her biri teste bağlı'],
+          ['0', 'lint uyarısı', "CI'da zorunlu"],
+        ],
+      },
+      {
+        caption: 'Çevrimdışı yapay zekâ ölçümü · 20 görev',
+        items: [
+          ['20 / 20', 'ilk denemede geçerli', 've doğru dilde'],
+          ['6,5 sn', 'p95 model gecikmesi', 'p50 3,5 sn'],
+        ],
+      },
     ],
   },
   pipeline: {
