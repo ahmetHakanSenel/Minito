@@ -35,17 +35,19 @@ so it counts neither as good nor as bad.
 | --- | ---------- | --- | ----- |
 | Availability | Requests answered with a plan ÷ eligible requests | 99% | Q2, Q3 |
 | Latency | Answered requests with `latency_ms` ≤ 12 000 ÷ answered requests | 95% | Q2 |
-| Quality | Plans from the model (`model` or `repaired`) ÷ answered requests | 97% | Q1, Q2 |
+| Model response rate | Plans from the model (`model` or `repaired`) ÷ answered requests | 97% | Q1, Q2 |
 
 How the targets were chosen:
 
-- **Availability, 99%.** The app degrades to offline steps, so an outage costs quality, not
-  function. A tighter target would mostly measure the model provider's own SLA.
+- **Availability, 99%.** The app degrades to offline steps, so an outage costs the quality of
+  the plan, not the function. A tighter target would mostly measure the model provider's own SLA.
 - **Latency, 12 s.** The offline evaluation measured p95 model time at 6.5 s for one call. 12 s
   leaves room for a retry, but not for a repair round-trip on top of a slow first call. That case
   is rare, and the 17 s budget still ends it inside the client's limit.
-- **Quality, 97%.** The evaluation measured 100% first-try validity on 20 tasks. A sample that
-  small cannot support a tighter claim.
+- **Model response rate, 97%.** This counts where a plan came from, not how good it was: a
+  fallback plan is a worse plan, but a model plan is not automatically a good one. Plan quality is
+  measured separately and offline. The evaluation measured 100% first-try validity on 20 tasks,
+  and a sample that small cannot support a tighter claim.
 
 **Error budget.** At 99% availability, 1 in 100 requests may fail over 28 days. Q3 shows how much
 of that budget remains. When it runs out, stop prompt and model experiments until it recovers:
@@ -86,7 +88,7 @@ live in [`rules.ts`](../supabase/functions/ops-alerts/rules.ts), and Deno tests 
 | Rule | Fires when | Minimum sample | Severity |
 | ---- | ---------- | -------------- | -------- |
 | `availability` | Under 95% of requests answered with a plan, last hour | 20 requests | Page |
-| `quality` | Under 90% of plans came from the model, last hour | 20 plans | Ticket |
+| `model_response_rate` | Under 90% of plans came from the model, last hour | 20 plans | Ticket |
 | `latency` | Under 90% of plans arrived within 12 s, last hour | 20 plans | Ticket |
 | `error_budget` | More failures than the 99% SLO allows, last 28 days | 100 requests | Ticket; freeze prompt and model changes |
 | `spend` | Today's tokens exceed 3 × the 7-day daily average | 50 000 tokens | Ticket |
@@ -156,10 +158,10 @@ To switch delivery off again, unset `ALERT_WEBHOOK_URL`. The schedule can stay i
 3. If the cause is a `429`, raise the account's limit. The retry policy deliberately does not
    retry a `429`.
 
-Users keep getting offline steps throughout, so this is a quality incident, not an outage of the
-app.
+Users keep getting offline steps throughout, so this costs the quality of the plans, not the
+function of the app.
 
-### Quality regression after a prompt or model change
+### Model response rate falls after a prompt or model change
 
 **Symptoms:** Q1 shows `repair_rate` or `fallback_rate` rising for the newest `prompt_version`,
 or `helpful_rate` falling in Q7.

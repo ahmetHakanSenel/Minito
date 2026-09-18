@@ -36,7 +36,7 @@ Deno.test('each rule fires on its own symptom', () => {
     firingRules(
       snapshot({ last_hour: { eligible: 100, answered: 100, from_model: 80, fast: 100 } })
     ),
-    ['quality']
+    ['model_response_rate']
   );
   assertEquals(
     firingRules(
@@ -110,7 +110,7 @@ Deno.test('state is kept for every rule, firing or not', () => {
     next.map((state: AlertState) => [state.rule, state.firing]),
     [
       ['availability', false],
-      ['quality', false],
+      ['model_response_rate', false],
       ['latency', false],
       ['error_budget', false],
       ['spend', false],

@@ -41,13 +41,15 @@ export function evaluate(snapshot: Snapshot): RuleResult[] {
     runbook: `${RUNBOOK}#provider-outage`,
   });
 
-  const quality = hour.answered > 0 ? hour.from_model / hour.answered : 1;
+  // Where the plan came from, not how good it was: a fallback is a worse plan, but a model
+  // plan is not automatically a good one. Plan quality is measured offline, by the evaluation.
+  const modelRate = hour.answered > 0 ? hour.from_model / hour.answered : 1;
   results.push({
-    rule: 'quality',
+    rule: 'model_response_rate',
     severity: 'ticket',
-    firing: hour.answered >= 20 && quality < 0.9,
-    detail: `${pct(quality)} of plans came from the model over the last hour (${hour.answered} plans), threshold 90%`,
-    runbook: `${RUNBOOK}#quality-regression-after-a-prompt-or-model-change`,
+    firing: hour.answered >= 20 && modelRate < 0.9,
+    detail: `${pct(modelRate)} of plans came from the model over the last hour (${hour.answered} plans), threshold 90%`,
+    runbook: `${RUNBOOK}#model-response-rate-falls-after-a-prompt-or-model-change`,
   });
 
   const fast = hour.answered > 0 ? hour.fast / hour.answered : 1;

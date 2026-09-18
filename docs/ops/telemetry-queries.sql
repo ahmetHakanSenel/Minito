@@ -8,7 +8,8 @@
 --   eligible  = recorded requests, minus CONTENT_FLAGGED (a correct refusal, not a failure)
 --   answered  = eligible requests that returned a plan (breakdown_source is set)
 --   available = answered / eligible
---   quality   = (model + repaired) / answered: the share of plans that were not the fallback
+--   model_rate = (model + repaired) / answered: the share of plans that were not the fallback.
+--                It says where a plan came from, not how good it was.
 --   fast      = answered with latency_ms <= 12000 / answered
 
 -- 1. Prompt and model scorecard, last 7 days. The first thing to read after a prompt change.
@@ -42,7 +43,7 @@ WHERE created_at >= NOW() - INTERVAL '7 days'
 GROUP BY prompt_version, ai_model
 ORDER BY prompt_version DESC NULLS LAST, requests DESC;
 
--- 2. Hourly SLIs, last 48 hours. A dip in `available` is an outage; a dip in `quality` with
+-- 2. Hourly SLIs, last 48 hours. A dip in `available` is an outage; a dip in `model_rate` with
 --    `available` intact is a prompt or model regression.
 SELECT
   date_trunc('hour', created_at) AS hour,
@@ -51,7 +52,7 @@ SELECT
   round(
     avg((breakdown_source IN ('model', 'repaired'))::int) FILTER (WHERE breakdown_source IS NOT NULL),
     4
-  ) AS quality,
+  ) AS model_rate,
   round(avg((latency_ms <= 12000)::int) FILTER (WHERE breakdown_source IS NOT NULL), 4) AS fast
 FROM public.tasks
 WHERE created_at >= NOW() - INTERVAL '48 hours'
