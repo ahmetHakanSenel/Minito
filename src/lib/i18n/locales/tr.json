@@ -40,7 +40,9 @@
       "medium": "Orta",
       "hard": "Zor"
     },
-    "stepDone": "Adım {{done}}/{{total}} tamam"
+    "stepDone": "Adım {{done}}/{{total}} tamam",
+    "addTimer": "Bu adıma sayaç ekle",
+    "hideTimer": "Sayacı gizle"
   },
   "success": {
     "title": "{{count}} adımı Minito'ladın!",

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -27,6 +26,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { SUPPORTED_LANGUAGES } from '../src/lib/i18n';
 import { useChangeLanguage } from '../src/lib/i18n/I18nProvider';
+import { useDialog } from '../src/components/feedback/Dialog';
 import { haptics } from '../src/lib/ui/haptics';
 import { useHapticsPreference } from '../src/features/settings/useHapticsPreference';
 
@@ -90,6 +90,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 export default function SettingsScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
+  const dialog = useDialog();
   const { signOut } = useAuth();
   const { changeLanguage } = useChangeLanguage();
   const { enabled: hapticsEnabled, setEnabled: setHapticsEnabled } = useHapticsPreference();
@@ -105,23 +106,23 @@ export default function SettingsScreen() {
     });
   };
 
-  const handleSignOut = () => {
-    Alert.alert(t('settings.signOutConfirmTitle'), t('settings.signOutConfirmMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('settings.signOut'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            // Clears the encrypted session; the root auth guard then routes to /login.
-            await signOut();
-          } catch {
-            haptics.error();
-            Alert.alert(t('common.error'), t('errors.signOutFailed'));
-          }
-        },
-      },
-    ]);
+  const handleSignOut = async () => {
+    const confirmed = await dialog.confirm({
+      title: t('settings.signOutConfirmTitle'),
+      message: t('settings.signOutConfirmMessage'),
+      confirmLabel: t('settings.signOut'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      // Clears the encrypted session; the root auth guard then routes to /login.
+      await signOut();
+    } catch {
+      haptics.error();
+      await dialog.alert({ title: t('common.error'), message: t('errors.signOutFailed') });
+    }
   };
 
   return (
@@ -225,7 +226,7 @@ export default function SettingsScreen() {
           <SettingRow
             icon={<LogOut size={20} color="#EF4444" strokeWidth={2} />}
             label={t('settings.signOut')}
-            onPress={handleSignOut}
+            onPress={() => void handleSignOut()}
             index={5}
             danger
           />

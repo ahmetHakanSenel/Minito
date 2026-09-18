@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, SlideOutRight, LinearTransition } from 'react-native-reanimated';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
 import { STEP_CELEBRATION_MS } from '../src/components/PremiumStepAnimation';
 import { parseTimeFromStep } from '../src/lib/timeParser';
@@ -19,12 +20,23 @@ import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
-// An explicit duration in the step's text wins; otherwise the model's estimate timeboxes the step.
-function stepDuration(step: BreakdownStep) {
-  return (
-    parseTimeFromStep(`${step.title} ${step.instruction}`) ??
-    (step.estimatedMinutes ? { minutes: step.estimatedMinutes, seconds: 0 } : null)
-  );
+/**
+ * A time the step itself names — "wait 30 seconds", "read for 10 minutes". Only these get a
+ * countdown unasked, because only these are steps where the time is part of the instruction.
+ */
+function statedDuration(step: BreakdownStep) {
+  return parseTimeFromStep(`${step.title} ${step.instruction}`);
+}
+
+/**
+ * The model's estimate, which every step carries because the contract requires it.
+ *
+ * It used to be enough to put a countdown on the step, which meant every step had one, including
+ * "throw away one piece of rubbish". A clock on a step that does not need timing turns a small
+ * action into a test. It now seeds the timer that the reader asks for, and nothing more.
+ */
+function estimatedDuration(step: BreakdownStep) {
+  return step.estimatedMinutes ? { minutes: step.estimatedMinutes, seconds: 0 } : null;
 }
 
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
@@ -57,6 +69,8 @@ export default function FocusModeScreen() {
   const [showStepAnimation, setShowStepAnimation] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [timerCompletionLoop, setTimerCompletionLoop] = useState(false);
+  // Asking for a timer is a decision about this step, not about the whole session.
+  const [timerRequested, setTimerRequested] = useState(false);
   const nextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // A timer's completion pulse belongs to the step that produced it. If the
@@ -67,6 +81,7 @@ export default function FocusModeScreen() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the pulse when the step changes is what this effect is for
     setTimerCompletionLoop(false);
+    setTimerRequested(false);
   }, [currentStepIndex]);
 
   // A malformed param must degrade to the empty state, never crash the screen.
@@ -250,7 +265,10 @@ export default function FocusModeScreen() {
 
   // Clamped so the intro index (-1) and a stale resume index both land on a real step.
   const currentStep = steps[Math.min(Math.max(currentStepIndex, 0), totalSteps - 1)];
-  const currentDuration = stepDuration(currentStep);
+  const stated = statedDuration(currentStep);
+  const estimated = estimatedDuration(currentStep);
+  // The step's own time, or the estimate once the reader has asked to see a clock.
+  const timerDuration = stated ?? (timerRequested ? estimated : null);
   const isCompleted = currentStepIndex >= 0 && completedSteps.has(currentStepIndex);
 
   const isFinalStep = currentStepIndex === totalSteps - 1;
@@ -314,6 +332,9 @@ export default function FocusModeScreen() {
                 entering={FadeInDown.delay(300).springify()}
                 style={styles.readyButtonWrap}
               >
+                {/* The same gradient every other primary action in the app uses: starting a
+                    session, creating a project, confirming a dialog. This one was a flat block
+                    of colour, which made the first thing a person presses the odd one out. */}
                 <Pressable
                   onPress={handleNext}
                   accessibilityRole="button"
@@ -322,8 +343,15 @@ export default function FocusModeScreen() {
                     pressed && styles.readyButtonPressed,
                   ]}
                 >
-                  <Text style={styles.readyButtonText}>{t('focus.ready')}</Text>
-                  <ArrowRight size={19} color="#FFFFFF" strokeWidth={2.5} />
+                  <LinearGradient
+                    colors={['#8B5CF6', '#6D28D9']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.readyButtonFill}
+                  >
+                    <Text style={styles.readyButtonText}>{t('focus.ready')}</Text>
+                    <ArrowRight size={19} color="#FFFFFF" strokeWidth={2.5} />
+                  </LinearGradient>
                 </Pressable>
               </Animated.View>
             </View>
@@ -355,11 +383,16 @@ export default function FocusModeScreen() {
                 isFinalStep={isFinalStep}
                 disabled={isAnimating}
                 timerCompletionLoop={timerCompletionLoop}
+                // Offered only where the step does not already carry a time of its own.
+                onToggleTimer={
+                  !stated && estimated ? () => setTimerRequested((open) => !open) : undefined
+                }
+                isTimerOpen={timerRequested}
                 timerSlot={
-                  currentDuration ? (
+                  timerDuration ? (
                     <InlineTimer
-                      initialMinutes={currentDuration.minutes}
-                      initialSeconds={currentDuration.seconds}
+                      initialMinutes={timerDuration.minutes}
+                      initialSeconds={timerDuration.seconds}
                       onCompletionStateChange={setTimerCompletionLoop}
                     />
                   ) : undefined
@@ -489,14 +522,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   readyButton: {
-    minHeight: 56,
     borderRadius: 18,
+    overflow: 'hidden',
+  },
+  readyButtonFill: {
+    minHeight: 56,
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#7C3AED',
   },
   readyButtonPressed: {
     opacity: 0.82,

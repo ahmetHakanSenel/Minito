@@ -19,6 +19,7 @@ import { historyRoute } from '../src/features/tasks/focusLaunch';
 import { confirmDeleteBreakdown } from '../src/features/tasks/ui/confirmDeleteBreakdown';
 import { TaskHistoryRow, useRelativeTime } from '../src/features/tasks/ui/TaskHistoryList';
 import type { TaskBreakdown } from '../src/repositories/taskRepository';
+import { useDialog } from '../src/components/feedback/Dialog';
 import { haptics } from '../src/lib/ui/haptics';
 
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
@@ -27,6 +28,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 export default function HistoryScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const dialog = useDialog();
   const insets = useSafeAreaInsets();
   const formatTime = useRelativeTime();
   const {
@@ -57,8 +59,8 @@ export default function HistoryScreen() {
   );
 
   const handleDelete = useCallback(
-    (item: TaskBreakdown) => confirmDeleteBreakdown(t, () => remove(item.id)),
-    [t, remove]
+    (item: TaskBreakdown) => void confirmDeleteBreakdown(t, dialog, () => remove(item.id)),
+    [t, dialog, remove]
   );
 
   const renderItem = useCallback(

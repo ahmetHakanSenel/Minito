@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, Check, CircleCheck } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Check, CircleCheck, Timer, TimerOff } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,6 +26,13 @@ interface FocusCardProps {
   isFinalStep?: boolean;
   disabled?: boolean;
   timerSlot?: React.ReactNode;
+  /**
+   * Offered when the step does not name a time of its own. Given, the header carries a small
+   * round button that reveals a timer; withheld, the step either has one already or does not
+   * want one.
+   */
+  onToggleTimer?: () => void;
+  isTimerOpen?: boolean;
   timerCompletionLoop?: boolean;
 }
 
@@ -44,6 +51,8 @@ export const FocusCard: React.FC<FocusCardProps> = ({
   isFinalStep = false,
   disabled = false,
   timerSlot,
+  onToggleTimer,
+  isTimerOpen = false,
   timerCompletionLoop = false,
 }) => {
   const { t } = useTranslation();
@@ -90,6 +99,23 @@ export const FocusCard: React.FC<FocusCardProps> = ({
               <Text style={styles.difficulty}>{t(`focus.difficulty.${step.difficulty}`)}</Text>
             ) : null}
           </View>
+          {onToggleTimer ? (
+            <TouchableOpacity
+              onPress={() => handlePress(onToggleTimer)}
+              disabled={disabled}
+              style={[styles.timerToggle, isTimerOpen && styles.timerToggleOpen]}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={isTimerOpen ? t('focus.hideTimer') : t('focus.addTimer')}
+              accessibilityState={{ expanded: isTimerOpen }}
+            >
+              {isTimerOpen ? (
+                <TimerOff size={16} color="#C4B5FD" strokeWidth={2.2} />
+              ) : (
+                <Timer size={16} color="rgba(255,255,255,0.45)" strokeWidth={2.2} />
+              )}
+            </TouchableOpacity>
+          ) : null}
           {isCompleted && <CircleCheck size={22} color="#34D399" strokeWidth={2.2} />}
         </View>
 
@@ -174,6 +200,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 42,
+  },
+  timerToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  timerToggleOpen: {
+    backgroundColor: 'rgba(139, 92, 246, 0.18)',
+    borderColor: 'rgba(167, 139, 250, 0.45)',
   },
   stepBadge: {
     width: 38,

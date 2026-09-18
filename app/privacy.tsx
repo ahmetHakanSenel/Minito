@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,7 @@ import { clearPlannerState } from '../src/features/planner/plannerStorage';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { useDialog } from '../src/components/feedback/Dialog';
 import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -74,13 +74,14 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 export default function PrivacyScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const dialog = useDialog();
   const { user, signOut } = useAuth();
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleExportData = async () => {
     if (!user) {
-      Alert.alert(t('common.error'), t('errors.exportFailed'));
+      await dialog.alert({ title: t('common.error'), message: t('errors.exportFailed') });
       return;
     }
 
@@ -98,76 +99,64 @@ export default function PrivacyScreen() {
       if (isAvailable) {
         await Sharing.shareAsync(exportFile.uri);
         haptics.success();
-        Alert.alert(
-          t('common.success'),
-          t('privacy.exportData.success', {
+        await dialog.alert({
+          title: t('common.success'),
+          message: t('privacy.exportData.success', {
             defaultValue: 'Your data has been exported and is ready to share',
-          })
-        );
+          }),
+        });
       } else {
-        Alert.alert(t('common.error'), t('errors.exportFailed'));
+        await dialog.alert({ title: t('common.error'), message: t('errors.exportFailed') });
       }
     } catch (error) {
       console.error('Export error:', error);
       haptics.error();
-      Alert.alert(t('common.error'), t('errors.exportFailed'));
+      await dialog.alert({ title: t('common.error'), message: t('errors.exportFailed') });
     } finally {
       setExporting(false);
     }
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (!user) {
-      Alert.alert(t('common.error'), t('errors.deleteFailed'));
+      await dialog.alert({ title: t('common.error'), message: t('errors.deleteFailed') });
       return;
     }
 
-    Alert.alert(
-      t('privacy.deleteAccount.confirmTitle'),
-      t('privacy.deleteAccount.confirmMessage'),
-      [
-        {
-          text: t('common.cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeleting(true);
-              haptics.commit();
+    const confirmed = await dialog.confirm({
+      title: t('privacy.deleteAccount.confirmTitle'),
+      message: t('privacy.deleteAccount.confirmMessage'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
 
-              const deletedUserId = user?.id;
-              await deleteUserAccount();
-              // The server copy is gone; the device copy of the planner goes with it.
-              if (deletedUserId) await clearPlannerState(deletedUserId);
-              await signOut();
+    try {
+      setDeleting(true);
+      haptics.commit();
 
-              haptics.success();
-              Alert.alert(
-                t('common.success'),
-                t('privacy.deleteAccount.success', {
-                  defaultValue: 'Your account has been deleted',
-                }),
-                [
-                  {
-                    text: t('common.confirm'),
-                    onPress: () => router.replace('/'),
-                  },
-                ]
-              );
-            } catch (error) {
-              console.error('Delete error:', error);
-              haptics.error();
-              Alert.alert(t('common.error'), t('errors.deleteFailed'));
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+      const deletedUserId = user.id;
+      await deleteUserAccount();
+      // The server copy is gone; the device copy of the planner goes with it.
+      await clearPlannerState(deletedUserId);
+      await signOut();
+
+      haptics.success();
+      await dialog.alert({
+        title: t('common.success'),
+        message: t('privacy.deleteAccount.success', {
+          defaultValue: 'Your account has been deleted',
+        }),
+      });
+      router.replace('/');
+    } catch (error) {
+      console.error('Delete error:', error);
+      haptics.error();
+      await dialog.alert({ title: t('common.error'), message: t('errors.deleteFailed') });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -177,7 +166,7 @@ export default function PrivacyScreen() {
       router.replace('/');
     } catch (error) {
       console.error('Sign out error:', error);
-      Alert.alert(t('common.error'), t('errors.signOutFailed'));
+      await dialog.alert({ title: t('common.error'), message: t('errors.signOutFailed') });
     }
   };
 
@@ -229,7 +218,7 @@ export default function PrivacyScreen() {
                 {t('privacy.exportData.description')}
               </Text>
               <Button
-                onPress={handleExportData}
+                onPress={() => void handleExportData()}
                 title={t('privacy.exportData.button')}
                 variant="secondary"
                 loading={exporting}
@@ -245,7 +234,7 @@ export default function PrivacyScreen() {
                 {t('privacy.deleteAccount.description')}
               </Text>
               <Button
-                onPress={handleDeleteAccount}
+                onPress={() => void handleDeleteAccount()}
                 title={t('privacy.deleteAccount.button')}
                 variant="danger"
                 loading={deleting}
@@ -257,7 +246,11 @@ export default function PrivacyScreen() {
           {/* Sign Out */}
           {user && (
             <View className="mb-8">
-              <Button onPress={handleSignOut} title={t('privacy.signOut')} variant="secondary" />
+              <Button
+                onPress={() => void handleSignOut()}
+                title={t('privacy.signOut')}
+                variant="secondary"
+              />
             </View>
           )}
 

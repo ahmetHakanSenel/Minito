@@ -73,15 +73,6 @@ export async function initI18n(): Promise<void> {
       useSuspense: false, // Disable suspense for React Native
     },
   });
-
-  // Load database translations (fail-soft: if it fails, continue with JSON)
-  try {
-    const { initDatabaseTranslations } = await import('./databaseLoader');
-    await initDatabaseTranslations();
-  } catch (error) {
-    console.warn('Failed to initialize database translations:', error);
-    // Continue with JSON translations only
-  }
 }
 
 export default i18n;

@@ -40,7 +40,9 @@
       "medium": "Medium",
       "hard": "Hard"
     },
-    "stepDone": "Step {{done}} of {{total}} done"
+    "stepDone": "Step {{done}} of {{total}} done",
+    "addTimer": "Add a timer to this step",
+    "hideTimer": "Hide the timer"
   },
   "success": {
     "title": "You Minitized {{count}} steps!",

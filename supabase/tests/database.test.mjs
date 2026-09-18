@@ -686,29 +686,6 @@ describe('ops alerting', () => {
   });
 });
 
-describe('translations', () => {
-  test('are readable by anyone and writable by no client', async () => {
-    await pool.query(
-      "INSERT INTO public.translations (key, language_code, value) VALUES ('t.key', 'en', 'Hello')"
-    );
-    const count = await as('anon', null, async (client) => {
-      const { rows } = await client.query('SELECT count(*)::int AS n FROM public.translations');
-      return rows[0].n;
-    });
-    assert.equal(count, 1);
-
-    const user = await createUser();
-    await assert.rejects(
-      as('authenticated', user, (client) =>
-        client.query(
-          "INSERT INTO public.translations (key, language_code, value) VALUES ('t.key', 'tr', 'x')"
-        )
-      ),
-      PERMISSION_DENIED
-    );
-  });
-});
-
 // ─── Schema-wide invariants ─────────────────────────────────────────────────────────────────────
 
 describe('schema invariants', () => {

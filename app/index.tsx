@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -33,6 +32,7 @@ import {
   type FocusLaunchOptions,
 } from '../src/features/tasks/focusLaunch';
 import { confirmDeleteBreakdown } from '../src/features/tasks/ui/confirmDeleteBreakdown';
+import { useDialog } from '../src/components/feedback/Dialog';
 import { haptics } from '../src/lib/ui/haptics';
 import { useKeepAboveKeyboard } from '../src/lib/ui/useKeepAboveKeyboard';
 import { FallbackReason } from '../src/safety';
@@ -46,6 +46,7 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function HomeScreen() {
   const { t } = useTranslation();
+  const dialog = useDialog();
   const { user, displayName, signOut, updateDisplayName } = useAuth();
   const { items, hasMore, historyStatus, isBreakingDown, refresh, breakDown, remove } =
     useTaskBreakdowns();
@@ -102,7 +103,7 @@ export default function HomeScreen() {
     } catch {
       setIsSigningOut(false);
       haptics.error();
-      Alert.alert(t('common.error'), t('errors.signOutFailed'));
+      void dialog.alert({ title: t('common.error'), message: t('errors.signOutFailed') });
     }
   };
 
@@ -162,7 +163,7 @@ export default function HomeScreen() {
     }
   }, [params.openDashboard, router]);
 
-  const handleBreakdownFailure = (reason: FallbackReason) => {
+  const handleBreakdownFailure = async (reason: FallbackReason) => {
     console.warn('Failed to break task:', reason);
     if (reason === FallbackReason.DB_DOWN || reason === FallbackReason.AI_DOWN) {
       setIsOffline(true);
@@ -170,16 +171,15 @@ export default function HomeScreen() {
     }
     haptics.error();
     if (reason === FallbackReason.AUTH_EXPIRED) {
+      await dialog.alert({ title: t('common.error'), message: t('errors.sessionExpired') });
       // The root guard sends a signed-out user to the login screen.
-      Alert.alert(t('common.error'), t('errors.sessionExpired'), [
-        { text: t('common.ok'), onPress: () => void signOut().catch(() => {}) },
-      ]);
+      void signOut().catch(() => {});
       return;
     }
-    Alert.alert(
-      t('common.error'),
-      reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown')
-    );
+    await dialog.alert({
+      title: t('common.error'),
+      message: reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown'),
+    });
   };
 
   const handleBreakTask = async () => {
@@ -196,7 +196,7 @@ export default function HomeScreen() {
         return;
       }
       if (outcome.status === 'failed') {
-        handleBreakdownFailure(outcome.reason);
+        await handleBreakdownFailure(outcome.reason);
         return;
       }
       haptics.success();
@@ -218,7 +218,7 @@ export default function HomeScreen() {
   };
 
   const handleDeleteBreakdown = (item: TaskBreakdown) => {
-    confirmDeleteBreakdown(t, () => remove(item.id));
+    void confirmDeleteBreakdown(t, dialog, () => remove(item.id));
   };
 
   const handleSeeAllHistory = () => {

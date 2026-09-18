@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronDown, Circle, CheckCircle2, Play, Trash2 } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
@@ -18,6 +18,7 @@ import { FocusMode, SessionCompletionModal, SessionSetupModal, SessionConfig } f
 import { recordFocusSession } from '../../lib/stats/sessionStore';
 import { useAudioContext } from '../../context/AudioContext';
 import { useTranslation } from 'react-i18next';
+import { useDialog } from '../feedback/Dialog';
 import { haptics } from '../../lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -196,6 +197,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   totalProjects,
 }) => {
   const { t } = useTranslation();
+  const dialog = useDialog();
   const { toggleTask, getNextStep, completeTaskById, deleteProject } = useProjects();
   const scale = useSharedValue(1);
   const chevronRotation = useSharedValue(0);
@@ -230,12 +232,16 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     scale.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
-  const handleLongPress = () => {
+  const handleLongPress = async () => {
     haptics.warning();
-    Alert.alert(t('planner.deleteTitle'), t('planner.deleteMessage', { title: project.title }), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.delete'), style: 'destructive', onPress: () => deleteProject(project.id) },
-    ]);
+    const confirmed = await dialog.confirm({
+      title: t('planner.deleteTitle'),
+      message: t('planner.deleteMessage', { title: project.title }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) deleteProject(project.id);
   };
 
   const handlePress = () => {
@@ -368,7 +374,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         <AnimatedTouchableOpacity
           style={[styles.projectCard, cardAnimatedStyle]}
           onPress={handlePress}
-          onLongPress={handleLongPress}
+          onLongPress={() => void handleLongPress()}
           accessibilityRole="button"
           accessibilityLabel={project.title}
           accessibilityState={{ expanded: isExpanded }}
@@ -431,7 +437,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               {/* Long-pressing the card deletes it too, but nothing on screen said so. */}
               <TouchableOpacity
                 style={styles.deleteButton}
-                onPress={handleLongPress}
+                onPress={() => void handleLongPress()}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel={t('planner.deleteTitle')}
