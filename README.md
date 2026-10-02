@@ -43,7 +43,7 @@ History, progress and the project planner sync across devices, and keep working 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/numbers-en-dark.svg">
-    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 308 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
+    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 331 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
   </picture>
 </p>
 
@@ -98,8 +98,8 @@ tested, and how it would be operated.
 
 | Stage | What happens |
 | ----- | ------------ |
-| **Gatekeeping** | Readiness is checked first (`503`), so the anonymous health probe sees a misconfigured deployment. Then the JWT (`401`) and the body (`400`, trimmed before its length is checked) |
-| **Moderation and quota** | They run in parallel. Safety outranks quota, and the IP quota is checked before the user quota. Both fail open, and every failure is logged |
+| **Gatekeeping** | Readiness is checked first (`503`), so the anonymous health probe sees a misconfigured deployment. Then the JWT (`401`), then the body: read no further than 16 KB (`413`), and validated with the task trimmed before its length is checked (`400`) |
+| **Moderation and quota** | They run in parallel. Safety outranks quota. Only self-harm is answered with crisis support; anything else moderation flags is refused plainly. The user quota is checked before the IP quota, so a request refused for its account never spends a shared, partly caller-supplied IP budget. Both fail open, and every failure is logged |
 | **Fence** | Every `<` and `>` in user text becomes `‹ ›`. Stripping tag names is not enough: removing them once can assemble a new tag (`</task_</task_input>input>`) |
 | **Generate** | Provider JSON mode, 9 s per call, and one retry on network errors or 5xx. A `429` is never retried |
 | **Validate and repair** | A zod contract: 3–7 steps, a first step that is `easy`, 1–10 minutes each. A failing reply gets exactly one repair. The issues are rewritten so they never quote model output into logs |
@@ -178,7 +178,7 @@ playbook for every row above.
 | Guarantee | How |
 | --------- | --- |
 | A retried push never duplicates | Ids are generated on the device, so a retry is an upsert of the same row |
-| Deletes reach offline devices | Deletes are tombstones, purged after 30 days |
+| Deletes reach offline devices | Deletes are tombstones, purged after 30 days. A device away for longer than three weeks rebuilds from the server's whole state instead of pulling recent changes, so it cannot miss a delete whose tombstone is already gone |
 | A stale device cannot overwrite newer edits | A trigger compares `client_updated_at` and skips older writes. Far-future clocks are clamped |
 | An edit made during a push is not lost | Each pending change is versioned, and a push clears only the version it sent |
 | One bad row cannot block the queue | A rejected batch is retried row by row, and permanent failures are isolated |
@@ -201,9 +201,12 @@ analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md).
   - Quotas are atomic, and they are not tied to accounts, so deleting and re-creating an account
     does not reset them.
 - **No text at rest where it is not needed.**
-  - Task text is stored only as an HMAC.
+  - The request log keeps an HMAC of each task, never its text. The text itself is stored only
+    where the person needs it back — their own history and planner — behind RLS that limits every
+    row to its owner, and it goes with the account.
   - Logs carry ids, counts and durations.
-  - Unused personal data (IP hashes, guest ids) was removed from the schema.
+  - An IP is kept only as an HMAC inside a quota counter. Unused personal data (IP columns,
+    guest ids) was removed from the schema.
 - **Authenticated, crash-safe session storage.**
   - XChaCha20-Poly1305 (AEAD) with a fresh key and nonce per write; the key stays in the
     Keychain or Keystore.
@@ -225,8 +228,8 @@ analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 | Suite | Tests | What it proves |
 | ----- | ----: | -------------- |
-| App (Jest) | 185 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
-| Edge functions (Deno) | 87 | Request-path ordering and failure rules, the AI contract and repair, which language a plan comes back in, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
+| App (Jest) | 198 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
+| Edge functions (Deno) | 97 | Request-path ordering and failure rules, the AI contract and repair, which language a plan comes back in, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
 | Database (Postgres) | 36 | Cross-user RLS, grants under Supabase's defaults, quota concurrency, cascades, planner sync guards, schema-wide invariants, the runbook's SQL |
 | Schema drift | | The committed TypeScript types equal what the migrations produce |
 | Secrets | | gitleaks over the full git history |
@@ -250,8 +253,14 @@ table with no link to users removes the reset. A fixed window can let twice the 
 boundary; for a budget guard, that is worth one row and one statement per caller.
 
 **Why does the handler take its dependencies as an argument?** It makes the ordering rules
-testable: safety before quota, IP before user, readiness before auth. Those are the rules that
-matter most and break most easily in a refactor.
+testable: safety before quota, the user's quota before the IP's, readiness before auth. Those are
+the rules that matter most and break most easily in a refactor.
+
+**Why is the user quota checked before the IP quota?** Each check spends a unit as it passes, so
+the first one is spent even when the second refuses. The IP bucket is shared by everyone behind
+an address, and the address is partly caller-supplied. Checked first, it could be emptied for free
+by an account that had already used up its own quota and kept naming someone else's address.
+Checked second, it is only ever spent by requests that will be served.
 
 **Why do quota and moderation fail open?** A database hiccup should not lock out someone who is
 already struggling to start. Each failure is logged at a level that can page, and the provider's
@@ -298,7 +307,11 @@ These are the gaps a reviewer would find anyway, so they are written down here.
 - **Quota and moderation fail open** by design, so an outage in either leaves the provider's spend
   limit as the hard ceiling. A fixed window can also let up to twice the limit through at a window
   boundary.
-- **Planner conflicts** resolve by last write per row, not by merging fields.
+- **Planner conflicts** resolve by last write per row, not by merging fields. After a deletion's
+  tombstone has been purged, the evidence of the delete is gone, so an edit made offline to that
+  row before the device reconciles brings it back.
+- **Retention depends on scheduled jobs.** Telemetry expiry, quota counter cleanup and tombstone
+  purging are `pg_cron` jobs listed in the runbook. A deployment without them keeps that data.
 
 The last three are deliberate. Each is recorded in the
 [threat model](docs/THREAT_MODEL.md#accepted-risks) with the condition that would change it.

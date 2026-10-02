@@ -191,8 +191,15 @@ export default function HomeScreen() {
     try {
       const outcome = await breakDown(trimmed);
       if (outcome.status === 'flagged') {
-        // Panic screen renders its own localized content — no params needed
-        router.push('/panic');
+        if (outcome.crisis) {
+          // The panic screen renders its own localized content; it needs no parameters.
+          router.push('/panic');
+        } else {
+          await dialog.alert({
+            title: t('tasks.refusedTitle'),
+            message: t('tasks.refusedMessage'),
+          });
+        }
         return;
       }
       if (outcome.status === 'failed') {

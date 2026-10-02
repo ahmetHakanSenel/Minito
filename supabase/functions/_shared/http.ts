@@ -54,6 +54,49 @@ export function bearerToken(req: Request): string | null {
   return match ? match[1] : null;
 }
 
+export type BodyResult = { ok: true; value: unknown } | { ok: false; reason: 'too_large' };
+
+/**
+ * The request body as JSON, read no further than `maxBytes`.
+ *
+ * `req.json()` buffers whatever arrives before anything can look at its size, so a caller could
+ * make a function hold any amount of memory. The declared length is refused up front when it is
+ * already too large; a body that does not declare one, or declares less than it sends, is cut
+ * off as soon as it passes the limit. A body that is not valid JSON reads as `undefined`, which
+ * the caller's schema then rejects like any other bad input.
+ */
+export async function readJsonBody(req: Request, maxBytes: number): Promise<BodyResult> {
+  const declared = Number(req.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) return { ok: false, reason: 'too_large' };
+  if (!req.body) return { ok: true, value: undefined };
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, reason: 'too_large' };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(bytes)) };
+  } catch {
+    return { ok: true, value: undefined };
+  }
+}
+
 export function requireEnv(name: string): string {
   const value = Deno.env.get(name);
   if (!value) {

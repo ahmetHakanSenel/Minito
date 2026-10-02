@@ -309,7 +309,9 @@
     "seeAll": "Tümünü gör",
     "historyTitle": "Görev geçmişi",
     "historyUnavailable": "Geçmişin şu an yüklenemedi. Görevlerin güvende; birazdan tekrar dene.",
-    "loadMoreFailed": "Eski görevler yüklenemedi."
+    "loadMoreFailed": "Eski görevler yüklenemedi.",
+    "refusedTitle": "Bunu adımlara bölemiyorum",
+    "refusedMessage": "Yazılış biçimindeki bir şey Minito'nun yardım edebileceği alanın dışında kalıyor. Görevi başka bir şekilde anlatmayı dener misin?"
   },
   "audio": {
     "title": "Odak Sesleri",

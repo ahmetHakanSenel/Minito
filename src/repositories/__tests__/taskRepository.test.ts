@@ -149,12 +149,41 @@ describe('taskRepository.breakDown', () => {
     mockedBreakTask.mockResolvedValue({
       success: false,
       fallbackReason: FallbackReason.CONTENT_FLAGGED,
+      crisis: true,
     });
 
     await expect(taskRepository.breakDown('something heavy')).resolves.toEqual({
       status: 'flagged',
+      crisis: true,
     });
     expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  // Only self-harm calls for crisis support. Anything else moderation refuses is explained
+  // plainly instead of answered with "you are not alone, reach out to a support line".
+  it('tells a refusal apart from a crisis', async () => {
+    mockedBreakTask.mockResolvedValue({
+      success: false,
+      fallbackReason: FallbackReason.CONTENT_FLAGGED,
+      crisis: false,
+    });
+
+    await expect(taskRepository.breakDown('I hate my coworker')).resolves.toEqual({
+      status: 'flagged',
+      crisis: false,
+    });
+  });
+
+  it('treats a server that does not say as a crisis', async () => {
+    mockedBreakTask.mockResolvedValue({
+      success: false,
+      fallbackReason: FallbackReason.CONTENT_FLAGGED,
+    });
+
+    await expect(taskRepository.breakDown('something heavy')).resolves.toEqual({
+      status: 'flagged',
+      crisis: true,
+    });
   });
 
   it('surfaces the fallback reason when the AI call fails', async () => {

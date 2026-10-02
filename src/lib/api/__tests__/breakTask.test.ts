@@ -158,6 +158,19 @@ describe('breakTask', () => {
     });
   });
 
+  it('carries whether flagged content is a crisis, and only when the server says', async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { success: false, fallback_reason: 'CONTENT_FLAGGED', crisis: false },
+    } as never);
+    await expect(breakTask('something')).resolves.toMatchObject({ crisis: false });
+
+    mockedPost.mockResolvedValueOnce({
+      data: { success: false, fallback_reason: 'CONTENT_FLAGGED' },
+    } as never);
+    const older = await breakTask('something');
+    expect(older).not.toHaveProperty('crisis');
+  });
+
   it('does not trust an unknown reason code from the network', async () => {
     mockedPost.mockResolvedValue({
       data: { success: false, fallback_reason: 'SOMETHING_NEW' },

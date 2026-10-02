@@ -5,11 +5,13 @@ import {
   describeError,
   guardMethod,
   jsonResponse,
+  readJsonBody,
 } from '../_shared/http.ts';
 import type { Moderator } from './moderation.ts';
 import {
   type BreakdownSource,
   languageEvidence,
+  languageOfPlan,
   PROMPT_VERSION,
   runBreakdownPipeline,
   type TaskBreakdown,
@@ -31,6 +33,10 @@ export const RATE_LIMITS = {
 } as const;
 
 const MAX_DISPLAY_NAME_LENGTH = 30;
+
+// The body carries one task of at most a thousand characters and two short fields. Sixteen
+// kilobytes is room for the worst case several times over; anything larger is not a task.
+export const MAX_BODY_BYTES = 16 * 1024;
 
 const CORS = corsHeaders(['POST'], ['x-request-id']);
 
@@ -54,6 +60,12 @@ export type ResponseBody = {
   breakdown?: TaskBreakdown;
   meta?: { prompt_version: string; source: BreakdownSource; request_id: string };
   fallback_reason?: FallbackReason;
+  /**
+   * With CONTENT_FLAGGED: whether the content suggests the person may hurt themselves, which is
+   * the only case for crisis support. False means it was refused for another reason. A client
+   * that predates the field shows crisis support for every refusal, as all clients once did.
+   */
+  crisis?: boolean;
   error?: string;
   token_usage?: number;
   latency_ms?: number;
@@ -144,9 +156,17 @@ function clientRequestIdOf(req: Request, bodyId: string | undefined): string | n
 }
 
 /**
- * Checks the IP quota, then the user quota. Sequential on purpose: a request the IP quota turns
- * away never spends the user's quota. A quota check that errors is skipped (fail open) and
- * logged, because a database hiccup should not lock every user out of a budget guard.
+ * Checks the user quota, then the IP quota. Sequential, and in that order on purpose.
+ *
+ * Each check spends a unit as it passes, so whichever runs first is spent even when the second
+ * refuses. The IP bucket is the one to protect: it is shared by everyone behind the same address,
+ * and the address is partly caller-supplied (see `clientIp`). With the IP checked first, an
+ * account that had already used up its own quota could keep naming someone else's address and
+ * drain that bucket for free, since every one of those requests was turned away before reaching
+ * the model. Checked second, the IP budget is only ever spent by requests that will be served.
+ *
+ * A quota check that errors is skipped (fail open) and logged, because a database hiccup should
+ * not lock every user out of a budget guard.
  */
 async function withinQuota(
   deps: BreakTaskDeps,
@@ -155,8 +175,8 @@ async function withinQuota(
   context: Record<string, unknown>
 ): Promise<boolean> {
   const scopes = [
-    ...(ipHash ? [{ scope: 'ip', identifier: `ip:${ipHash}`, ...RATE_LIMITS.perIp }] : []),
     { scope: 'user', identifier: `user:${userId}`, ...RATE_LIMITS.perUser },
+    ...(ipHash ? [{ scope: 'ip', identifier: `ip:${ipHash}`, ...RATE_LIMITS.perIp }] : []),
   ];
 
   for (const { scope, identifier, max, windowSeconds } of scopes) {
@@ -230,7 +250,16 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
         return reply({ success: false, error: 'Unauthorized' }, 401);
       }
 
-      const parsed = RequestBodySchema.safeParse(await req.json().catch(() => undefined));
+      // Read only after authentication, so no one without an account can make it buffer anything.
+      const body = await readJsonBody(req, MAX_BODY_BYTES);
+      if (!body.ok) {
+        deps.log('warn', 'break_task.body_too_large', { request_id: requestId });
+        return reply(
+          { success: false, fallback_reason: 'VALIDATION', error: 'Request body too large' },
+          413
+        );
+      }
+      const parsed = RequestBodySchema.safeParse(body.value);
       if (!parsed.success) {
         return reply(
           {
@@ -275,7 +304,10 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
       // Safety wins over quota: telling someone in crisis that they are out of requests is the
       // wrong answer, whichever gate tripped.
       if (moderation?.flagged) {
-        deps.log('info', 'break_task.content_flagged', context);
+        // Crisis support only for self-harm. Unknown categories count as a crisis: wrongly
+        // offering support to someone is a far smaller harm than withholding it.
+        const crisis = moderation.selfHarm !== false;
+        deps.log('info', 'break_task.content_flagged', { ...context, crisis });
         deps.runInBackground(
           deps.persistTask({
             ...recordBase,
@@ -284,7 +316,9 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
             fallback_reason: 'CONTENT_FLAGGED',
           })
         );
-        return reply({ success: false, fallback_reason: 'CONTENT_FLAGGED' }, 200);
+        // Both kinds are recorded as CONTENT_FLAGGED: each is a correct refusal, and the SLIs
+        // already treat that reason as neither a success nor a failure.
+        return reply({ success: false, fallback_reason: 'CONTENT_FLAGGED', crisis }, 200);
       }
 
       if (!allowed) {
@@ -345,7 +379,13 @@ export function createBreakTaskHandler(deps: BreakTaskDeps): (req: Request) => P
       // heuristic would always agree. Only the model's own choice is worth scoring, and only
       // against something we can hold it to: the evidence in the task, or the language we told
       // it to use. A one-word task from a client that sent no preference is not scored at all.
-      const responseLanguage = source === 'fallback' ? null : breakdown.language;
+      //
+      // The language is read from what the model wrote, not from the label it put on it. The
+      // label is the model's own claim, and a metric that trusts it measures whether the model
+      // says the right thing about its answer rather than whether the answer is right. The label
+      // is used only when the text itself gives no evidence either way.
+      const responseLanguage =
+        source === 'fallback' ? null : (languageOfPlan(breakdown) ?? breakdown.language);
       const expectedLanguage = languageEvidence(task) ?? appLanguage;
       const languageMatch =
         responseLanguage === null || expectedLanguage === null

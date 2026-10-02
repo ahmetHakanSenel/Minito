@@ -309,7 +309,9 @@
     "seeAll": "See all",
     "historyTitle": "Task history",
     "historyUnavailable": "Your history could not be loaded right now. Your tasks are safe; try again in a moment.",
-    "loadMoreFailed": "Could not load older tasks."
+    "loadMoreFailed": "Could not load older tasks.",
+    "refusedTitle": "I can't break this one down",
+    "refusedMessage": "Something in how it's written is outside what Minito can help with. Try describing the task a different way."
   },
   "audio": {
     "title": "Focus Sounds",

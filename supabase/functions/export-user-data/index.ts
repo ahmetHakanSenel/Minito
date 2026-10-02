@@ -9,9 +9,9 @@ import {
  * Edge Function: export-user-data (right of access and portability)
  *
  * Returns everything stored about the caller: the account, the saved breakdown history, the
- * planner, and the AI request log. The request log is included because it is linked to the account and holds the
- * generated plans; the task text itself was never stored, only its HMAC, which is omitted as it
- * means nothing without the server's secret.
+ * planner, and the AI request log. The history and the planner hold the person's own text. The
+ * request log holds the generated plans and an HMAC of each task rather than its text; the HMAC
+ * is left out, as it means nothing without the server's secret.
  */
 
 const METHODS = ['GET'];
@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       planner: { projects: projects.data ?? [], tasks: plannerTasks.data ?? [] },
       metadata: {
         export_date: new Date().toISOString(),
-        note: 'Includes your saved breakdowns and the log of your AI requests. Task text is never stored on the server.',
+        note: 'Includes your saved breakdowns, your planner and the log of your AI requests. Your tasks appear in full in the breakdowns and the planner; the request log keeps only a keyed hash of each one.',
       },
     };
 

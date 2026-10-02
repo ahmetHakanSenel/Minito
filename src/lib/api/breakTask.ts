@@ -35,6 +35,8 @@ export interface BreakTaskResponse {
     request_id?: string;
   };
   fallback_reason?: string;
+  /** With CONTENT_FLAGGED: whether the content suggests self-harm. Absent from older servers. */
+  crisis?: boolean;
   error?: string;
   token_usage?: number;
   latency_ms?: number;
@@ -66,6 +68,8 @@ export type BreakTaskResult =
       success: false;
       fallbackReason: FallbackReason;
       error?: string;
+      /** Set with CONTENT_FLAGGED only. */
+      crisis?: boolean;
     };
 
 // Hard ceiling on perceived latency. It covers generation plus one repair round-trip, and the
@@ -179,11 +183,18 @@ export async function breakTask(input: string): Promise<BreakTaskResult> {
       };
     }
 
-    // CONTENT_FLAGGED needs no payload: the panic screen renders its own localized content.
-    return failure(
-      reasonFrom(data.fallback_reason, FallbackReason.VALIDATION),
-      data.error || 'Unknown error occurred'
-    );
+    // CONTENT_FLAGGED carries no copy: the screens render their own localized content. It does
+    // carry whether this is a crisis, which decides which screen that is.
+    const reason = reasonFrom(data.fallback_reason, FallbackReason.VALIDATION);
+    if (reason === FallbackReason.CONTENT_FLAGGED) {
+      return {
+        success: false,
+        fallbackReason: reason,
+        error: data.error,
+        ...(typeof data.crisis === 'boolean' ? { crisis: data.crisis } : {}),
+      };
+    }
+    return failure(reason, data.error || 'Unknown error occurred');
   } catch (error) {
     console.warn('breakTask API call failed:', error);
     const status = isAxiosError(error) ? error.response?.status : undefined;

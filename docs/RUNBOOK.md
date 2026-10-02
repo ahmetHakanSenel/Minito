@@ -234,13 +234,19 @@ After a deploy:
   and its body names the reason:
 
   ```bash
-  curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/break-task"     -H "apikey: <anon-key>" -H "Authorization: Bearer <anon-key>" -d '{}'
+  curl -i -X POST "https://<project-ref>.supabase.co/functions/v1/break-task" \
+    -H "apikey: <anon-key>" -H "Authorization: Bearer <anon-key>" -d '{}'
   ```
 
 - One real breakdown appears in Q1 under the expected `prompt_version` and `ai_model`.
 - No `misconfigured` event appears in the logs.
 
 ## Scheduled jobs
+
+These are part of deploying, not an extra. Every retention claim this project makes — telemetry
+gone after 90 days, an IP held only as long as its quota window, a deleted row purged after 30 days
+— is carried out by one of them. A deployment without them keeps that data indefinitely, and
+nothing else will notice: the rest of the system works the same either way.
 
 Retention and cleanup are plain SQL functions, scheduled with `pg_cron`:
 
@@ -249,6 +255,21 @@ SELECT cron.schedule('cleanup-old-tasks', '0 3 * * *', 'SELECT public.cleanup_ol
 SELECT cron.schedule('cleanup-rate-limits', '17 * * * *', 'SELECT public.cleanup_rate_limits();');
 SELECT cron.schedule('cleanup-planner-tombstones', '40 3 * * *', 'SELECT public.cleanup_planner_tombstones();');
 ```
+
+To confirm they are in place, and running:
+
+```sql
+SELECT jobname, schedule, active FROM cron.job ORDER BY jobname;
+
+SELECT j.jobname, d.status, d.start_time
+FROM cron.job_run_details d JOIN cron.job j USING (jobid)
+ORDER BY d.start_time DESC
+LIMIT 10;
+```
+
+`cleanup_planner_tombstones` purges after 30 days by default, and the app's sync engine relies on
+that number (`TOMBSTONE_RETENTION_MS` in `src/features/planner/syncEngine.ts`). A test fails if
+the two drift apart; change them together.
 
 ## Secrets
 

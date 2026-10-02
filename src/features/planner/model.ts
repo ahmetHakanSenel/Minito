@@ -47,6 +47,13 @@ export type PlannerState = {
   cursor: string | null;
   /** Monotonic counter behind `PendingChange.version`. */
   clock: number;
+  /**
+   * When this device last completed a sync, by its own clock (epoch ms). Not the same thing as
+   * the cursor: the cursor is the last time anything changed on the server, which can be weeks
+   * ago for a planner nobody has touched, even on a device that syncs every day. Absent in
+   * state saved before it existed.
+   */
+  lastSyncedAt?: number | null;
 };
 
 export const EMPTY_PLANNER_STATE: PlannerState = {

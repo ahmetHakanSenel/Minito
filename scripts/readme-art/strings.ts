@@ -124,12 +124,12 @@ const en: Strings = {
     footer: 'model · task-breakdown-v2 · 3.5 s · 1,381 tokens',
   },
   numbers: {
-    alt: 'Verified in CI: 308 automated tests across 3 suites; 20 of 60 parallel calls granted under a quota of 20; 25 threats modeled, each tied to a test; zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and in the right language; 6.5 s p95 model latency, 3.5 s p50',
+    alt: 'Verified in CI: 331 automated tests across 3 suites; 20 of 60 parallel calls granted under a quota of 20; 25 threats modeled, each tied to a test; zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and in the right language; 6.5 s p95 model latency, 3.5 s p50',
     groups: [
       {
         caption: 'Verified in CI',
         items: [
-          ['308', 'automated tests', '3 suites, every push'],
+          ['331', 'automated tests', '3 suites, every push'],
           ['20 / 60', 'parallel calls granted', 'quota of 20, never more'],
           ['25', 'threats modeled', 'each tied to a test'],
           ['0', 'lint warnings', 'enforced in CI'],
@@ -249,12 +249,12 @@ const tr: Strings = {
     footer: 'model · task-breakdown-v2 · 3,5 sn · 1.381 jeton',
   },
   numbers: {
-    alt: "CI'da doğrulanmış: 3 pakette 308 otomatik test; 20 kotasında 60 paralel çağrıdan 20'si kabul; her biri bir teste bağlı 25 modellenmiş tehdit; sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli; 6,5 sn p95 model gecikmesi, 3,5 sn p50",
+    alt: "CI'da doğrulanmış: 3 pakette 331 otomatik test; 20 kotasında 60 paralel çağrıdan 20'si kabul; her biri bir teste bağlı 25 modellenmiş tehdit; sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli; 6,5 sn p95 model gecikmesi, 3,5 sn p50",
     groups: [
       {
         caption: "CI'da doğrulanmış",
         items: [
-          ['308', 'otomatik test', '3 paket, her push'],
+          ['331', 'otomatik test', '3 paket, her push'],
           ['20 / 60', 'kabul edilen çağrı', 'kota 20, fazlası yok'],
           ['25', 'modellenmiş tehdit', 'her biri teste bağlı'],
           ['0', 'lint uyarısı', "CI'da zorunlu"],

@@ -7,6 +7,7 @@ import {
   type BreakTaskDeps,
   createBreakTaskHandler,
   type LogLevel,
+  MAX_BODY_BYTES,
   RATE_LIMITS,
   sanitizeDisplayName,
   type TaskRecord,
@@ -36,6 +37,21 @@ const plan = {
     difficulty: n === 1 ? 'easy' : 'medium',
   })),
   stopping_point: 'You can stop here.',
+};
+
+// Written in Turkish throughout, so the language of the text is never in doubt.
+const turkishPlan = {
+  language: 'tr',
+  empathy_bridge: 'Misafir gelecek diye her kırıntı gözüne batıyor, çok normal.',
+  first_step_hook: 'Mutfağın kapısında dur.',
+  steps: [1, 2, 3].map((n) => ({
+    id: `step-${n}`,
+    title: `Küçük bir mutfak işi ${n}`,
+    instruction: 'Sadece bunu yap ve dur.',
+    estimated_minutes: 2,
+    difficulty: n === 1 ? 'easy' : 'medium',
+  })),
+  stopping_point: 'Burada bırakabilirsin.',
 };
 
 type Harness = {
@@ -221,33 +237,56 @@ Deno.test('a task over 1000 characters after trimming is rejected', async () => 
 });
 
 Deno.test(
-  'the IP quota is checked before the user quota, and a denial spares the user quota',
+  'the user quota is checked before the IP quota, and a denial spares the IP budget',
   async () => {
-    const h = harness({}, { deniedScopes: ['ip'] });
+    const h = harness({}, { deniedScopes: ['user'] });
     const { status, body } = await call(h, post({ input: TASK }));
 
     assertEquals(status, 429);
     assertEquals(body.fallback_reason, 'RATE_DOWN');
-    assertEquals(h.quotaCalls, [`ip:${fakeHash('ip:203.0.113.7')}`]);
+    assertEquals(h.quotaCalls, ['user:user-1']);
     assertEquals(h.providerCalls(), 0);
     assertEquals(h.persisted.length, 0);
   }
 );
 
-Deno.test('the user quota is enforced with its own limit', async () => {
+// The attack the order exists to stop. The client IP is partly caller-supplied, and an IP bucket
+// is shared by everyone behind one address. With the IP checked first, an account whose own
+// quota was spent could keep naming a victim's address and empty that bucket at no cost, because
+// every one of those requests was refused before reaching the model.
+Deno.test("an account out of quota cannot spend anyone else's IP budget", async () => {
+  const spent: string[] = [];
+  const h = harness({
+    clientIp: () => '198.51.100.23',
+    consumeQuota: (identifier) => {
+      spent.push(identifier.split(':')[0]);
+      return Promise.resolve(!identifier.startsWith('user:'));
+    },
+  });
+
+  for (let i = 0; i < 50; i++) {
+    const { status } = await call(h, post({ input: TASK }));
+    assertEquals(status, 429);
+  }
+
+  assertEquals(spent.filter((scope) => scope === 'ip').length, 0);
+  assertEquals(h.providerCalls(), 0);
+});
+
+Deno.test('each quota is enforced with its own limit', async () => {
   const limits: Array<[string, number, number]> = [];
   const h = harness({
     consumeQuota: (identifier, max, windowSeconds) => {
       limits.push([identifier.split(':')[0], max, windowSeconds]);
-      return Promise.resolve(!identifier.startsWith('user:'));
+      return Promise.resolve(!identifier.startsWith('ip:'));
     },
   });
   const { status } = await call(h, post({ input: TASK }));
 
   assertEquals(status, 429);
   assertEquals(limits, [
-    ['ip', RATE_LIMITS.perIp.max, RATE_LIMITS.perIp.windowSeconds],
     ['user', RATE_LIMITS.perUser.max, RATE_LIMITS.perUser.windowSeconds],
+    ['ip', RATE_LIMITS.perIp.max, RATE_LIMITS.perIp.windowSeconds],
   ]);
 });
 
@@ -265,23 +304,74 @@ Deno.test('a failing quota check fails open and is logged as an error', async ()
   const failures = h.logs.filter((entry) => entry.event === 'break_task.quota_check_failed');
   assertEquals(
     failures.map((entry) => entry.fields.scope),
-    ['ip', 'user']
+    ['user', 'ip']
   );
   assert(failures.every((entry) => entry.level === 'error'));
 });
 
 Deno.test('flagged content wins over an exhausted quota and never reaches the model', async () => {
-  const h = harness({}, { moderation: { flagged: true, checked: true }, deniedScopes: ['user'] });
+  const h = harness(
+    {},
+    { moderation: { flagged: true, checked: true, selfHarm: true }, deniedScopes: ['user'] }
+  );
   const { status, body } = await call(h, post({ input: TASK }));
 
   assertEquals(status, 200);
-  assertEquals(body, { success: false, fallback_reason: 'CONTENT_FLAGGED' });
+  assertEquals(body, { success: false, fallback_reason: 'CONTENT_FLAGGED', crisis: true });
   assertEquals(h.providerCalls(), 0);
   assertEquals(
     h.persisted.map((record) => record.fallback_reason),
     ['CONTENT_FLAGGED']
   );
 });
+
+// Moderation flags hate, harassment, violence and sexual content as well as self-harm. Only
+// self-harm calls for crisis support; the rest are still refused, but not as a crisis.
+Deno.test('only self-harm is treated as a crisis', async () => {
+  const h = harness({}, { moderation: { flagged: true, checked: true, selfHarm: false } });
+  const { status, body } = await call(h, post({ input: TASK }));
+
+  assertEquals(status, 200);
+  assertEquals(body, { success: false, fallback_reason: 'CONTENT_FLAGGED', crisis: false });
+  assertEquals(h.providerCalls(), 0);
+  // Recorded the same way, so the SLIs keep counting it as a correct refusal.
+  assertEquals(
+    h.persisted.map((record) => record.fallback_reason),
+    ['CONTENT_FLAGGED']
+  );
+});
+
+// Withholding support from someone who needed it is a far worse error than offering it to
+// someone who did not, so a verdict whose categories could not be read counts as a crisis.
+Deno.test('a flag whose categories are unknown is treated as a crisis', async () => {
+  const h = harness({}, { moderation: { flagged: true, checked: true } });
+  const { body } = await call(h, post({ input: TASK }));
+
+  assertEquals(body.crisis, true);
+});
+
+Deno.test('a body larger than any task is refused before it is read', async () => {
+  const h = harness();
+  const { status } = await call(h, post({ input: 'x'.repeat(MAX_BODY_BYTES * 2) }));
+
+  assertEquals(status, 413);
+  assertEquals(h.quotaCalls, []);
+  assertEquals(h.moderatedInputs, []);
+  assertEquals(h.providerCalls(), 0);
+});
+
+Deno.test(
+  'the language recorded is the one the plan was written in, not the one it claims',
+  async () => {
+    // A Turkish plan that labels itself English.
+    const mislabelled = JSON.stringify({ ...turkishPlan, language: 'en' });
+    const h = harness({}, { reply: mislabelled });
+    await call(h, post({ input: 'Mutfağı toplamam lazım' }));
+
+    assertEquals(h.persisted[0].response_language, 'tr');
+    assertEquals(h.persisted[0].language_match, true);
+  }
+);
 
 Deno.test('moderation sees the normalized task', async () => {
   const h = harness();

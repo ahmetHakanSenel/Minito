@@ -43,7 +43,7 @@ Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında senkronize olur, 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/numbers-tr-dark.svg">
-    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 308 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
+    <img src="assets/numbers-tr-light.svg" alt="CI'da doğrulanmış: 3 pakette 331 otomatik test, 20 kotasında 60 paralel çağrıdan 20'si kabul, her biri bir teste bağlı 25 modellenmiş tehdit, sıfır lint uyarısı. 20 görevlik çevrimdışı yapay zekâ ölçümü: 20 görevin 20'si ilk denemede ve doğru dilde geçerli, 6,5 sn p95 model gecikmesi" width="100%">
   </picture>
 </p>
 
@@ -99,7 +99,7 @@ iddia nasıl test ediliyor ve nasıl işletilecek.
 | Aşama | Ne olur |
 | ----- | ------- |
 | **Giriş kontrolleri** | Önce kurulumun hazır olup olmadığına bakılır (`503`); böylece anonim sağlık yoklaması yanlış yapılandırılmış bir kurulumu görür. Sonra JWT (`401`) ve istek gövdesi (`400`; metin uzunluk kontrolünden önce kırpılır) |
-| **Denetim ve kota** | İkisi paralel çalışır. Güvenlik kotadan önce gelir; IP kotası kullanıcı kotasından önce kontrol edilir. İkisi de hata durumunda açık kalır ve her hata günlüğe yazılır |
+| **Denetim ve kota** | İkisi paralel çalışır. Güvenlik kotadan önce gelir. Kriz desteğiyle yalnızca kendine zarar içeriği karşılanır; denetimin işaretlediği diğer her şey sade bir dille reddedilir. Kullanıcı kotası IP kotasından önce kontrol edilir; böylece hesabı nedeniyle reddedilen bir istek, paylaşılan ve kısmen istemcinin belirlediği IP bütçesini hiç harcamaz. İkisi de hata durumunda açık kalır ve her hata günlüğe yazılır |
 | **Çit** | Kullanıcı metnindeki her `<` ve `>`, `‹ ›` olur. Etiket adlarını silmek yetmez: tek geçişte silmek yeni bir etiket oluşturabilir (`</task_</task_input>input>`) |
 | **Üretim** | Sağlayıcının JSON modu, çağrı başına 9 sn; ağ hatası ya da 5xx durumunda bir kez yeniden deneme. `429` asla yeniden denenmez |
 | **Doğrulama ve onarım** | Zod sözleşmesi: 3–7 adım, ilk adım `easy`, her adım 1–10 dakika. Sözleşmeyi bozan yanıta tam bir onarım isteği gider. Sorunlar günlüğe model çıktısını alıntılamayacak biçimde yeniden yazılır |
@@ -186,7 +186,7 @@ Hedeflerin nasıl seçildiği, günlük olayları kataloğu ve yukarıdaki her s
 | Garanti | Nasıl |
 | ------- | ----- |
 | Yeniden gönderim kopya oluşturmaz | Kimlikler cihazda üretilir; yeniden deneme, aynı satırın tekrar yazılmasıdır |
-| Silmeler çevrimdışı cihazlara ulaşır | Silinen satırlar işaretlenir ve 30 gün sonra temizlenir |
+| Silmeler çevrimdışı cihazlara ulaşır | Silinen satırlar işaretlenir ve 30 gün sonra temizlenir. Üç haftadan uzun süre uzak kalan bir cihaz son değişiklikleri çekmek yerine sunucunun tüm durumundan yeniden kurulur; böylece işareti çoktan temizlenmiş bir silmeyi kaçıramaz |
 | Eski kalmış bir cihaz yeni düzenlemelerin üzerine yazamaz | Tetikleyici `client_updated_at` değerini karşılaştırıp eski yazmaları atlar. Geleceğe kurulmuş saatler sınırlanır |
 | Gönderim sırasında yapılan düzenleme kaybolmaz | Her bekleyen değişiklik sürümlüdür; gönderim yalnızca gönderdiği sürümü temizler |
 | Tek bir hatalı satır kuyruğu tıkayamaz | Reddedilen grup satır satır yeniden denenir; kalıcı hatalar ayıklanır |
@@ -209,9 +209,12 @@ varsayılana bırakılmaz, açıkça çizilir. Aşağıdaki her madde bir teste 
 - **Yapay zekâya yalnızca oturum açmış kullanıcı erişir.**
   - Kotalar atomiktir ve hesaba bağlı değildir; hesabı silip yeniden açmak kotayı sıfırlamaz.
 - **Gerekmeyen metin saklanmaz.**
-  - Görev metni yalnızca HMAC özeti olarak tutulur.
+  - İstek kaydı her görevin metnini değil, HMAC özetini tutar. Metnin kendisi yalnızca kişinin
+    ona geri ihtiyaç duyduğu yerde — kendi geçmişinde ve planlayıcısında — her satırı sahibine
+    bağlayan RLS'nin arkasında saklanır ve hesapla birlikte silinir.
   - Günlüklerde yalnızca kimlikler, sayılar ve süreler bulunur.
-  - Kullanılmayan kişisel veri (IP özetleri, misafir kimlikleri) şemadan kaldırıldı.
+  - IP yalnızca bir kota sayacının içinde HMAC olarak tutulur. Kullanılmayan kişisel veri (IP
+    sütunları, misafir kimlikleri) şemadan kaldırıldı.
 - **Kimliği doğrulanan, çökmeye dayanıklı oturum deposu.**
   - XChaCha20-Poly1305 (AEAD); her yazmada yeni anahtar ve nonce, anahtar Keychain/Keystore'da.
   - Şifreli veri, yazıldığı depolama yuvasına ve anahtar kimliğine bağlıdır. Tek bir bitin
@@ -233,8 +236,8 @@ varsayılana bırakılmaz, açıkça çizilir. Aşağıdaki her madde bir teste 
 
 | Paket | Test | Neyi kanıtlar |
 | ----- | ---: | ------------- |
-| Uygulama (Jest) | 185 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
-| Edge Functions (Deno) | 87 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, planın hangi dilde döndüğü, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
+| Uygulama (Jest) | 198 | Planlayıcı modeli, senkronizasyon motoru ve zamanlayıcısı; API istemcisinin her HTTP durumunda nasıl geri çekildiği; kurcalamayı reddeden ve çökmeye dayanıklı oturum deposu; Apple nonce'u; süre çarkının, telefonu elde tutma tespitinin ve ses geçişlerinin aritmetiği; her statik `t()` anahtarı dahil çeviri eşitliği |
+| Edge Functions (Deno) | 97 | İstek akışındaki sıralama ve hata kuralları, yapay zekâ sözleşmesi ve onarım, planın hangi dilde döndüğü, sağlayıcı zaman aşımları ve yeniden denemeler, denetimin açık kalması, Auth kesintisi, uyarı kuralları ve bildirim geçişleri |
 | Veritabanı (Postgres) | 36 | Kullanıcılar arası RLS, Supabase varsayılanları altında yetkiler, kota eş zamanlılığı, zincirleme silmeler, planlayıcı korumaları, şema geneli kurallar, el kitabındaki SQL |
 | Şema sapması | | Kayıtlı TypeScript tipleri, migration'ların ürettiğiyle birebir aynı |
 | Gizli bilgiler | | Tüm git geçmişinde gitleaks taraması |
@@ -259,7 +262,7 @@ sıfırlanmayı. Sabit pencere, sınırda kotanın iki katına kadar isteğin ge
 bütçe koruması için bu, çağıran başına tek satır ve tek ifadeye değer.
 
 **İşleyici bağımlılıklarını neden dışarıdan alıyor?** Böylece sıralama kuralları test edilebiliyor:
-güvenlik kotadan önce, IP kullanıcıdan önce, hazır olma denetimi kimlik doğrulamadan önce. Bunlar
+güvenlik kotadan önce, kullanıcı kotası IP kotasından önce, hazır olma denetimi kimlik doğrulamadan önce. Bunlar
 en önemli ve yeniden düzenlemede en kolay bozulan kurallar.
 
 **Kota ve denetim neden hata durumunda açık kalıyor?** Başlamakta zaten zorlanan biri, bir
@@ -310,7 +313,12 @@ Bir inceleyenin zaten bulacağı boşluklar. O yüzden burada yazıyorlar.
 - **Kota ve denetim hata durumunda açık kalır**; bu bilinçli. İkisinden birinde kesinti olduğunda
   kesin üst sınırı sağlayıcıdaki harcama limiti çizer. Sabit pencere, pencere sınırında sınırın iki
   katına kadar isteğin geçmesine de izin verebilir.
-- **Planlayıcıdaki çakışmalar** alan birleştirmeyle değil, satır başına son yazmayla çözülür.
+- **Planlayıcıdaki çakışmalar** alan birleştirmeyle değil, satır başına son yazmayla çözülür. Bir
+  silmenin işareti temizlendikten sonra silmenin kanıtı da yok olur; bu yüzden cihaz uzlaşmadan
+  önce o satıra çevrimdışı yapılmış bir düzenleme, satırı geri getirir.
+- **Saklama süreleri zamanlanmış işlere bağlıdır.** Telemetrinin silinmesi, kota sayaçlarının
+  temizlenmesi ve silme işaretlerinin kaldırılması, runbook'ta listelenen `pg_cron` işleridir. Bu
+  işler kurulmamış bir ortam o veriyi saklamaya devam eder.
 
 Son üçü bilinçli birer tercih. Her biri, onu değiştirecek koşulla birlikte
 [tehdit modelinde](THREAT_MODEL.md#accepted-risks) yazılı.

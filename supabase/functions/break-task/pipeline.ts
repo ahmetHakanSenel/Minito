@@ -323,6 +323,21 @@ export function detectLanguage(
   return languageEvidence(text) ?? preferred ?? 'en';
 }
 
+/**
+ * The language a plan is actually written in, judged from all of its text; null when the text
+ * gives no evidence. Independent of the `language` field, which is only the model's own claim.
+ */
+export function languageOfPlan(plan: TaskBreakdown): BreakdownLanguage | null {
+  return languageEvidence(
+    [
+      plan.empathy_bridge,
+      plan.first_step_hook,
+      plan.stopping_point,
+      ...plan.steps.flatMap((step) => [step.title, step.instruction]),
+    ].join(' ')
+  );
+}
+
 export function buildFallbackBreakdown(language: BreakdownLanguage): TaskBreakdown {
   return structuredClone(FALLBACK_BREAKDOWNS[language]);
 }

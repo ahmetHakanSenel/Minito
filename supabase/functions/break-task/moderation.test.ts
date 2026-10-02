@@ -17,8 +17,22 @@ Deno.test('a flagged verdict is passed through, with the model pinned', async ()
   const { fetchFn, bodies } = fakeFetch(() => json({ results: [{ flagged: true }] }));
   const verdict = await openAiModerator('key', { fetchFn })('some text');
 
-  assertEquals(verdict, { flagged: true, checked: true });
+  // No categories in the reply: whether it was self-harm is unknown, not false.
+  assertEquals(verdict, { flagged: true, checked: true, selfHarm: undefined });
   assertEquals(bodies, [{ model: MODERATION_MODEL, input: 'some text' }]);
+});
+
+Deno.test('self-harm is told apart from the other reasons content is flagged', async () => {
+  const verdictFor = async (categories: Record<string, boolean>) => {
+    const { fetchFn } = fakeFetch(() => json({ results: [{ flagged: true, categories }] }));
+    return (await openAiModerator('key', { fetchFn })('text')).selfHarm;
+  };
+
+  assertEquals(await verdictFor({ 'self-harm': true }), true);
+  assertEquals(await verdictFor({ 'self-harm/intent': true }), true);
+  assertEquals(await verdictFor({ 'self-harm/instructions': true }), true);
+  assertEquals(await verdictFor({ harassment: true, 'self-harm': false }), false);
+  assertEquals(await verdictFor({ hate: true, violence: true }), false);
 });
 
 Deno.test('an HTTP error fails open and says so', async () => {

@@ -9,14 +9,19 @@ import {
   type ProjectRecord,
   type TaskRecord,
 } from '../model';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
+  FULL_RESYNC_AFTER_MS,
   mergePull,
+  needsReconcile,
   PULL_OVERLAP_MS,
   pullSince,
   PUSH_BATCH_SIZE,
   RemoteError,
   retryDelay,
   syncOnce,
+  TOMBSTONE_RETENTION_MS,
   type PlannerRemote,
   type PullResult,
 } from '../syncEngine';
@@ -260,7 +265,9 @@ describe('syncOnce', () => {
 
   it('pulls from just before the cursor, and moves the cursor to the newest row', async () => {
     const cursor = '2026-09-16T12:00:00.000+00:00';
-    const store = storeOf({ ...EMPTY_PLANNER_STATE, cursor });
+    // A device that synced an hour ago: an incremental pull is all it needs.
+    const now = Date.parse('2026-09-16T13:00:00.000Z');
+    const store = storeOf({ ...EMPTY_PLANNER_STATE, cursor, lastSyncedAt: now - 60 * 60 * 1000 });
     const newest = '2026-09-16T12:05:00.123456+00:00';
     const { remote, pulls } = fakeRemote({
       pull: jest.fn(async (since: string | null) => {
@@ -282,11 +289,198 @@ describe('syncOnce', () => {
       }),
     });
 
-    await syncOnce(store, remote);
+    await syncOnce(store, remote, undefined, { now: () => now });
 
     expect(pulls).toEqual([new Date(Date.parse(cursor) - PULL_OVERLAP_MS).toISOString()]);
     expect(store.get().cursor).toBe(newest);
     expect(store.get().projects['remote-1'].title).toBe('From the laptop');
+    expect(store.get().lastSyncedAt).toBe(now);
+  });
+});
+
+/**
+ * A device that has been away for longer than tombstones live on the server.
+ *
+ * A deletion reaches other devices as a tombstone, and tombstones are purged after thirty days.
+ * After that the deleted row is simply absent, and an incremental pull — "what changed since my
+ * cursor?" — cannot notice an absence. Without a full reconcile, a phone left in a drawer for a
+ * month would keep showing a project deleted on the laptop, for ever.
+ */
+describe('a device that was away longer than tombstones live', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.parse('2026-11-01T09:00:00.000Z');
+  const CURSOR = '2026-09-16T12:00:00.000+00:00';
+
+  const serverProject = (id: string, updatedAt = '2026-09-16T12:00:00.000+00:00') => ({
+    id,
+    title: `Project ${id}`,
+    color: '#60A5FA',
+    dueDate: null,
+    clientUpdatedAt: T1,
+    deletedAt: null,
+    updatedAt,
+  });
+
+  /** Two projects and a task this device already synced, a long time ago. */
+  function syncedLongAgo(lastSyncedAt: number | null | undefined): PlannerState {
+    const project = (id: string): ProjectRecord => ({
+      id,
+      title: `Project ${id}`,
+      color: '#60A5FA',
+      dueDate: null,
+      clientUpdatedAt: T0,
+      deletedAt: null,
+    });
+    return {
+      ...EMPTY_PLANNER_STATE,
+      projects: { kept: project('kept'), purged: project('purged') },
+      tasks: {
+        orphan: {
+          id: 'orphan',
+          projectId: 'purged',
+          title: 'Under the purged project',
+          isCompleted: false,
+          position: 0,
+          clientUpdatedAt: T0,
+          deletedAt: null,
+        },
+      },
+      cursor: CURSOR,
+      lastSyncedAt,
+    };
+  }
+
+  /** A server holding exactly these projects, which records what each pull asked for. */
+  function serverWith(projects: ReturnType<typeof serverProject>[]) {
+    const pulls: (string | null)[] = [];
+    const fake = fakeRemote({
+      pull: jest.fn(async (since: string | null) => {
+        pulls.push(since);
+        return { projects, tasks: [] };
+      }),
+    });
+    return { ...fake, pulls };
+  }
+
+  it('rebuilds from the whole server state instead of pulling recent changes', async () => {
+    const store = storeOf(syncedLongAgo(NOW - 40 * DAY));
+    const { remote, pulls } = serverWith([serverProject('kept')]);
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+
+    expect(pulls).toEqual([null]);
+  });
+
+  it('drops what the server no longer has, along with what belonged to it', async () => {
+    const store = storeOf(syncedLongAgo(NOW - 40 * DAY));
+    const { remote } = serverWith([serverProject('kept')]);
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+
+    expect(Object.keys(store.get().projects)).toEqual(['kept']);
+    expect(store.get().tasks).toEqual({});
+  });
+
+  // An edit made while offline is the one thing a reconcile must never throw away: the person
+  // made it, and the server has not seen it yet.
+  it('keeps a local change that has not reached the server yet', async () => {
+    const away = syncedLongAgo(NOW - 40 * DAY);
+    const created = createProject(
+      away,
+      { title: 'Written offline', color: '#34D399', tasks: [] },
+      () => 'offline-new',
+      T1
+    )!;
+    const store = storeOf(created.state);
+    const { remote } = serverWith([serverProject('kept')]);
+    // The push succeeds, but this server's pull does not echo it back: the reconcile has to
+    // keep it on the strength of the pending change alone. The push settles it first, so it is
+    // made pending again here, as if it were edited while the push was in flight.
+    remote.pushProjects = jest.fn(async () => {
+      store.update((state) => ({
+        ...state,
+        clock: state.clock + 1,
+        pending: {
+          ...state.pending,
+          [pendingKey('project', 'offline-new')]: {
+            kind: 'project',
+            id: 'offline-new',
+            version: state.clock + 1,
+            isNew: true,
+          },
+        },
+      }));
+    });
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+
+    expect(store.get().projects['offline-new']?.title).toBe('Written offline');
+    expect(store.get().projects.purged).toBeUndefined();
+  });
+
+  it('pulls incrementally again once it is back in step', async () => {
+    const store = storeOf(syncedLongAgo(NOW - 40 * DAY));
+    const { remote, pulls } = serverWith([serverProject('kept')]);
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+    await syncOnce(store, remote, undefined, { now: () => NOW + 60_000 });
+
+    expect(pulls[0]).toBeNull();
+    expect(pulls[1]).not.toBeNull();
+  });
+
+  it('does not reconcile a device that synced recently, however old the cursor', async () => {
+    // A planner nobody has touched for weeks has an old cursor even on a device that syncs
+    // every day. The cursor says when the server last changed, not when this device last looked.
+    const store = storeOf(syncedLongAgo(NOW - 2 * DAY));
+    const { remote, pulls } = serverWith([serverProject('kept')]);
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+
+    expect(pulls[0]).not.toBeNull();
+    expect(store.get().projects.purged).toBeDefined();
+  });
+
+  it('reconciles once after upgrading from a version that did not record the last sync', async () => {
+    const store = storeOf(syncedLongAgo(undefined));
+    const { remote, pulls } = serverWith([serverProject('kept')]);
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+
+    expect(pulls).toEqual([null]);
+  });
+
+  it('reconciles when the clock has gone backwards, since it proves nothing', async () => {
+    const store = storeOf(syncedLongAgo(NOW + 5 * DAY));
+    const { remote, pulls } = serverWith([serverProject('kept')]);
+
+    await syncOnce(store, remote, undefined, { now: () => NOW });
+
+    expect(pulls).toEqual([null]);
+  });
+
+  it('never reconciles a device that has never pulled anything', () => {
+    expect(needsReconcile({ ...EMPTY_PLANNER_STATE, lastSyncedAt: null }, NOW)).toBe(false);
+  });
+
+  it('reconciles a little inside the retention window, never after it', () => {
+    const synced = { ...EMPTY_PLANNER_STATE, cursor: CURSOR };
+    const atLimit = NOW - FULL_RESYNC_AFTER_MS;
+    expect(needsReconcile({ ...synced, lastSyncedAt: atLimit }, NOW)).toBe(false);
+    expect(needsReconcile({ ...synced, lastSyncedAt: atLimit - 1 }, NOW)).toBe(true);
+    expect(FULL_RESYNC_AFTER_MS).toBeLessThan(TOMBSTONE_RETENTION_MS);
+  });
+
+  // The client's idea of the retention and the server's purge job are two numbers in two
+  // languages. If one moves without the other, long-offline devices go back to missing deletes.
+  it('assumes the same retention the server purges tombstones with', () => {
+    const migration = readFileSync(
+      join(__dirname, '../../../../supabase/migrations/016_planner_sync.sql'),
+      'utf8'
+    );
+    const match = migration.match(/cleanup_planner_tombstones\([^)]*DEFAULT INTERVAL '(\d+) days'/);
+    expect(match).not.toBeNull();
+    expect(Number(match![1]) * DAY).toBe(TOMBSTONE_RETENTION_MS);
   });
 });
 

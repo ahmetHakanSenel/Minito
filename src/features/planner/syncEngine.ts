@@ -118,8 +118,18 @@ function strip<T>(row: RemoteRow<T>): T {
   return record as T;
 }
 
-/** Applies what the server changed, except where a local edit is still on its way up. */
-export function mergePull(state: PlannerState, pulled: PullResult): PlannerState {
+/**
+ * Applies what the server changed, except where a local edit is still on its way up.
+ *
+ * With `reconcile`, the pull is the server's whole state rather than its recent changes, and a
+ * record the server no longer has at all — not even as a tombstone — is removed here too, unless
+ * it has a local change still waiting to go up.
+ */
+export function mergePull(
+  state: PlannerState,
+  pulled: PullResult,
+  { reconcile = false }: { reconcile?: boolean } = {}
+): PlannerState {
   const projects = { ...state.projects };
   const tasks = { ...state.tasks };
   let cursor = state.cursor;
@@ -137,9 +147,52 @@ export function mergePull(state: PlannerState, pulled: PullResult): PlannerState
     }
   };
 
+  const forgetMissing = <T>(
+    kind: EntityKind,
+    rows: { id: string }[],
+    collection: Record<string, T>
+  ) => {
+    const onServer = new Set(rows.map((row) => row.id));
+    for (const id of Object.keys(collection)) {
+      if (!onServer.has(id) && !state.pending[pendingKey(kind, id)]) delete collection[id];
+    }
+  };
+
   apply('project', pulled.projects, projects);
   apply('task', pulled.tasks, tasks);
+  if (reconcile) {
+    forgetMissing('project', pulled.projects, projects);
+    forgetMissing('task', pulled.tasks, tasks);
+  }
   return { ...state, projects, tasks, cursor };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a deletion stays on the server as a tombstone: the default of
+ * `cleanup_planner_tombstones` in migration 016. The two must change together.
+ */
+export const TOMBSTONE_RETENTION_MS = 30 * DAY_MS;
+
+/**
+ * A device away for longer than this rebuilds from the server's whole state instead of pulling
+ * recent changes. A deletion made while it was away is only visible to an incremental pull while
+ * its tombstone exists; once the tombstone is purged, the deleted row is simply absent, and an
+ * incremental pull has no way to notice an absence. Three weeks leaves a wide margin inside the
+ * thirty-day retention, and a full read of one person's planner costs next to nothing.
+ */
+export const FULL_RESYNC_AFTER_MS = 21 * DAY_MS;
+
+/** Whether this device may have missed deletions whose tombstones are already gone. */
+export function needsReconcile(state: PlannerState, now: number): boolean {
+  // Nothing was ever pulled, so there is nothing a deletion could have been hidden from.
+  if (state.cursor === null) return false;
+  const last = state.lastSyncedAt;
+  // Synced before the time of the last sync was recorded: reconcile once to be certain.
+  if (last === undefined || last === null) return true;
+  // A clock that went backwards proves nothing about how long the device was away.
+  return now < last || now - last > FULL_RESYNC_AFTER_MS;
 }
 
 export function pullSince(cursor: string | null): string | null {
@@ -149,7 +202,8 @@ export function pullSince(cursor: string | null): string | null {
 export async function syncOnce(
   store: StateStore,
   remote: PlannerRemote,
-  onRejected: (kind: EntityKind, id: string) => void = () => {}
+  onRejected: (kind: EntityKind, id: string) => void = () => {},
+  { now = Date.now }: { now?: () => number } = {}
 ): Promise<SyncOutcome> {
   const snapshot = store.get();
   const pendingOf = (kind: EntityKind) =>
@@ -189,8 +243,14 @@ export async function syncOnce(
     await pushAndSettle('project', projectRows, (batch) => remote.pushProjects(batch));
     await pushAndSettle('task', taskRows, (batch) => remote.pushTasks(batch));
 
-    const pulled = await remote.pull(pullSince(store.get().cursor));
-    store.update((state) => mergePull(state, pulled));
+    // Taken before the pull: the state it returns is at least this recent, never older.
+    const pulledAt = now();
+    const reconcile = needsReconcile(store.get(), pulledAt);
+    const pulled = await remote.pull(reconcile ? null : pullSince(store.get().cursor));
+    store.update((state) => ({
+      ...mergePull(state, pulled, { reconcile }),
+      lastSyncedAt: pulledAt,
+    }));
     return {
       status: 'synced',
       pushed,

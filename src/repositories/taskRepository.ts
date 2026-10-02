@@ -32,7 +32,11 @@ export type BreakdownOutcome =
       /** Tracing id of the analytics row behind this breakdown, for the feedback loop. */
       requestId: string | null;
     }
-  | { status: 'flagged' }
+  /**
+   * Refused by moderation. `crisis` means the content suggests self-harm, and only then is the
+   * person shown crisis support; any other refusal gets a plain explanation instead.
+   */
+  | { status: 'flagged'; crisis: boolean }
   | { status: 'failed'; reason: FallbackReason };
 
 export type TaskRepositoryErrorCode = 'unavailable' | 'unknown';
@@ -154,8 +158,10 @@ async function breakDown(input: string): Promise<BreakdownOutcome> {
   const result = await breakTask(title);
 
   if (!result.success) {
+    // A server too old to say counts as a crisis: offering support to someone who did not need
+    // it is a far smaller mistake than withholding it from someone who did.
     return result.fallbackReason === FallbackReason.CONTENT_FLAGGED
-      ? { status: 'flagged' }
+      ? { status: 'flagged', crisis: result.crisis !== false }
       : { status: 'failed', reason: result.fallbackReason };
   }
 

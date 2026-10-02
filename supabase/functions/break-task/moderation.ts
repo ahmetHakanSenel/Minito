@@ -3,8 +3,30 @@
  * tested without a network.
  */
 
-/** checked: false means the verdict is a default, because moderation could not run. */
-export type ModerationVerdict = { flagged: boolean; checked: boolean; reason?: string };
+/**
+ * checked: false means the verdict is a default, because moderation could not run.
+ *
+ * selfHarm separates the one kind of flag that calls for crisis support from every other kind.
+ * The endpoint's `flagged` is true for hate, harassment, violence, sexual content and more, and
+ * treating all of them as a crisis showed "you are not alone, reach out to a support line" to
+ * someone who had only written that they hated a coworker. Absent when the categories could not
+ * be read, in which case the caller must assume the worst.
+ */
+export type ModerationVerdict = {
+  flagged: boolean;
+  checked: boolean;
+  selfHarm?: boolean;
+  reason?: string;
+};
+
+// The endpoint's self-harm categories: the person, the intent, and instructions for it.
+const SELF_HARM_CATEGORIES = ['self-harm', 'self-harm/intent', 'self-harm/instructions'];
+
+function selfHarmOf(categories: unknown): boolean | undefined {
+  if (typeof categories !== 'object' || categories === null) return undefined;
+  const flags = categories as Record<string, unknown>;
+  return SELF_HARM_CATEGORIES.some((category) => flags[category] === true);
+}
 
 export type Moderator = (input: string) => Promise<ModerationVerdict>;
 
@@ -38,11 +60,12 @@ export function openAiModerator(
         return { flagged: false, checked: false, reason: `http_${response.status}` };
       }
       const data = await response.json();
-      const flagged = data.results?.[0]?.flagged;
+      const result = data.results?.[0];
+      const flagged = result?.flagged;
       if (typeof flagged !== 'boolean') {
         return { flagged: false, checked: false, reason: 'malformed_response' };
       }
-      return { flagged, checked: true };
+      return { flagged, checked: true, selfHarm: selfHarmOf(result.categories) };
     } catch (error) {
       const reason =
         error instanceof DOMException && error.name === 'TimeoutError' ? 'timeout' : 'network';
