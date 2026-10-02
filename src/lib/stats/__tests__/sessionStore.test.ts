@@ -1,4 +1,66 @@
-import { computeFlowMetrics, type FocusSessionRecord } from '../sessionStore';
+import {
+  computeFlowMetrics,
+  getFocusSessions,
+  recordFocusSession,
+  type FocusSessionRecord,
+} from '../sessionStore';
+
+// A store whose reads and writes each take a turn of the event loop, the way real I/O does. That
+// is what lets two appends interleave: both read before either has written.
+jest.mock('../../storage/jsonStore', () => {
+  const files = new Map<string, string>();
+  const tick = () => new Promise((resolve) => setImmediate(resolve));
+  return {
+    readJson: async (key: string) => {
+      await tick();
+      const text = files.get(key);
+      return text === undefined ? null : JSON.parse(text);
+    },
+    writeJson: async (key: string, value: unknown) => {
+      await tick();
+      files.set(key, JSON.stringify(value));
+      return true;
+    },
+    __files: files,
+  };
+});
+
+describe('recordFocusSession', () => {
+  // Appending is read, add, write. Two appends that overlap would each read the same list and
+  // the second write would erase the first record without a trace.
+  it('keeps every session when two are recorded at once', async () => {
+    await Promise.all([
+      recordFocusSession({ durationSec: 60, pickupCount: 0, completed: true, source: 'timer' }),
+      recordFocusSession({ durationSec: 120, pickupCount: 1, completed: false, source: 'timer' }),
+    ]);
+
+    const durations = (await getFocusSessions()).map((s) => s.durationSec).sort((a, b) => a - b);
+    expect(durations).toEqual([60, 120]);
+  });
+
+  // Appends wait for each other, so one that fails must not leave every later one waiting
+  // behind it for ever.
+  it('keeps recording after an append has failed', async () => {
+    const store = jest.requireMock('../../storage/jsonStore') as {
+      __files: Map<string, string>;
+      writeJson: (key: string, value: unknown) => Promise<boolean>;
+    };
+    store.__files.clear();
+    const working = store.writeJson;
+    store.writeJson = async () => {
+      throw new Error('disk full');
+    };
+
+    await expect(
+      recordFocusSession({ durationSec: 30, pickupCount: 0, completed: true, source: 'steps' })
+    ).rejects.toThrow('disk full');
+
+    store.writeJson = working;
+    await recordFocusSession({ durationSec: 45, pickupCount: 0, completed: true, source: 'steps' });
+
+    expect((await getFocusSessions()).map((s) => s.durationSec)).toEqual([45]);
+  });
+});
 
 function session(over: Partial<FocusSessionRecord> = {}): FocusSessionRecord {
   return {

@@ -208,13 +208,13 @@ export default function FocusModeScreen() {
     markCompleted(totalSteps);
 
     // Log the completed step-flow for the Insights screen
-    recordFocusSession({
+    void recordFocusSession({
       durationSec: 0, // step flows are untimed; they count toward continuity, not focus minutes
       pickupCount: 0,
       completed: true,
       source: 'steps',
       stepsCompleted: totalSteps,
-    });
+    }).catch(() => {});
 
     try {
       router.replace({

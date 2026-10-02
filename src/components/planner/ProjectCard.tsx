@@ -300,14 +300,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       void endAudioSession();
 
       // Insights are fed by what happened, finished or not (fire and forget).
-      recordFocusSession({
+      void recordFocusSession({
         durationSec: data.duration,
         pickupCount: data.pickupCount,
         completed: data.completed,
         source: 'timer',
         projectId: data.projectId,
         taskId: data.taskId,
-      });
+      }).catch(() => {});
 
       // A session someone walked out of is not something to congratulate them for. It is
       // counted, and the screen simply goes back to the plan.

@@ -190,17 +190,30 @@ async function breakDown(input: string): Promise<BreakdownOutcome> {
   }
 }
 
+/**
+ * Records progress, forward only.
+ *
+ * Two writes in flight can arrive in either order, and a second device resuming an earlier step
+ * can write a smaller count after a larger one. An unconditional update let the later arrival win
+ * whatever it said, so progress could go backwards — even below a finished task's step count.
+ * The filter makes the larger count win, in whatever order the writes land.
+ */
 async function recordProgress(id: string, completedStepCount: number): Promise<void> {
-  const { error } = await table().update({ completed_step_count: completedStepCount }).eq('id', id);
+  const { error } = await table()
+    .update({ completed_step_count: completedStepCount })
+    .eq('id', id)
+    .lt('completed_step_count', completedStepCount);
   if (error) {
     throw toRepositoryError(error);
   }
 }
 
+/** Marks the task finished. The first completion is the one recorded; repeating it changes nothing. */
 async function markCompleted(id: string, totalSteps: number): Promise<void> {
   const { error } = await table()
     .update({ completed_step_count: totalSteps, completed_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .is('completed_at', null);
   if (error) {
     throw toRepositoryError(error);
   }

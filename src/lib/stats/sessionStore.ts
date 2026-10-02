@@ -27,17 +27,27 @@ export interface FocusSessionRecord {
   stepsCompleted?: number;
 }
 
-export async function recordFocusSession(
+// Appending is read, add, write. Two appends that overlapped would each read the same list, and
+// the second write would erase the first record without a trace. They are chained instead: each
+// starts once the previous one has written. A failed append is not allowed to break the chain.
+let lastAppend: Promise<void> = Promise.resolve();
+
+export function recordFocusSession(
   record: Omit<FocusSessionRecord, 'id' | 'endedAt'> & { endedAt?: number }
 ): Promise<void> {
-  const sessions = (await readJson<FocusSessionRecord[]>(KEY)) ?? [];
-  sessions.push({
-    ...record,
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    endedAt: record.endedAt ?? Date.now(),
+  const endedAt = record.endedAt ?? Date.now();
+  const append = lastAppend.then(async () => {
+    const sessions = (await readJson<FocusSessionRecord[]>(KEY)) ?? [];
+    sessions.push({
+      ...record,
+      id: `${endedAt}-${Math.random().toString(36).slice(2, 9)}`,
+      endedAt,
+    });
+    // Cap file size; oldest records rotate out
+    await writeJson(KEY, sessions.slice(-MAX_RECORDS));
   });
-  // Cap file size; oldest records rotate out
-  await writeJson(KEY, sessions.slice(-MAX_RECORDS));
+  lastAppend = append.catch(() => {});
+  return append;
 }
 
 export async function getFocusSessions(): Promise<FocusSessionRecord[]> {

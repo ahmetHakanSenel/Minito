@@ -2,7 +2,7 @@ import { getSupabase } from '../../data/supabase/client';
 import { breakTask } from '../../lib/api/breakTask';
 import type { BreakdownStep } from '../../lib/breakdownSteps';
 import { FallbackReason } from '../../safety';
-import { taskRepository } from '../taskRepository';
+import { TaskRepositoryError, taskRepository } from '../taskRepository';
 
 jest.mock('../../data/supabase/client', () => {
   const client = { from: jest.fn() };
@@ -22,6 +22,8 @@ const CHAIN_METHODS = [
   'update',
   'delete',
   'eq',
+  'lt',
+  'is',
   'order',
   'limit',
   'range',
@@ -261,5 +263,38 @@ describe('taskRepository.breakDown', () => {
       status: 'ready',
       saved: null,
     });
+  });
+});
+
+describe('progress', () => {
+  // Two writes in flight can land in either order, and a second device can resume at an earlier
+  // step. Only the filter keeps a smaller count from overwriting a larger one.
+  it('only ever moves progress forward', async () => {
+    const builder = mockQuery({ data: null, error: null });
+
+    await taskRepository.recordProgress('task-1', 3);
+
+    expect(builder.update).toHaveBeenCalledWith({ completed_step_count: 3 });
+    expect(builder.eq).toHaveBeenCalledWith('id', 'task-1');
+    expect(builder.lt).toHaveBeenCalledWith('completed_step_count', 3);
+  });
+
+  it('records the first completion and ignores any repeat of it', async () => {
+    const builder = mockQuery({ data: null, error: null });
+
+    await taskRepository.markCompleted('task-1', 5);
+
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ completed_step_count: 5, completed_at: expect.any(String) })
+    );
+    expect(builder.is).toHaveBeenCalledWith('completed_at', null);
+  });
+
+  it('reports a failed write so the caller can try again', async () => {
+    mockQuery({ data: null, error: { message: 'offline', code: 'PGRST000' } as never });
+
+    await expect(taskRepository.recordProgress('task-1', 2)).rejects.toBeInstanceOf(
+      TaskRepositoryError
+    );
   });
 });
