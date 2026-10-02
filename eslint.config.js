@@ -41,6 +41,8 @@ module.exports = defineConfig([
     ignores: [
       'dist/*',
       '.expo/*',
+      // Agent worktrees are second checkouts of this repository, not source.
+      '.claude/**',
       // Deno runtime with URL imports; checked with `deno check` instead.
       'supabase/functions/*',
       'scripts/*',

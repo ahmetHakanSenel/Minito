@@ -93,11 +93,18 @@ jobs:
       - run: npm run test:db
 
       # The committed client types must match what the migrations actually produce.
+      #
+      # The CLI is pinned because the generator's output changes between releases with no change
+      # to the schema (`never` became `Record<PropertyKey, never>`), which would turn this check
+      # red with nothing to fix. Prettier makes the output deterministic and readable; `npm run
+      # gen:types` runs exactly this pipeline, so the committed file is what this step produces.
+      # The test container has no TLS, so the connection must not try to negotiate it.
       - name: Check generated types against the migrations
         run: |
-          npx -y supabase@2 gen types typescript \
-            --db-url "postgres://postgres:postgres@localhost:5432/minito_migrations_test" \
-            --schema public > "${RUNNER_TEMP}/database.types.ts"
+          set -o pipefail
+          npx -y supabase@2.117.0 gen types typescript \
+            --db-url "postgres://postgres:postgres@localhost:5432/minito_migrations_test?sslmode=disable" \
+            --schema public | npx prettier --parser typescript > "${RUNNER_TEMP}/database.types.ts"
           diff -u src/data/supabase/database.types.ts "${RUNNER_TEMP}/database.types.ts"
 
   secrets:

@@ -14,7 +14,7 @@
     "test": "jest",
     "brand:assets": "npx -y deno run --no-lock --node-modules-dir=none --allow-read --allow-write --allow-env --allow-ffi --allow-sys --allow-net scripts/build-brand-assets.ts",
     "eval:ai": "npx -y deno run --no-lock --allow-net --allow-env --allow-read --allow-write scripts/eval.ts",
-    "gen:types": "npx -y supabase@2 gen types typescript --db-url postgres://postgres:postgres@localhost:54329/minito_migrations_test --schema public > src/data/supabase/database.types.ts",
+    "gen:types": "npx -y supabase@2.117.0 gen types typescript --db-url \"postgres://postgres:postgres@localhost:54329/minito_migrations_test?sslmode=disable\" --schema public | prettier --parser typescript > src/data/supabase/database.types.ts",
     "test:db": "node --test \"supabase/tests/*.test.mjs\"",
     "test:edge": "npx -y deno test --no-lock --allow-read supabase/functions/ scripts/",
     "docs:check": "node scripts/check-doc-numbers.mjs",
@@ -91,7 +91,8 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "<rootDir>/supabase/",
-      "<rootDir>/scripts/"
+      "<rootDir>/scripts/",
+      "<rootDir>/.claude/"
     ]
   }
 }

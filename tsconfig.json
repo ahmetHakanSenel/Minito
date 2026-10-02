@@ -8,5 +8,5 @@
     "types": ["jest", "node"]
   },
   "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"],
-  "exclude": ["node_modules", "supabase/functions", "scripts"]
+  "exclude": ["node_modules", "supabase/functions", ".claude", "scripts"]
 }
