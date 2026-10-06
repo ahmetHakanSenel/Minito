@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,15 +26,18 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { useAudioContext, AUDIO_TRACKS, AudioTrack } from '../../context';
 import { SoftGlow } from '../SoftGlow';
+import { haptics } from '../../lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 // Screens where no audio control may appear at all
 const HIDDEN_ROUTES = ['/panic', '/login'];
+// Screens with something docked along the bottom, which the orb would otherwise sit on top of.
+const DOCKED_BAR_ROUTES = ['/planner'];
+const DOCKED_BAR_HEIGHT = 60;
 
 const ORB_SIZE = 52;
 const IDLE_RING = ['rgba(255, 255, 255, 0.32)', 'rgba(255, 255, 255, 0.03)'] as const;
@@ -64,7 +76,7 @@ function EqualizerBar({ color, active, rest, peak, duration }: EqualizerBarProps
       cancelAnimation(height);
       height.value = withTiming(rest, { duration: 250 });
     }
-  }, [active]);
+  }, [active, duration, height, peak, rest]);
 
   const barStyle = useAnimatedStyle(() => ({ height: height.value }));
 
@@ -80,6 +92,7 @@ function EqualizerBar({ color, active, rest, peak, duration }: EqualizerBarProps
 export const FloatingAudioButton: React.FC = () => {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const pathname = usePathname();
   const { currentTrack, isPlaying, play, pause, resume, stop } = useAudioContext();
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -97,7 +110,7 @@ export const FloatingAudioButton: React.FC = () => {
       cancelAnimation(pulse);
       pulse.value = withTiming(1, { duration: 300 });
     }
-  }, [isPlaying]);
+  }, [isPlaying, pulse]);
 
   const glowStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
@@ -107,6 +120,10 @@ export const FloatingAudioButton: React.FC = () => {
 
   // On the focus step flow the button stays available but recedes.
   const isQuietRoute = pathname === '/focus';
+  const orbBottom =
+    Math.max(insets.bottom, 16) +
+    16 +
+    (DOCKED_BAR_ROUTES.includes(pathname) ? DOCKED_BAR_HEIGHT : 0);
 
   const hasTrack = !!currentTrack;
   const trackColor = currentTrack?.color || '#8B5CF6';
@@ -114,14 +131,14 @@ export const FloatingAudioButton: React.FC = () => {
   const barColor = isPlaying ? trackColor : `${trackColor}99`;
 
   const openSheet = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     setSheetVisible(true);
   };
 
   const closeSheet = () => setSheetVisible(false);
 
   const handleTrackPress = async (track: AudioTrack) => {
-    Haptics.selectionAsync();
+    haptics.selection();
     if (currentTrack?.id === track.id) {
       if (isPlaying) {
         await pause();
@@ -134,7 +151,7 @@ export const FloatingAudioButton: React.FC = () => {
   };
 
   const handleStop = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     setSheetVisible(false);
     await stop();
   };
@@ -144,7 +161,7 @@ export const FloatingAudioButton: React.FC = () => {
       <AnimatedView
         entering={FadeIn.duration(300)}
         exiting={FadeOut.duration(200)}
-        style={[styles.orbContainer, { bottom: Math.max(insets.bottom, 16) + 16 }]}
+        style={[styles.orbContainer, { bottom: orbBottom }]}
       >
         {/* Opacity lives on an inner view so it never fights the layout animation */}
         <View style={{ opacity: isQuietRoute ? (hasTrack ? 0.6 : 0.45) : 1 }}>
@@ -195,7 +212,12 @@ export const FloatingAudioButton: React.FC = () => {
         statusBarTranslucent
         onRequestClose={closeSheet}
       >
-        <Pressable style={styles.backdrop} onPress={closeSheet}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={closeSheet}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
+        >
           <AnimatedView
             entering={FadeIn.duration(200)}
             exiting={FadeOut.duration(150)}
@@ -211,37 +233,57 @@ export const FloatingAudioButton: React.FC = () => {
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>{t('audio.title')}</Text>
 
-          {AUDIO_TRACKS.map((track) => {
-            const isActive = currentTrack?.id === track.id;
-            return (
-              <TouchableOpacity
-                key={track.id}
-                style={[styles.trackRow, isActive && styles.trackRowActive]}
-                onPress={() => handleTrackPress(track)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.trackIcon, { backgroundColor: `${track.color}20` }]}>
-                  <Volume2 size={18} color={track.color} strokeWidth={2} />
-                </View>
-                <View style={styles.trackInfo}>
-                  <Text style={styles.trackName}>{track.name}</Text>
-                  <Text style={styles.trackDesc}>{track.description}</Text>
-                </View>
-                {isActive && (
-                  <View style={[styles.stateBadge, { backgroundColor: track.color }]}>
-                    {isPlaying ? (
-                      <Pause size={13} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
-                    ) : (
-                      <Play size={13} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
-                    )}
+          <ScrollView
+            style={{ maxHeight: windowHeight * 0.5 }}
+            contentContainerStyle={styles.sheetList}
+            showsVerticalScrollIndicator={false}
+          >
+            {AUDIO_TRACKS.map((track) => {
+              const isActive = currentTrack?.id === track.id;
+              return (
+                <TouchableOpacity
+                  key={track.id}
+                  style={[styles.trackRow, isActive && styles.trackRowActive]}
+                  onPress={() => void handleTrackPress(track)}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(`audio.tracks.${track.id}.name`)}
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityHint={
+                    isActive && isPlaying ? t('audio.pauseHint') : t('audio.playHint')
+                  }
+                >
+                  <View style={[styles.trackIcon, { backgroundColor: `${track.color}20` }]}>
+                    <Volume2 size={18} color={track.color} strokeWidth={2} />
                   </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+                  <View style={styles.trackInfo}>
+                    <Text style={styles.trackName}>{t(`audio.tracks.${track.id}.name`)}</Text>
+                    <Text style={styles.trackDesc}>
+                      {t(`audio.tracks.${track.id}.description`)}
+                    </Text>
+                  </View>
+                  {isActive && (
+                    <View style={[styles.stateBadge, { backgroundColor: track.color }]}>
+                      {isPlaying ? (
+                        <Pause size={13} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
+                      ) : (
+                        <Play size={13} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
           {hasTrack && (
-            <TouchableOpacity style={styles.stopButton} onPress={handleStop} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.stopButton}
+              onPress={() => void handleStop()}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={t('audio.stop')}
+            >
               <Square size={14} color="#F87171" strokeWidth={2.5} fill="#F87171" />
               <Text style={styles.stopButtonText}>{t('audio.stop')}</Text>
             </TouchableOpacity>
@@ -253,6 +295,9 @@ export const FloatingAudioButton: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  sheetList: {
+    paddingBottom: 4,
+  },
   orbContainer: {
     position: 'absolute',
     right: 16,
@@ -290,7 +335,7 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   sheet: {

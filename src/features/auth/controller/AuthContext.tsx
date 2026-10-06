@@ -20,6 +20,7 @@ type AuthContextValue = {
   user: User | null;
   displayName: string | null;
   isInitializing: boolean;
+  isBackendAvailable: boolean;
   providers: SocialProviders;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<SignUpResult>;
@@ -56,14 +57,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      authRepository.isGoogleSignInAvailable(),
-      authRepository.isAppleSignInAvailable(),
-    ]).then(([google, apple]) => {
-      if (active) {
-        setProviders({ google, apple });
-      }
-    });
+    Promise.all([authRepository.isGoogleSignInAvailable(), authRepository.isAppleSignInAvailable()])
+      .then(([google, apple]) => {
+        if (active) {
+          setProviders({ google, apple });
+        }
+      })
+      // A provider that cannot be probed is simply not offered.
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       displayName: readDisplayName(user),
       isInitializing,
+      isBackendAvailable: authRepository.isBackendAvailable,
       providers,
       signInWithEmail: authRepository.signInWithEmail,
       signUpWithEmail: authRepository.signUpWithEmail,

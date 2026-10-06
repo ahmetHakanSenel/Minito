@@ -18,16 +18,29 @@ interface ParsedTime {
  * - "5 minutes rest" → { minutes: 5, seconds: 0 }
  * - "2 min stretch" → { minutes: 2, seconds: 0 }
  */
+/**
+ * Turkish takes suffixes where English takes another word: a step says "10 dakikada", "20
+ * dakikaya", "15 dakikalığına", "45 saniyede". Requiring a word boundary straight after the unit
+ * matched none of them — six of ten natural phrasings — and the step then fell back to the
+ * model's own estimate, so the timer silently counted a different number from the one written in
+ * the instruction. Anything that follows the unit is allowed to be a suffix instead.
+ *
+ * English keeps its boundary, and the alternations run longest-first so `min` cannot swallow the
+ * start of `minutes`.
+ */
+const TURKISH_SUFFIX = '[a-zçğıöşü]*';
+const TURKISH_MINUTES = new RegExp(`(\\d+)\\s*(?:dakika|dk)${TURKISH_SUFFIX}`);
+const TURKISH_SECONDS = new RegExp(`(\\d+)\\s*(?:saniye|sn)${TURKISH_SUFFIX}`);
+const ENGLISH_MINUTES = /(\d+)\s*(?:minutes|minute|mins|min)\b/;
+const ENGLISH_SECONDS = /(\d+)\s*(?:seconds|second|secs|sec)\b/;
+
 export function parseTimeFromStep(step: string): ParsedTime | null {
   if (!step) return null;
 
   const text = step.toLowerCase();
 
-  // Dakika patterns (Türkçe + İngilizce)
-  const minutePatterns = [/(\d+)\s*(dk|dakika|dakikalık)\b/, /(\d+)\s*(min|mins|minute|minutes)\b/];
-
-  // Saniye patterns (Türkçe + İngilizce)
-  const secondPatterns = [/(\d+)\s*(sn|saniye|saniyelik)\b/, /(\d+)\s*(sec|secs|second|seconds)\b/];
+  const minutePatterns = [TURKISH_MINUTES, ENGLISH_MINUTES];
+  const secondPatterns = [TURKISH_SECONDS, ENGLISH_SECONDS];
 
   let minutes = 0;
   let seconds = 0;
@@ -75,9 +88,8 @@ export function parseTimeFromInput(input: string): ParsedTime | null {
 
   const text = input.toLowerCase();
 
-  // Dakika patterns - ana ekran için daha esnek
-  const timeRegex = /(\d+)\s*(dk|dakika|min|mins|minute|minutes)\b/;
-  const match = text.match(timeRegex);
+  // Same suffix problem as above; the home screen reads the same sentences.
+  const match = text.match(TURKISH_MINUTES) ?? text.match(ENGLISH_MINUTES);
 
   if (!match) return null;
 

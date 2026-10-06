@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, BrainCircuit } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING, SETTLE_SPRING } from '../lib/ui/motion';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -33,6 +34,12 @@ interface TaskInputProps {
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+// The edge function's own ceiling for a task. Beyond it the text would be refused, so the
+// field stops there and says so rather than letting someone write into nothing.
+const TASK_MAX_LENGTH = 500;
+// The counter stays out of the way until the limit is close enough to matter.
+const COUNTER_VISIBLE_AT = 400;
 
 // Generate SVG path for rounded rectangle
 const getRoundedRectPath = (width: number, height: number, radius: number): string => {
@@ -75,7 +82,7 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   const [hasFocused, setHasFocused] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [borderSize, setBorderSize] = useState<{ width: number; height: number } | null>(null);
-  const buttonPressed = useSharedValue(0);
+  const buttonScale = useSharedValue(1);
 
   // Input glow animation
   const glowOpacity = useSharedValue(0.3); // Default subtle glow
@@ -86,19 +93,13 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   // Update glow based on focus state
   useEffect(() => {
     if (isFocused) {
-      // Focus state: increase glow
-      glowOpacity.value = withSpring(0.8, {
-        damping: 12,
-        stiffness: 100,
-      });
+      // Focus state: increase glow. Opacity that overshoots reads as a flicker, so it settles.
+      glowOpacity.value = withSpring(0.8, SETTLE_SPRING);
     } else {
       // Default state: subtle glow
-      glowOpacity.value = withSpring(0.3, {
-        damping: 12,
-        stiffness: 100,
-      });
+      glowOpacity.value = withSpring(0.3, SETTLE_SPRING);
     }
-  }, [isFocused]);
+  }, [glowOpacity, isFocused]);
 
   // Border radius constant (must match rounded-2xl = 16px, but SVG uses 18 for better visual)
   const BORDER_RADIUS = 18;
@@ -129,14 +130,14 @@ export const TaskInput: React.FC<TaskInputProps> = ({
     } else {
       dashOffset.value = 0;
     }
-  }, [isLoading, perimeter]);
+  }, [dashOffset, isLoading, perimeter]);
 
   // Haptic feedback on first focus (when user starts typing)
   const handleFocus = () => {
     setIsFocused(true);
     onFocus?.();
     if (!hasFocused) {
-      Haptics.selectionAsync();
+      haptics.selection();
       setHasFocused(true);
     }
   };
@@ -145,19 +146,16 @@ export const TaskInput: React.FC<TaskInputProps> = ({
     setIsFocused(false);
   };
 
-  // God Mode: Heavy haptic on main button press
+  // The heaviest tap in the app marks the moment an AI breakdown is committed.
   const handleSubmit = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    haptics.commit();
     onSubmit();
   };
 
   const buttonStyle = useAnimatedStyle(() => ({
     transform: [
       {
-        scale: withSpring(buttonPressed.value ? 0.96 : 1, {
-          damping: 10,
-          stiffness: 200,
-        }),
+        scale: buttonScale.value,
       },
     ],
   }));
@@ -243,8 +241,9 @@ export const TaskInput: React.FC<TaskInputProps> = ({
             onBlur={handleBlur}
             placeholder={inputPlaceholder}
             placeholderTextColor="#A1A1AA"
+            accessibilityLabel={t('home.inputLabel')}
             multiline
-            maxLength={500}
+            maxLength={TASK_MAX_LENGTH}
             editable={!isLoading}
             style={{
               color: '#E5E5E5',
@@ -258,19 +257,31 @@ export const TaskInput: React.FC<TaskInputProps> = ({
           <View className="absolute left-4 top-4">
             <BrainCircuit size={20} color="#A1A1AA" strokeWidth={2.5} />
           </View>
+          {value.length >= COUNTER_VISIBLE_AT ? (
+            <Text
+              className="absolute right-3 bottom-2 text-xs text-textMuted"
+              accessibilityLabel={t('home.charactersLeft', {
+                count: TASK_MAX_LENGTH - value.length,
+              })}
+            >
+              {value.length} / {TASK_MAX_LENGTH}
+            </Text>
+          ) : null}
         </View>
       </View>
 
-      {/* Minitize It button with Sparkles icon - GOD MODE: Heavy Haptic */}
+      {/* Primary action: starts a breakdown, with the app's one heavy haptic */}
       <AnimatedTouchableOpacity
         onPressIn={() => {
-          buttonPressed.value = 1;
+          buttonScale.value = withSpring(0.96, PRESS_SPRING);
         }}
         onPressOut={() => {
-          buttonPressed.value = 0;
+          buttonScale.value = withSpring(1, PRESS_SPRING);
         }}
         onPress={handleSubmit}
         disabled={!value.trim() || isLoading}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !value.trim() || isLoading, busy: isLoading }}
         className={`mt-4 rounded-2xl py-4 px-6 flex-row items-center justify-center gap-2 ${
           value.trim() && !isLoading ? 'bg-primary' : 'bg-gray-700 opacity-50'
         }`}

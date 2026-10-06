@@ -1,86 +1,63 @@
+import { isAxiosError } from 'axios';
 import { tracedAxios } from '../requestTracing';
-import { supabase } from '../../data/supabase/client';
+import { getSupabase } from '../../data/supabase/client';
 
-const SUPABASE_EDGE_FUNCTION_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_URL;
+/** The shape `export-user-data` returns. */
+export type UserDataExport = {
+  user: { id: string; email?: string; created_at: string; last_sign_in_at?: string };
+  task_breakdowns: Record<string, unknown>[];
+  ai_requests: Record<string, unknown>[];
+  planner: { projects: Record<string, unknown>[]; tasks: Record<string, unknown>[] };
+  metadata: { export_date: string; note: string };
+};
 
-/**
- * Delete user account and all associated data (GDPR Right to be Forgotten)
- * @throws Error if deletion fails
- */
-export async function deleteUserAccount(): Promise<void> {
+function functionUrl(name: string): string | undefined {
+  const breakTaskUrl = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_URL;
+  if (breakTaskUrl) return breakTaskUrl.replace(/\/break-task\/?$/, `/${name}`);
+  return process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$|$/, `/functions/v1/${name}`);
+}
+
+async function authorizedRequest(name: string): Promise<{ url: string; token: string }> {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
-
+  } = await getSupabase().auth.getSession();
   if (!session) {
     throw new Error('No active session. Please sign in first.');
   }
-
-  const edgeFunctionUrl =
-    SUPABASE_EDGE_FUNCTION_URL?.replace('/break-task', '/delete-user') ||
-    process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$|$/, '/functions/v1/delete-user');
-
-  if (!edgeFunctionUrl) {
+  const url = functionUrl(name);
+  if (!url) {
     throw new Error('Edge function URL not configured');
   }
+  return { url, token: session.access_token };
+}
 
+// The server's own message is safe to show; it never carries internals.
+function toUserFacingError(error: unknown, fallbackMessage: string): Error {
+  if (isAxiosError<{ error?: string }>(error) && error.response) {
+    return new Error(error.response.data?.error || fallbackMessage);
+  }
+  return error instanceof Error ? error : new Error(fallbackMessage);
+}
+
+/** Deletes the account and, through cascading deletes, everything it owns (right to erasure). */
+export async function deleteUserAccount(): Promise<void> {
+  const { url, token } = await authorizedRequest('delete-user');
   try {
-    const response = await tracedAxios.delete(edgeFunctionUrl, {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (response.status !== 200) {
-      throw new Error('Failed to delete user account');
-    }
-  } catch (error: any) {
-    if (error.response) {
-      throw new Error(error.response.data?.error || 'Failed to delete user account');
-    }
-    throw error;
+    await tracedAxios.delete(url, { headers: { Authorization: `Bearer ${token}` } });
+  } catch (error) {
+    throw toUserFacingError(error, 'Failed to delete user account');
   }
 }
 
-/**
- * Export user data (GDPR Right to Data Portability)
- * @returns User data as JSON object
- */
-export async function exportUserData(): Promise<any> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('No active session. Please sign in first.');
-  }
-
-  const edgeFunctionUrl =
-    SUPABASE_EDGE_FUNCTION_URL?.replace('/break-task', '/export-user-data') ||
-    process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$|$/, '/functions/v1/export-user-data');
-
-  if (!edgeFunctionUrl) {
-    throw new Error('Edge function URL not configured');
-  }
-
+/** Everything stored about the signed-in user (right of access and portability). */
+export async function exportUserData(): Promise<UserDataExport> {
+  const { url, token } = await authorizedRequest('export-user-data');
   try {
-    const response = await tracedAxios.get(edgeFunctionUrl, {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
+    const response = await tracedAxios.get<UserDataExport>(url, {
+      headers: { Authorization: `Bearer ${token}` },
     });
-
-    if (response.status !== 200) {
-      throw new Error('Failed to export user data');
-    }
-
     return response.data;
-  } catch (error: any) {
-    if (error.response) {
-      throw new Error(error.response.data?.error || 'Failed to export user data');
-    }
-    throw error;
+  } catch (error) {
+    throw toUserFacingError(error, 'Failed to export user data');
   }
 }

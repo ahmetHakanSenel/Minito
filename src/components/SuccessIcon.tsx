@@ -78,14 +78,15 @@ export const SuccessIcon: React.FC<SuccessIconProps> = ({
         withSpring(1, {
           damping: 10,
           stiffness: 150,
+          mass: 1,
         })
       );
 
       // Continuous glow pulse - Spring Physics
       glowOpacity.value = withRepeat(
         withSequence(
-          withSpring(0.8, { damping: 10, stiffness: 80 }),
-          withSpring(0.4, { damping: 10, stiffness: 80 })
+          withSpring(0.8, { damping: 10, stiffness: 80, mass: 1 }),
+          withSpring(0.4, { damping: 10, stiffness: 80, mass: 1 })
         ),
         -1,
         true
@@ -93,8 +94,8 @@ export const SuccessIcon: React.FC<SuccessIconProps> = ({
 
       glowScale.value = withRepeat(
         withSequence(
-          withSpring(1.15, { damping: 10, stiffness: 80 }),
-          withSpring(1, { damping: 10, stiffness: 80 })
+          withSpring(1.15, { damping: 10, stiffness: 80, mass: 1 }),
+          withSpring(1, { damping: 10, stiffness: 80, mass: 1 })
         ),
         -1,
         true
@@ -105,7 +106,7 @@ export const SuccessIcon: React.FC<SuccessIconProps> = ({
       glowOpacity.value = 0.6;
       glowScale.value = 1;
     }
-  }, [animated]);
+  }, [animated, glowOpacity, glowScale, iconScale, scale]);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

@@ -1,38 +1,40 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
+  AppState,
+  Modal,
+  Platform,
+  Pressable,
+  StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
-  StyleSheet,
-  Modal,
-  Dimensions,
-  Platform,
-  StatusBar,
+  View,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Pause, Play, Smartphone } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pause, Play, Smartphone, X } from 'lucide-react-native';
 import Animated, {
+  Easing,
   FadeIn,
   FadeOut,
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  Easing,
+  ReduceMotion,
   cancelAnimation,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Accelerometer } from 'expo-sensors';
+import { createPickupDetector, magnitude } from '../lib/focus/pickupDetector';
 import { useTranslation } from 'react-i18next';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const AnimatedView = Animated.createAnimatedComponent(View);
-const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
+import { haptics } from '../lib/ui/haptics';
+import { formatCountdown, formatWallClock, secondsLeft } from '../lib/time/duration';
 
 // ============================================================================
 // TYPES
@@ -57,9 +59,103 @@ export interface FocusSessionResult {
 }
 
 // ============================================================================
-// FOCUS MODE COMPONENT - ZEN MODE
+// TUNING
 // ============================================================================
 
+// How the phone decides it has been picked up lives in lib/focus/pickupDetector, where the rule
+// can be tested against a stream of samples. Ten readings a second is enough for a rule measured
+// in seconds, and cheap enough to run for an hour.
+const SENSOR_INTERVAL_MS = 100;
+// A grace period after starting, resuming or turning the phone: settling it is not a pickup.
+const PICKUP_ARM_DELAY_MS = 3_000;
+const WARNING_VISIBLE_MS = 3_500;
+// Below this, leaving is a change of mind rather than a session; recording it would only add
+// noise to the history.
+const MIN_RECORDED_SESSION_SEC = 60;
+const CONTROLS_HIDE_MS = 4_000;
+const TICK_MS = 250;
+
+const noop = () => {};
+
+/**
+ * The ring sweeping toward the end of a session. It is a reading of the time left, not decoration,
+ * so it ignores the system's reduce-motion setting: honoring it would make Reanimated jump the ring
+ * to full the moment a session starts. A sweep this slow is not the motion that setting guards against.
+ */
+const ringTiming = (durationMs: number) => ({
+  duration: durationMs,
+  easing: Easing.linear,
+  reduceMotion: ReduceMotion.Never,
+});
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// ============================================================================
+// PROGRESS RING
+// ============================================================================
+
+type ProgressRingProps = {
+  size: number;
+  progress: SharedValue<number>;
+  children: React.ReactNode;
+};
+
+function ProgressRing({ size, progress, children }: ProgressRingProps) {
+  const strokeWidth = Math.max(6, Math.round(size * 0.028));
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const center = size / 2;
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - progress.value),
+  }));
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <SvgGradient id="focusRing" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#8B5CF6" />
+            <Stop offset="1" stopColor="#D946EF" />
+          </SvgGradient>
+        </Defs>
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke="rgba(139, 92, 246, 0.14)"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <AnimatedCircle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke="url(#focusRing)"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${circumference} ${circumference}`}
+          animatedProps={animatedProps}
+          // Start at twelve o'clock and fill clockwise.
+          transform={`rotate(-90 ${center} ${center})`}
+        />
+      </Svg>
+      {children}
+    </View>
+  );
+}
+
+// ============================================================================
+// FOCUS MODE
+// ============================================================================
+
+/**
+ * The timed focus session: one countdown, readable from across a desk, in either orientation.
+ *
+ * Time is kept against an absolute end timestamp rather than by counting interval ticks, so a
+ * throttled JS thread or a pause can never make the clock drift.
+ */
 export const FocusMode: React.FC<FocusModeProps> = ({
   visible,
   onClose,
@@ -69,553 +165,321 @@ export const FocusMode: React.FC<FocusModeProps> = ({
   taskId,
   onSessionComplete,
 }) => {
-  // Keep the screen awake only while a session is actually on screen.
-  // This component stays mounted (hidden) inside every ProjectCard, so an
-  // unconditional useKeepAwake() would fire one activation per card — and
-  // an activation attempted with no resumed Activity rejects with
-  // "Unable to activate keep awake", surfacing as an unhandled rejection.
+  const { t } = useTranslation();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isLandscape = width > height;
+
+  const [remaining, setRemaining] = useState(duration);
+  const [isPaused, setIsPaused] = useState(false);
+  const [clock, setClock] = useState(() => formatWallClock(new Date()));
+  const [pickupCount, setPickupCount] = useState(0);
+  const [isWarning, setIsWarning] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+
+  const endAtRef = useRef(0);
+  const pausedRemainingMsRef = useRef(0);
+  const finishedRef = useRef(false);
+  const pickupsRef = useRef(0);
+  const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const progress = useSharedValue(0);
+  const controlsOpacity = useSharedValue(1);
+  const warningOpacity = useSharedValue(0);
+
+  // --------------------------------------------------------------------------
+  // Controls: visible on open and while paused, otherwise fade out and wait for a tap.
+  // --------------------------------------------------------------------------
+
+  const scheduleHide = useCallback(() => {
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => {
+      controlsOpacity.value = withTiming(0, { duration: 500 });
+      setControlsVisible(false);
+    }, CONTROLS_HIDE_MS);
+  }, [controlsOpacity]);
+
+  const revealControls = useCallback(() => {
+    controlsOpacity.value = withTiming(1, { duration: 200 });
+    setControlsVisible(true);
+    scheduleHide();
+  }, [controlsOpacity, scheduleHide]);
+
+  // --------------------------------------------------------------------------
+  // Session lifecycle
+  // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!visible) return;
 
-    let released = false;
-    const tag = `minito-focus-${Math.random().toString(36).slice(2, 9)}`;
-
-    activateKeepAwakeAsync(tag).catch((error) => {
-      console.warn('Keep awake could not be activated:', error);
-    });
-
-    return () => {
-      if (released) return;
-      released = true;
-      // Returns a promise: a rejection here must be caught, not thrown
-      deactivateKeepAwake(tag).catch((error) => {
-        console.warn('Keep awake could not be deactivated:', error);
-      });
-    };
-  }, [visible]);
-
-  // Localization
-  const { t } = useTranslation();
-
-  // Timer state
-  const [remaining, setRemaining] = useState(duration);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
-
-  // Orientation state
-  const [isLandscape, setIsLandscape] = useState(false);
-  const [dimensions, setDimensions] = useState({ width: SCREEN_WIDTH, height: SCREEN_HEIGHT });
-
-  // Clock state
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Sensor state
-  const [pickupCount, setPickupCount] = useState(0);
-  const [showPickupWarning, setShowPickupWarning] = useState(false);
-  const accelerometerSubscription = useRef<{ remove: () => void } | null>(null);
-  const lastAcceleration = useRef({ x: 0, y: 0, z: 0 });
-  const warningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // UI state - Immersive Mode
-  const [showControls, setShowControls] = useState(true);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Animation values
-  const progressWidth = useSharedValue(0);
-  const controlsOpacity = useSharedValue(1);
-  const warningOpacity = useSharedValue(0);
-  const gradientProgress = useSharedValue(0);
-
-  // ========================================================================
-  // INITIALIZATION & CLEANUP
-  // ========================================================================
-
-  useEffect(() => {
-    if (visible) {
-      // Unlock orientation for this screen
-      ScreenOrientation.unlockAsync();
-
-      // IMMERSIVE MODE: Hide status bar immediately for zero distractions
-      if (Platform.OS === 'android') {
-        StatusBar.setHidden(true, 'fade');
-        // Also hide navigation bar initially for full immersion
-        NavigationBar.setVisibilityAsync('hidden');
-        NavigationBar.setBehaviorAsync('overlay-swipe');
-        NavigationBar.setBackgroundColorAsync('transparent');
-        NavigationBar.setPositionAsync('absolute');
-      } else {
-        // iOS
-        StatusBar.setHidden(true, 'fade');
-      }
-
-      // Listen for orientation changes
-      const subscription = ScreenOrientation.addOrientationChangeListener((event) => {
-        const orientation = event.orientationInfo.orientation;
-        const landscape =
-          orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
-          orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
-        setIsLandscape(landscape);
-
-        // Keep status bar hidden in ALL orientations for Focus mode
-        if (Platform.OS === 'android') {
-          StatusBar.setHidden(true, 'fade');
-          if (landscape) {
-            // Full immersive for landscape
-            NavigationBar.setVisibilityAsync('hidden');
-            NavigationBar.setBehaviorAsync('overlay-swipe');
-            NavigationBar.setBackgroundColorAsync('transparent');
-            NavigationBar.setPositionAsync('absolute');
-          } else {
-            // Portrait: keep nav bar hidden too for consistency
-            NavigationBar.setVisibilityAsync('hidden');
-            NavigationBar.setBehaviorAsync('overlay-swipe');
-          }
-        }
-
-        // Update dimensions
-        const { width, height } = Dimensions.get('window');
-        setDimensions({ width, height });
-      });
-
-      // Initial setup
-      setRemaining(duration);
-      setIsRunning(true);
-      setIsPaused(false);
-      setPickupCount(0);
-      startTimeRef.current = Date.now();
-      startAccelerometerTracking();
-      startClockUpdates();
-      startProgressAnimation();
-      hideControlsAfterDelay();
-
-      return () => {
-        subscription.remove();
-        cleanup();
-        // Lock orientation back to portrait when leaving
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        // Restore navigation bar and status bar
-        if (Platform.OS === 'android') {
-          NavigationBar.setVisibilityAsync('visible');
-          NavigationBar.setBackgroundColorAsync('#050510');
-          NavigationBar.setPositionAsync('relative');
-          StatusBar.setHidden(false, 'fade');
-        } else {
-          StatusBar.setHidden(false, 'fade');
-        }
-      };
-    } else {
-      cleanup();
-    }
-  }, [visible, duration]);
-
-  // Timer effect
-  useEffect(() => {
-    if (isRunning && !isPaused) {
-      timerRef.current = setInterval(() => {
-        setRemaining((prev) => {
-          if (prev <= 1) {
-            handleTimerComplete();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [isRunning, isPaused]);
-
-  const cleanup = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (clockIntervalRef.current) {
-      clearInterval(clockIntervalRef.current);
-      clockIntervalRef.current = null;
-    }
-    if (accelerometerSubscription.current) {
-      accelerometerSubscription.current.remove();
-      accelerometerSubscription.current = null;
-    }
-    if (warningTimeoutRef.current) {
-      clearTimeout(warningTimeoutRef.current);
-      warningTimeoutRef.current = null;
-    }
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-      controlsTimeoutRef.current = null;
-    }
-    cancelAnimation(progressWidth);
-    cancelAnimation(gradientProgress);
-    setIsRunning(false);
+    finishedRef.current = false;
+    pickupsRef.current = 0;
+    endAtRef.current = Date.now() + duration * 1000;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a session starts from zero every time it opens
+    setPickupCount(0);
     setIsPaused(false);
-  }, []);
+    setIsWarning(false);
+    setRemaining(duration);
+    setClock(formatWallClock(new Date()));
 
-  // ========================================================================
-  // CLOCK UPDATES (Every minute for remaining, every second for clock)
-  // ========================================================================
+    cancelAnimation(progress);
+    progress.value = 0;
+    progress.value = withTiming(1, ringTiming(duration * 1000));
+    warningOpacity.value = 0;
+    revealControls();
 
-  const startClockUpdates = useCallback(() => {
-    // Update clock every second
-    clockIntervalRef.current = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-  }, []);
+    return () => {
+      cancelAnimation(progress);
+      if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [visible, duration, progress, warningOpacity, revealControls]);
 
-  // ========================================================================
-  // PROGRESS ANIMATION (Smooth, fluid)
-  // ========================================================================
-
-  const startProgressAnimation = useCallback(() => {
-    // Animate progress smoothly over the entire duration
-    progressWidth.value = 0;
-    progressWidth.value = withTiming(100, {
-      duration: duration * 1000,
-      easing: Easing.linear,
+  // Returning from the background: the digits are already right, the ring is not.
+  useEffect(() => {
+    if (!visible || isPaused) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const leftMs = Math.max(0, endAtRef.current - Date.now());
+      cancelAnimation(progress);
+      progress.value = duration > 0 ? 1 - leftMs / (duration * 1000) : 1;
+      if (leftMs > 0) {
+        progress.value = withTiming(1, ringTiming(leftMs));
+      }
     });
+    return () => subscription.remove();
+  }, [visible, isPaused, duration, progress]);
 
-    // Subtle gradient animation
-    gradientProgress.value = withTiming(1, {
-      duration: 8000,
-      easing: Easing.inOut(Easing.sin),
-    });
-  }, [duration]);
+  // The countdown: derived from the end timestamp on every tick.
+  useEffect(() => {
+    if (!visible || isPaused) return;
+    const tick = () => {
+      const left = secondsLeft(endAtRef.current, Date.now());
+      setRemaining(left);
+      const nextClock = formatWallClock(new Date());
+      setClock((current) => (current === nextClock ? current : nextClock));
+    };
+    tick();
+    const id = setInterval(tick, TICK_MS);
+    return () => clearInterval(id);
+  }, [visible, isPaused]);
 
-  // ========================================================================
-  // IMMERSIVE MODE - Hide/Show Controls
-  // ========================================================================
-
-  const hideControlsAfterDelay = useCallback(() => {
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    controlsTimeoutRef.current = setTimeout(() => {
-      controlsOpacity.value = withTiming(0, { duration: 500 });
-      setShowControls(false);
-    }, 3000);
-  }, []);
-
-  const handleScreenTap = useCallback(() => {
-    if (!showControls) {
-      setShowControls(true);
-      controlsOpacity.value = withTiming(1, { duration: 200 });
-    }
-    hideControlsAfterDelay();
-  }, [showControls, hideControlsAfterDelay]);
-
-  // ========================================================================
-  // TIMER HANDLERS
-  // ========================================================================
-
-  const handleTimerComplete = useCallback(() => {
-    cleanup();
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  // Completion runs in an effect, never inside a state updater: reporting it updates the parent,
+  // and doing that while React is still computing this component's state is exactly what used to
+  // throw "Cannot update a component while rendering a different component".
+  useEffect(() => {
+    if (!visible || isPaused || remaining > 0 || finishedRef.current) return;
+    // `remaining` can still hold the previous session's zero in the commit that reopens the
+    // modal; the end timestamp is the authority on whether this session is really over.
+    if (Date.now() < endAtRef.current) return;
+    finishedRef.current = true;
+    haptics.success();
     onSessionComplete({
-      duration: duration - remaining,
-      pickupCount,
+      duration,
+      pickupCount: pickupsRef.current,
       completed: true,
       projectId,
       taskId,
     });
-  }, [duration, remaining, pickupCount, projectId, taskId, onSessionComplete, cleanup]);
-
-  const handleCancel = useCallback(() => {
-    cleanup();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onClose();
-  }, [cleanup, onClose]);
+  }, [visible, isPaused, remaining, duration, projectId, taskId, onSessionComplete]);
 
   const togglePause = useCallback(() => {
-    setIsPaused((prev) => {
-      if (prev) {
-        // Resuming - restart progress animation from current point
-        const elapsed = duration - remaining;
-        const remainingProgress = (remaining / duration) * 100;
-        progressWidth.value = 100 - remainingProgress;
-        progressWidth.value = withTiming(100, {
-          duration: remaining * 1000,
-          easing: Easing.linear,
-        });
-      } else {
-        // Pausing - cancel animation
-        cancelAnimation(progressWidth);
-      }
-      return !prev;
-    });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [remaining, duration]);
-
-  // ========================================================================
-  // ACCELEROMETER (PHONE PICKUP DETECTION)
-  // ========================================================================
-
-  const startAccelerometerTracking = useCallback(() => {
-    Accelerometer.setUpdateInterval(500);
-
-    accelerometerSubscription.current = Accelerometer.addListener((data) => {
-      const { x, y, z } = data;
-      const last = lastAcceleration.current;
-
-      const deltaX = Math.abs(x - last.x);
-      const deltaY = Math.abs(y - last.y);
-      const deltaZ = Math.abs(z - last.z);
-      const totalDelta = deltaX + deltaY + deltaZ;
-
-      const MOVEMENT_THRESHOLD = 1.2;
-
-      if (totalDelta > MOVEMENT_THRESHOLD) {
-        triggerPickupWarning();
-      }
-
-      lastAcceleration.current = { x, y, z };
-    });
-  }, []);
-
-  const triggerPickupWarning = useCallback(() => {
-    setPickupCount((prev) => prev + 1);
-    setShowPickupWarning(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    // Smooth cross-fade animation (800ms as per spec)
-    warningOpacity.value = withTiming(1, {
-      duration: 800,
-      easing: Easing.inOut(Easing.ease),
-    });
-
-    if (warningTimeoutRef.current) {
-      clearTimeout(warningTimeoutRef.current);
+    haptics.tap();
+    if (isPaused) {
+      endAtRef.current = Date.now() + pausedRemainingMsRef.current;
+      progress.value = withTiming(1, ringTiming(pausedRemainingMsRef.current));
+      setIsPaused(false);
+      revealControls();
+      return;
     }
+    pausedRemainingMsRef.current = Math.max(0, endAtRef.current - Date.now());
+    cancelAnimation(progress);
+    progress.value = duration > 0 ? 1 - pausedRemainingMsRef.current / (duration * 1000) : 1;
+    setIsPaused(true);
+    // A paused session keeps its controls on screen: there is nothing to hide them for.
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsOpacity.value = withTiming(1, { duration: 200 });
+    setControlsVisible(true);
+  }, [isPaused, duration, progress, controlsOpacity, revealControls]);
 
-    warningTimeoutRef.current = setTimeout(() => {
-      warningOpacity.value = withTiming(0, {
-        duration: 800,
-        easing: Easing.inOut(Easing.ease),
+  const handleClose = useCallback(() => {
+    haptics.tap();
+    const elapsed = Math.max(0, duration - remaining);
+    if (!finishedRef.current && elapsed >= MIN_RECORDED_SESSION_SEC) {
+      // Time spent is time spent. It is reported as unfinished, so nothing celebrates it.
+      finishedRef.current = true;
+      onSessionComplete({
+        duration: elapsed,
+        pickupCount: pickupsRef.current,
+        completed: false,
+        projectId,
+        taskId,
       });
-      setTimeout(() => setShowPickupWarning(false), 800);
-    }, 4000);
-  }, []);
+      return;
+    }
+    onClose();
+  }, [onClose, onSessionComplete, duration, remaining, projectId, taskId]);
 
-  // ========================================================================
-  // FORMAT HELPERS
-  // ========================================================================
+  // --------------------------------------------------------------------------
+  // Pickup detection
+  // --------------------------------------------------------------------------
 
-  const formatClockTime = (date: Date) => {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
+  // Deliberately silent. The phone is already in the reader's hand when this fires, so the
+  // message is seen without a buzz, and a vibration at that moment lands as a telling-off —
+  // the opposite of what an app for people who struggle to start should do.
+  const flashWarning = useCallback(() => {
+    setIsWarning(true);
+    warningOpacity.value = withTiming(1, { duration: 400 });
+    if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
+    warningTimeoutRef.current = setTimeout(() => {
+      warningOpacity.value = withTiming(0, { duration: 600 });
+      setIsWarning(false);
+    }, WARNING_VISIBLE_MS);
+  }, [warningOpacity]);
 
-  const formatRemainingMinutes = (seconds: number) => {
-    const minutes = Math.ceil(seconds / 60);
-    // Zen-Engineer format: No "remaining/kaldı" - just clean info
-    return `${minutes} dk • ${t('focusMode.focusLabel')}`;
-  };
+  useEffect(() => {
+    if (!visible || isPaused) return;
+    const armedAt = Date.now() + PICKUP_ARM_DELAY_MS;
+    const detector = createPickupDetector(Date.now());
 
-  // ========================================================================
-  // ANIMATED STYLES
-  // ========================================================================
+    Accelerometer.setUpdateInterval(SENSOR_INTERVAL_MS);
+    const subscription = Accelerometer.addListener((reading) => {
+      const now = Date.now();
+      // Samples before the grace period still feed the detector, so putting the phone down
+      // during it drains the budget rather than leaving it primed to fire straight after.
+      const pickedUp = detector.sample(magnitude(reading), now);
+      if (!pickedUp || now < armedAt) return;
+      pickupsRef.current += 1;
+      setPickupCount(pickupsRef.current);
+      flashWarning();
+    });
+    return () => subscription.remove();
+  }, [visible, isPaused, flashWarning]);
 
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progressWidth.value}%`,
-  }));
+  // --------------------------------------------------------------------------
+  // Device state: orientation, immersive bars, keep-awake
+  // --------------------------------------------------------------------------
 
-  const controlsStyle = useAnimatedStyle(() => ({
-    opacity: controlsOpacity.value,
-  }));
+  useEffect(() => {
+    if (!visible) return;
+    ScreenOrientation.unlockAsync().catch(noop);
+    StatusBar.setHidden(true, 'fade');
+    if (Platform.OS === 'android') {
+      // Edge-to-edge apps may only toggle visibility; colour and position are the system's.
+      NavigationBar.setVisibilityAsync('hidden').catch(noop);
+    }
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(noop);
+      StatusBar.setHidden(false, 'fade');
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible').catch(noop);
+      }
+    };
+  }, [visible]);
 
-  const warningStyle = useAnimatedStyle(() => ({
-    opacity: warningOpacity.value,
-  }));
+  // This component stays mounted (hidden) inside every ProjectCard, so keep-awake is tied to
+  // visibility; an activation with no resumed Activity would otherwise reject.
+  useEffect(() => {
+    if (!visible) return;
+    const tag = `minito-focus-${Math.random().toString(36).slice(2, 9)}`;
+    activateKeepAwakeAsync(tag).catch(noop);
+    return () => {
+      deactivateKeepAwake(tag).catch(noop);
+    };
+  }, [visible]);
 
-  const gradientStyle = useAnimatedStyle(() => ({
-    opacity: 0.3 + gradientProgress.value * 0.2,
-  }));
+  // --------------------------------------------------------------------------
+  // Render
+  // --------------------------------------------------------------------------
 
-  // ========================================================================
-  // RENDER - LANDSCAPE MODE (Desk Clock)
-  // ========================================================================
+  const controlsStyle = useAnimatedStyle(() => ({ opacity: controlsOpacity.value }));
+  const warningStyle = useAnimatedStyle(() => ({ opacity: warningOpacity.value }));
+  const labelStyle = useAnimatedStyle(() => ({ opacity: 1 - warningOpacity.value }));
 
-  const renderLandscapeMode = () => (
-    <View style={styles.landscapeContainer}>
-      {/* StatusBar hidden for true fullscreen - we hide it programmatically too */}
-      <StatusBar translucent backgroundColor="transparent" hidden={true} barStyle="light-content" />
+  const countdown = formatCountdown(remaining);
+  const ringSize = isLandscape
+    ? Math.min(height - insets.top - insets.bottom - 48, width * 0.46)
+    : Math.min(width * 0.8, height * 0.48, 420);
+  // Long countdowns (1:04:05) need a smaller face to fit the ring.
+  const digitSize = ringSize * (countdown.length > 5 ? 0.18 : 0.24);
+  const controlsPointerEvents = controlsVisible ? 'auto' : 'none';
 
-      {/* Pure black OLED background - fills entire screen including notch */}
-      <View style={styles.landscapeBackground} />
-
-      {/* Centered Clock */}
-      <View style={styles.landscapeClockContainer}>
-        <Text style={styles.landscapeClock}>{formatClockTime(currentTime)}</Text>
-        {/* Ghost Text: Remaining or Warning - smooth cross-fade */}
-        <View style={styles.ghostTextContainer}>
-          <Animated.Text
-            style={[styles.landscapeRemaining, { opacity: showPickupWarning ? 0 : 1 }]}
-          >
-            {formatRemainingMinutes(remaining)}
-          </Animated.Text>
-          <Animated.Text
-            style={[styles.landscapeWarningText, warningStyle, { position: 'absolute' }]}
-          >
-            {t('focusMode.gentleWarning')}
-          </Animated.Text>
-        </View>
-      </View>
-
-      {/* Bottom Progress Line */}
-      <View style={styles.landscapeProgressContainer}>
-        <Animated.View style={[styles.landscapeProgressFill, progressStyle]}>
-          <LinearGradient
-            colors={['#8B5CF6', '#A855F7', '#D946EF']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
-      </View>
-
-      {/* Hidden controls - tap to show */}
-      <TouchableWithoutFeedback onPress={handleScreenTap}>
-        <View style={StyleSheet.absoluteFill}>
-          <AnimatedView style={[styles.landscapeControls, controlsStyle]}>
-            <TouchableOpacity onPress={handleCancel} style={styles.landscapeButton}>
-              <X size={28} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={togglePause} style={styles.landscapeButton}>
-              {isPaused ? (
-                <Play size={28} color="#34D399" fill="#34D399" />
-              ) : (
-                <Pause size={28} color="rgba(255,255,255,0.7)" />
-              )}
-            </TouchableOpacity>
-          </AnimatedView>
-        </View>
-      </TouchableWithoutFeedback>
+  const statusLine = (
+    <View style={styles.statusLine}>
+      <Animated.Text style={[styles.statusText, labelStyle]}>
+        {isPaused ? t('focusMode.paused') : t('focusMode.focusLabel')}
+      </Animated.Text>
+      <Animated.Text
+        style={[styles.statusText, styles.warningText, styles.overlayText, warningStyle]}
+        accessibilityLiveRegion="polite"
+      >
+        {isWarning ? t('focusMode.gentleWarning') : ''}
+      </Animated.Text>
     </View>
   );
 
-  // ========================================================================
-  // RENDER - PORTRAIT MODE (Zen Mode)
-  // ========================================================================
-
-  const renderPortraitMode = () => (
-    <TouchableWithoutFeedback onPress={handleScreenTap}>
-      <View style={styles.container}>
-        {/* Deep Mesh Gradient Background */}
-        <AnimatedLinearGradient
-          colors={['#0a0a0f', '#1a0a2e', '#0f1419', '#0a0a0f']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, gradientStyle]}
-        />
-
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          {/* Header - Hidden by default */}
-          <AnimatedView style={[styles.header, controlsStyle]}>
-            <TouchableOpacity
-              onPress={handleCancel}
-              style={styles.closeButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <X size={24} color="rgba(255,255,255,0.5)" />
-            </TouchableOpacity>
-
-            <Text style={styles.taskTitle} numberOfLines={1}>
-              {taskTitle}
-            </Text>
-
-            <View style={styles.closeButton} />
-          </AnimatedView>
-
-          {/* Main Content */}
-          <View style={styles.content}>
-            {/* Current Clock Time (Large) */}
-            <View style={styles.clockContainer}>
-              <Text style={styles.clockTime}>{formatClockTime(currentTime)}</Text>
-            </View>
-
-            {/* Ghost Text: Remaining Time or Warning - smooth cross-fade */}
-            <View style={styles.portraitGhostContainer}>
-              <Animated.Text style={[styles.remainingText, { opacity: showPickupWarning ? 0 : 1 }]}>
-                {formatRemainingMinutes(remaining)}
-              </Animated.Text>
-              <Animated.Text
-                style={[styles.portraitWarningText, warningStyle, { position: 'absolute' }]}
-              >
-                {t('focusMode.gentleWarning')}
-              </Animated.Text>
-            </View>
-
-            {/* Progress Bar (No percentage, smooth) */}
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <Animated.View style={[styles.progressFill, progressStyle]}>
-                  <LinearGradient
-                    colors={['#8B5CF6', '#A855F7']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                </Animated.View>
-              </View>
-            </View>
-
-            {/* Pause Button - Hidden by default */}
-            <AnimatedView style={[styles.pauseContainer, controlsStyle]}>
-              <TouchableOpacity
-                style={styles.pauseButton}
-                onPress={togglePause}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={
-                    isPaused
-                      ? ['#34D399', '#10B981']
-                      : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']
-                  }
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.pauseButtonGradient}
-                >
-                  {isPaused ? (
-                    <Play size={24} color="#FFFFFF" fill="#FFFFFF" />
-                  ) : (
-                    <Pause size={24} color="rgba(255,255,255,0.6)" />
-                  )}
-                  <Text style={[styles.pauseButtonText, !isPaused && styles.pauseButtonTextMuted]}>
-                    {isPaused ? 'Devam Et' : 'Duraklat'}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </AnimatedView>
-
-            {/* Pickup Count (Subtle) */}
-            {pickupCount > 0 && (
-              <View style={styles.pickupIndicator}>
-                <Smartphone size={14} color="rgba(255,255,255,0.3)" />
-                <Text style={styles.pickupText}>{pickupCount}</Text>
-              </View>
-            )}
-          </View>
-        </SafeAreaView>
-      </View>
-    </TouchableWithoutFeedback>
+  const ring = (
+    <ProgressRing size={ringSize} progress={progress}>
+      <Text
+        style={[styles.countdown, { fontSize: digitSize }, isPaused && styles.countdownPaused]}
+        accessibilityRole="timer"
+        accessibilityLabel={t('focusMode.remainingA11y', { time: countdown })}
+      >
+        {countdown}
+      </Text>
+      <Text style={[styles.clock, { fontSize: Math.max(13, ringSize * 0.05) }]}>{clock}</Text>
+    </ProgressRing>
   );
 
-  // ========================================================================
-  // MAIN RENDER
-  // ========================================================================
+  const pauseButton = (
+    <TouchableOpacity
+      onPress={togglePause}
+      activeOpacity={0.8}
+      style={[styles.pauseButton, isPaused && styles.pauseButtonActive]}
+      accessibilityRole="button"
+      accessibilityLabel={isPaused ? t('focusMode.resume') : t('focusMode.pause')}
+    >
+      {isPaused ? (
+        <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+      ) : (
+        <Pause size={20} color="rgba(255,255,255,0.75)" />
+      )}
+      <Text style={[styles.pauseText, !isPaused && styles.pauseTextMuted]}>
+        {isPaused ? t('focusMode.resume') : t('focusMode.pause')}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const closeButton = (
+    <TouchableOpacity
+      onPress={handleClose}
+      style={styles.iconButton}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      accessibilityRole="button"
+      accessibilityLabel={t('focusMode.end')}
+    >
+      <X size={22} color="rgba(255,255,255,0.6)" />
+    </TouchableOpacity>
+  );
+
+  const pickups =
+    pickupCount > 0 ? (
+      <View
+        style={styles.pickups}
+        accessibilityLabel={t('focusMode.pickupsA11y', { count: pickupCount })}
+      >
+        <Smartphone size={13} color="rgba(255,255,255,0.35)" />
+        <Text style={styles.pickupsText}>{pickupCount}</Text>
+      </View>
+    ) : null;
+
+  const edges = {
+    paddingTop: insets.top + 12,
+    paddingBottom: insets.bottom + 12,
+    paddingLeft: insets.left + 20,
+    paddingRight: insets.right + 20,
+  };
 
   return (
     <Modal
@@ -623,16 +487,72 @@ export const FocusMode: React.FC<FocusModeProps> = ({
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={handleCancel}
+      navigationBarTranslucent
+      onRequestClose={handleClose}
       supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
     >
-      <AnimatedView
+      <Animated.View
         entering={FadeIn.duration(300)}
         exiting={FadeOut.duration(200)}
-        style={styles.modalContainer}
+        style={styles.root}
       >
-        {isLandscape ? renderLandscapeMode() : renderPortraitMode()}
-      </AnimatedView>
+        <LinearGradient
+          colors={['#05050A', '#140A26', '#07070D']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <Pressable style={[styles.fill, edges]} onPress={revealControls}>
+          {isLandscape ? (
+            <View style={styles.landscape}>
+              <View style={styles.landscapeRing}>{ring}</View>
+              <View style={styles.landscapeSide}>
+                <Animated.View
+                  style={[styles.landscapeTop, controlsStyle]}
+                  pointerEvents={controlsPointerEvents}
+                >
+                  <Text style={styles.title} numberOfLines={2}>
+                    {taskTitle}
+                  </Text>
+                  {closeButton}
+                </Animated.View>
+                {statusLine}
+                <Animated.View style={controlsStyle} pointerEvents={controlsPointerEvents}>
+                  {pauseButton}
+                </Animated.View>
+                {pickups}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.portrait}>
+              <Animated.View
+                style={[styles.portraitTop, controlsStyle]}
+                pointerEvents={controlsPointerEvents}
+              >
+                {closeButton}
+                <Text style={[styles.title, styles.portraitTitle]} numberOfLines={1}>
+                  {taskTitle}
+                </Text>
+                <View style={styles.iconButton} />
+              </Animated.View>
+
+              <View style={styles.portraitCenter}>
+                {ring}
+                {statusLine}
+              </View>
+
+              <Animated.View
+                style={[styles.portraitBottom, controlsStyle]}
+                pointerEvents={controlsPointerEvents}
+              >
+                {pauseButton}
+              </Animated.View>
+              {pickups}
+            </View>
+          )}
+        </Pressable>
+      </Animated.View>
     </Modal>
   );
 };
@@ -642,255 +562,146 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 // ============================================================================
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  root: {
     flex: 1,
     backgroundColor: '#000000',
-    width: '100%',
-    height: '100%',
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0f',
-  },
-  safeArea: {
+  fill: {
     flex: 1,
   },
-  header: {
+  portrait: {
+    flex: 1,
+  },
+  portraitTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
   },
-  closeButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  taskTitle: {
+  portraitTitle: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
     marginHorizontal: 12,
   },
-  content: {
+  portraitCenter: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  warningContainer: {
-    position: 'absolute',
-    top: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(251, 191, 36, 0.15)',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
-  },
-  warningText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FBBF24',
-  },
-  clockContainer: {
-    marginBottom: 16,
-  },
-  clockTime: {
-    fontSize: 96,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -4,
-    fontVariant: ['tabular-nums'],
-    // Monospace font + Neon glow
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    textShadowColor: 'rgba(139, 92, 246, 0.6)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 15,
-  },
-  remainingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    // Zen-Engineer: Monospace Bold, 0.8 opacity (less aggressive than clock)
-    color: 'rgba(255,255,255,0.8)',
-    opacity: 0.8,
-    letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-  },
-  portraitGhostContainer: {
-    // Container for the cross-fade effect in portrait mode
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 48,
-    minHeight: 30,
+    gap: 28,
   },
-  portraitWarningText: {
-    fontSize: 18,
-    fontWeight: '700',
-    // Warning state: Soft red with glow
-    color: '#F87171',
-    letterSpacing: 1,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    textShadowColor: 'rgba(248, 113, 113, 0.6)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  progressContainer: {
-    width: '70%',
-    marginBottom: 48,
-  },
-  progressBar: {
-    // Neon Rail design: 6px height, visible in all lighting
-    height: 6,
-    backgroundColor: 'rgba(139,92,246,0.15)', // Faint violet track
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-    overflow: 'hidden',
-    // Neon glow effect
-    shadowColor: '#A855F7',
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  pauseContainer: {
-    marginTop: 20,
-  },
-  pauseButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  pauseButtonGradient: {
-    flexDirection: 'row',
+  portraitBottom: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingBottom: 28,
   },
-  pauseButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  pauseButtonTextMuted: {
-    color: 'rgba(255,255,255,0.5)',
-  },
-  pickupIndicator: {
-    position: 'absolute',
-    bottom: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  pickupText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.25)',
-  },
-
-  // Landscape Mode Styles (Desk Clock - True Fullscreen behind notch)
-  landscapeContainer: {
+  landscape: {
     flex: 1,
-    backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Critical: These ensure we draw behind the notch cutout
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-  },
-  landscapeBackground: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000000',
-  },
-  landscapeClockContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  landscapeClock: {
-    // Dynamic font size that scales - massive in landscape
-    fontSize: Math.min(Dimensions.get('window').width * 0.18, 160),
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -2,
-    fontVariant: ['tabular-nums'],
-    // Monospace font family as per spec
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    // Neon Tube glow effect
-    textShadowColor: 'rgba(139, 92, 246, 0.6)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 15,
-  },
-  ghostTextContainer: {
-    // Container for the cross-fade effect
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    minHeight: 30,
-  },
-  landscapeRemaining: {
-    fontSize: 20,
-    fontWeight: '600',
-    // Zen-Engineer: Monospace Bold, 0.8 opacity (less aggressive than clock)
-    color: 'rgba(255,255,255,0.8)',
-    opacity: 0.8,
-    letterSpacing: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-  },
-  landscapeWarningText: {
-    fontSize: 20,
-    fontWeight: '700',
-    // Warning state: Soft red with glow
-    color: '#F87171',
-    letterSpacing: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    textShadowColor: 'rgba(248, 113, 113, 0.6)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  landscapeProgressContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    // Neon Rail design: 5px height for landscape (desk mode visibility)
-    height: 5,
-    backgroundColor: 'rgba(139,92,246,0.12)', // Faint violet track
-  },
-  landscapeProgressFill: {
-    height: '100%',
-    overflow: 'hidden',
-    shadowColor: '#A855F7',
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  landscapeControls: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
     flexDirection: 'row',
+    alignItems: 'center',
+  },
+  landscapeRing: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landscapeSide: {
+    flex: 0.8,
+    height: '100%',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingLeft: 24,
+  },
+  landscapeTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
   },
-  landscapeButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
+  title: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  countdown: {
+    color: '#FFFFFF',
+    fontWeight: '200',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -1,
+    textShadowColor: 'rgba(139, 92, 246, 0.55)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
+  },
+  countdownPaused: {
+    opacity: 0.45,
+  },
+  clock: {
+    marginTop: 4,
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+  },
+  statusLine: {
+    minHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+  },
+  overlayText: {
+    position: 'absolute',
+  },
+  warningText: {
+    color: '#FCA5A5',
+    letterSpacing: 1.5,
+  },
+  pauseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  pauseButtonActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#34D399',
+  },
+  pauseText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  pauseTextMuted: {
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  pickups: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 4,
+  },
+  pickupsText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontVariant: ['tabular-nums'],
   },
 });
 

@@ -1,235 +1,253 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  withRepeat,
-  withSequence,
-  withDelay,
+  Easing,
+  Extrapolation,
   cancelAnimation,
   interpolate,
-  Extrapolate,
+  runOnJS,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
-import Svg, { Path, Circle, G, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+/**
+ * The moment a step is done: a seal that draws itself, a small burst of sparks, and a line saying
+ * how far along the person is. About a second, then the next step.
+ *
+ * It is short on purpose. The reward is the acknowledgement, not the wait; anything longer starts
+ * to stand between someone with momentum and their next action.
+ *
+ * Everything runs off one clock (0 → 1), and each element maps its own slice of that clock, so
+ * the choreography is deterministic and has no springs to overshoot.
+ */
+
+export const STEP_CELEBRATION_MS = 1050;
+
+// Keyframes, in milliseconds on the shared clock.
+const at = (ms: number) => ms / STEP_CELEBRATION_MS;
+const SCRIM_IN = [0, at(120)];
+const DISC_IN = [at(40), at(300)];
+const RING_DRAW = [at(60), at(400)];
+const CHECK_DRAW = [at(230), at(480)];
+const SPARKS = [at(250), at(760)];
+const LABEL_IN = [at(300), at(480)];
+const GLOW_FADE = [at(400), at(840)];
+const EXIT = [at(840), 1];
+
+const SEAL = 132;
+const CENTER = SEAL / 2;
+const RING_R = 61;
+const RING_LENGTH = 2 * Math.PI * RING_R;
+const CHECK_PATH = 'M47 67 L60 80 L86 53';
+const CHECK_LENGTH = 58;
+
+const SPARK_COLORS = ['#6EE7B7', '#A78BFA', '#F0ABFC', '#34D399'];
+const SPARK_COUNT = 10;
+const SPARK_REACH = 58;
+
+const easeOutBack = Easing.out(Easing.back(1.6));
+const easeOutCubic = Easing.out(Easing.cubic);
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+function slice(clock: number, [from, to]: number[]): number {
+  'worklet';
+  return interpolate(clock, [from, to], [0, 1], Extrapolation.CLAMP);
+}
 
 interface PremiumStepAnimationProps {
   visible: boolean;
   onComplete?: () => void;
-  isFinalStep?: boolean;
+  /** Steps done so far, including this one, and the total: shown under the seal. */
+  completedCount?: number;
+  totalSteps?: number;
 }
 
-const AnimatedSvg = Animated.createAnimatedComponent(Svg);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedPath = Animated.createAnimatedComponent(Path);
+function Spark({ index, clock }: { index: number; clock: SharedValue<number> }) {
+  // Evenly spread, with every other spark a little further and smaller, so the burst has depth.
+  const angle = (index / SPARK_COUNT) * Math.PI * 2 - Math.PI / 2;
+  const reach = SPARK_REACH * (index % 2 === 0 ? 1 : 0.78);
+  const size = index % 2 === 0 ? 9 : 6;
+
+  const style = useAnimatedStyle(() => {
+    const p = easeOutCubic(slice(clock.value, SPARKS));
+    return {
+      opacity: p === 0 ? 0 : interpolate(p, [0, 0.25, 1], [0, 1, 0]),
+      transform: [
+        { translateX: Math.cos(angle) * (RING_R - 6 + reach * p) },
+        { translateY: Math.sin(angle) * (RING_R - 6 + reach * p) },
+        { scale: interpolate(p, [0, 1], [1, 0.4]) },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.spark,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: SPARK_COLORS[index % SPARK_COLORS.length],
+        },
+        style,
+      ]}
+    />
+  );
+}
 
 export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
   visible,
   onComplete,
-  isFinalStep = false,
+  completedCount,
+  totalSteps,
 }) => {
-  const scale = useSharedValue(0);
-  const opacity = useSharedValue(0);
-  const rotation = useSharedValue(0);
-  const glowOpacity = useSharedValue(0);
-  const glowScale = useSharedValue(1);
-  const checkmarkProgress = useSharedValue(0);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { t } = useTranslation();
+  const clock = useSharedValue(0);
 
   useEffect(() => {
-    if (visible) {
-      // Cancel any running animations first
-      cancelAnimation(scale);
-      cancelAnimation(opacity);
-      cancelAnimation(rotation);
-      cancelAnimation(glowOpacity);
-      cancelAnimation(glowScale);
-      cancelAnimation(checkmarkProgress);
-
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
+    cancelAnimation(clock);
+    clock.value = 0;
+    if (!visible) return;
+    clock.value = withTiming(
+      1,
+      { duration: STEP_CELEBRATION_MS, easing: Easing.linear },
+      (done) => {
+        if (done && onComplete) runOnJS(onComplete)();
       }
+    );
+    return () => cancelAnimation(clock);
+    // onComplete is read when the clock finishes; restarting on its identity would replay it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, clock]);
 
-      // Reset all values to initial state
-      scale.value = 0;
-      opacity.value = 0;
-      rotation.value = 0;
-      glowOpacity.value = 0;
-      glowScale.value = 1;
-      checkmarkProgress.value = 0;
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: slice(clock.value, SCRIM_IN) * (1 - slice(clock.value, EXIT)),
+  }));
 
-      // Main container animation - Spring Physics
-      scale.value = withSpring(1, {
-        damping: 12,
-        mass: 0.8,
-        stiffness: 150,
-      });
-
-      opacity.value = withTiming(1, { duration: 200 });
-
-      rotation.value = withSpring(1, {
-        damping: 15,
-        stiffness: 100,
-      });
-
-      // Glow pulse - Spring Physics
-      glowOpacity.value = withRepeat(
-        withSequence(
-          withSpring(1, { damping: 10, stiffness: 80 }),
-          withSpring(0.3, { damping: 10, stiffness: 80 })
-        ),
-        3,
-        false
-      );
-
-      glowScale.value = withRepeat(
-        withSequence(
-          withSpring(1.4, { damping: 10, stiffness: 80 }),
-          withSpring(1, { damping: 10, stiffness: 80 })
-        ),
-        3,
-        false
-      );
-
-      // Checkmark drawing animation (handled separately for SVG)
-      checkmarkProgress.value = withDelay(
-        200,
-        withSpring(1, {
-          damping: 12,
-          stiffness: 120,
-        })
-      );
-
-      // Hide after animation
-      timeoutRef.current = setTimeout(
-        () => {
-          scale.value = withSpring(0, { damping: 12, stiffness: 150 });
-          opacity.value = withTiming(0, { duration: 300 });
-          onComplete?.();
-          timeoutRef.current = null;
-        },
-        isFinalStep ? 3000 : 2500
-      );
-    } else {
-      // When visible becomes false, immediately cancel all animations and reset
-      cancelAnimation(scale);
-      cancelAnimation(opacity);
-      cancelAnimation(rotation);
-      cancelAnimation(glowOpacity);
-      cancelAnimation(glowScale);
-      cancelAnimation(checkmarkProgress);
-
-      // Clear timeout if exists
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-
-      // Reset all values to initial state
-      scale.value = 0;
-      opacity.value = 0;
-      rotation.value = 0;
-      glowOpacity.value = 0;
-      glowScale.value = 1;
-      checkmarkProgress.value = 0;
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      cancelAnimation(scale);
-      cancelAnimation(opacity);
-      cancelAnimation(rotation);
-      cancelAnimation(glowOpacity);
-      cancelAnimation(glowScale);
-      cancelAnimation(checkmarkProgress);
+  const groupStyle = useAnimatedStyle(() => {
+    const exit = easeOutCubic(slice(clock.value, EXIT));
+    return {
+      opacity: 1 - exit,
+      transform: [{ scale: 1 - exit * 0.06 }, { translateY: -exit * 8 }],
     };
-  }, [visible, isFinalStep]);
+  });
 
-  // Animated styles
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { rotate: `${interpolate(rotation.value, [0, 1], [0, 360], Extrapolate.CLAMP)}deg` },
-    ],
-    opacity: opacity.value,
-  }));
+  const discStyle = useAnimatedStyle(() => {
+    const p = slice(clock.value, DISC_IN);
+    return {
+      opacity: p === 0 ? 0 : 1,
+      transform: [{ scale: interpolate(easeOutBack(p), [0, 1], [0.55, 1]) }],
+    };
+  });
 
-  const glowStyle1 = useAnimatedStyle(() => ({
-    opacity: interpolate(glowOpacity.value, [0, 1], [0.4, 1], Extrapolate.CLAMP),
-    transform: [{ scale: glowScale.value }],
-  }));
+  const glowStyle = useAnimatedStyle(() => {
+    const p = slice(clock.value, DISC_IN);
+    const fade = slice(clock.value, GLOW_FADE);
+    return {
+      opacity: p * (0.55 - fade * 0.35),
+      transform: [{ scale: 0.8 + easeOutCubic(p) * 0.45 }],
+    };
+  });
 
-  const glowStyle2 = useAnimatedStyle(() => ({
-    opacity: interpolate(glowOpacity.value, [0, 1], [0.2, 0.6], Extrapolate.CLAMP),
-    transform: [{ scale: interpolate(glowScale.value, [1, 1.4], [1.2, 1.6], Extrapolate.CLAMP) }],
-  }));
+  const ringProps = useAnimatedProps(() => {
+    const p = slice(clock.value, RING_DRAW);
+    return {
+      strokeDashoffset: RING_LENGTH * (1 - easeOutCubic(p)),
+      // A zero-length dash with round caps can still paint a dot; keep it hidden until it draws.
+      strokeOpacity: p === 0 ? 0 : 0.85,
+    };
+  });
 
-  // Checkmark overlay animated style (only animated properties)
-  const checkmarkOverlayStyle = useAnimatedStyle(() => ({
-    opacity: checkmarkProgress.value,
-    transform: [{ scale: checkmarkProgress.value }],
-  }));
+  const checkProps = useAnimatedProps(() => {
+    const p = slice(clock.value, CHECK_DRAW);
+    return {
+      strokeDashoffset: CHECK_LENGTH * (1 - easeOutCubic(p)),
+      strokeOpacity: p === 0 ? 0 : 1,
+    };
+  });
+
+  const labelStyle = useAnimatedStyle(() => {
+    const p = easeOutCubic(slice(clock.value, LABEL_IN));
+    return { opacity: p, transform: [{ translateY: (1 - p) * 8 }] };
+  });
 
   if (!visible) return null;
 
+  const hasProgress = completedCount !== undefined && totalSteps !== undefined;
+
   return (
     <View style={styles.container} pointerEvents="auto">
-      {/* Subtle dimmed backdrop to block touches and focus attention */}
-      <View style={styles.backdrop} />
-      {/* Multiple glow layers */}
-      <Animated.View style={[styles.glowLayer1, glowStyle1]} />
-      <Animated.View style={[styles.glowLayer2, glowStyle2]} />
+      <Animated.View style={[styles.scrim, scrimStyle]} />
 
-      {/* Main SVG icon */}
-      <Animated.View style={containerStyle}>
-        <Svg width={140} height={140} viewBox="0 0 140 140">
-          <Defs>
-            <RadialGradient id="gradient" cx="50%" cy="50%">
-              <Stop offset="0%" stopColor="#34D399" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#10B981" stopOpacity="0.8" />
-            </RadialGradient>
-          </Defs>
+      <Animated.View style={[styles.group, groupStyle]}>
+        <View style={styles.seal}>
+          <Animated.View style={[styles.glow, glowStyle]} />
 
-          {/* Outer ring */}
-          <Circle
-            cx="70"
-            cy="70"
-            r="65"
-            fill="none"
-            stroke="url(#gradient)"
-            strokeWidth="2"
-            opacity="0.5"
-          />
+          {Array.from({ length: SPARK_COUNT }, (_, index) => (
+            <Spark key={index} index={index} clock={clock} />
+          ))}
 
-          {/* Main circle */}
-          <Circle cx="70" cy="70" r="60" fill="url(#gradient)" opacity="0.9" />
+          <Animated.View style={[StyleSheet.absoluteFill, discStyle]}>
+            <Svg width={SEAL} height={SEAL}>
+              <Defs>
+                <LinearGradient id="stepSealFill" x1="0" y1="0" x2="1" y2="1">
+                  <Stop offset="0" stopColor="#34D399" />
+                  <Stop offset="1" stopColor="#059669" />
+                </LinearGradient>
+              </Defs>
+              <Circle cx={CENTER} cy={CENTER} r={48} fill="url(#stepSealFill)" />
+              <Circle
+                cx={CENTER}
+                cy={CENTER}
+                r={42}
+                fill="none"
+                stroke="rgba(255,255,255,0.18)"
+                strokeWidth={1}
+              />
+              <AnimatedPath
+                d={CHECK_PATH}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={`${CHECK_LENGTH} ${CHECK_LENGTH}`}
+                animatedProps={checkProps}
+              />
+            </Svg>
+          </Animated.View>
 
-          {/* Inner highlight */}
-          <Circle cx="70" cy="70" r="50" fill="none" stroke="white" strokeWidth="1" opacity="0.3" />
-        </Svg>
-      </Animated.View>
+          <Svg width={SEAL} height={SEAL} style={StyleSheet.absoluteFill}>
+            <AnimatedCircle
+              cx={CENTER}
+              cy={CENTER}
+              r={RING_R}
+              fill="none"
+              stroke="#6EE7B7"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeDasharray={`${RING_LENGTH} ${RING_LENGTH}`}
+              animatedProps={ringProps}
+              transform={`rotate(-90 ${CENTER} ${CENTER})`}
+            />
+          </Svg>
+        </View>
 
-      {/* Checkmark with opacity and scale animation - perfectly centered */}
-      <Animated.View style={[styles.checkmarkOverlay, checkmarkOverlayStyle]} pointerEvents="none">
-        <Svg width={60} height={60} viewBox="0 0 60 60">
-          <Path
-            d="M10 30 L25 45 L50 10"
-            stroke="white"
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        </Svg>
+        {hasProgress ? (
+          <Animated.View style={labelStyle}>
+            <Text style={styles.label}>
+              {t('focus.stepDone', { done: completedCount, total: totalSteps })}
+            </Text>
+          </Animated.View>
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -237,50 +255,39 @@ export const PremiumStepAnimation: React.FC<PremiumStepAnimationProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 1000,
   },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  scrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(5, 5, 16, 0.62)',
   },
-  glowLayer1: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#34D399',
-    shadowColor: '#34D399',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 50,
-  },
-  glowLayer2: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#10B981',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 60,
-  },
-  checkmarkOverlay: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    justifyContent: 'center',
+  group: {
     alignItems: 'center',
+    gap: 18,
+  },
+  seal: {
+    width: SEAL,
+    height: SEAL,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glow: {
+    position: 'absolute',
+    width: SEAL,
+    height: SEAL,
+    borderRadius: SEAL / 2,
+    backgroundColor: 'rgba(52, 211, 153, 0.35)',
+  },
+  spark: {
+    position: 'absolute',
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 });

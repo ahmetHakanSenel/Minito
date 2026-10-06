@@ -1,93 +1,57 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders, describeError, guardMethod, jsonResponse } from '../_shared/http.ts';
+import {
+  AuthUnavailableError,
+  authenticateRequest,
+  createAdminClient,
+} from '../_shared/supabase.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+/**
+ * Edge Function: delete-user (right to erasure)
+ *
+ * Deletes the caller's auth account. Every user-owned row (`task_breakdowns`, `tasks`, `planner_*`) references
+ * `auth.users` with ON DELETE CASCADE, so the database removes them in the same transaction.
+ * Rate-limit counters are deliberately not user-owned: deleting an account must not reset them.
+ */
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+const METHODS = ['DELETE', 'POST'];
+const CORS = corsHeaders(METHODS);
+
+Deno.serve(async (req) => {
+  const rejected = guardMethod(req, METHODS, CORS);
+  if (rejected) return rejected;
 
   try {
-    // Get authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const admin = createAdminClient();
+    const user = await authenticateRequest(req, admin);
+    if (!user) {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, 401, CORS);
     }
 
-    // Create Supabase client with service role key for admin operations
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const { error } = await admin.auth.admin.deleteUser(user.id);
+    if (error) {
+      console.error(
+        JSON.stringify({ level: 'error', event: 'delete_user.failed', error: error.message })
+      );
+      return jsonResponse({ success: false, error: 'Failed to delete user account' }, 500, CORS);
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    // Verify the user's JWT token
-    const token = authHeader.replace('Bearer ', '');
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const userId = user.id;
-
-    // Delete user data from tasks table (privacy-first: only hashed data)
-    // Note: Since we only store input_hash, we can delete by user_id if we add that column
-    // For now, we'll delete all tasks associated with this user's guest_id pattern
-    // This is a simplified implementation - in production, you'd want to track user_id in tasks table
-
-    // Delete user's auth account (this will cascade delete related data if RLS is set up)
-    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-
-    if (deleteError) {
-      console.error('Error deleting user:', deleteError);
-      return new Response(JSON.stringify({ error: 'Failed to delete user account' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Return success response
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'User account and data deleted successfully',
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    console.log(JSON.stringify({ level: 'info', event: 'delete_user.completed' }));
+    return jsonResponse({ success: true }, 200, CORS);
   } catch (error) {
-    console.error('Unexpected error in delete-user:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    if (error instanceof AuthUnavailableError) {
+      return jsonResponse(
+        { success: false, error: 'Authentication is temporarily unavailable' },
+        503,
+        CORS
+      );
+    }
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: 'delete_user.unhandled_error',
+        error: describeError(error),
+      })
+    );
+    return jsonResponse({ success: false, error: 'Internal server error' }, 500, CORS);
   }
 });

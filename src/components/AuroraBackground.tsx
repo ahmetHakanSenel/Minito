@@ -45,7 +45,15 @@ export const AuroraBackground: React.FC = () => {
     primaryDriftY.value = withDelay(3000, withRepeat(withTiming(25, lavaDrift), -1, true));
     anchorDriftX.value = withDelay(5000, withRepeat(withTiming(-28, lavaDrift), -1, true));
     anchorDriftY.value = withDelay(7000, withRepeat(withTiming(-22, lavaDrift), -1, true));
-  }, [isCompletionPulse]);
+  }, [
+    anchorDriftX,
+    anchorDriftY,
+    anchorOpacity,
+    isCompletionPulse,
+    primaryDriftX,
+    primaryDriftY,
+    primaryOpacity,
+  ]);
 
   // Completion pulse - faster, more intense
   useEffect(() => {
@@ -59,7 +67,7 @@ export const AuroraBackground: React.FC = () => {
       primaryOpacity.value = withRepeat(withTiming(0.7, completionPulse), -1, true);
       anchorOpacity.value = withRepeat(withTiming(0.6, completionPulse), -1, true);
     }
-  }, [isCompletionPulse]);
+  }, [anchorOpacity, isCompletionPulse, primaryOpacity]);
 
   const primaryStyle = useAnimatedStyle(() => ({
     opacity: primaryOpacity.value,

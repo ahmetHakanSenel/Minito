@@ -1,20 +1,34 @@
-import { supabase } from '../../data/supabase/client';
+import { getSupabase } from '../../data/supabase/client';
 import { breakTask } from '../../lib/api/breakTask';
+import type { BreakdownStep } from '../../lib/breakdownSteps';
 import { FallbackReason } from '../../safety';
-import { taskRepository } from '../taskRepository';
+import { TaskRepositoryError, taskRepository } from '../taskRepository';
 
-jest.mock('../../data/supabase/client', () => ({ supabase: { from: jest.fn() } }));
+jest.mock('../../data/supabase/client', () => {
+  const client = { from: jest.fn() };
+  return { getSupabase: jest.fn(() => client) };
+});
 jest.mock('../../lib/api/breakTask', () => ({ breakTask: jest.fn() }));
-jest.mock('../../lib/guestIdentity', () => ({
-  getOrCreateGuestId: jest.fn(async () => 'guest-1'),
-}));
 
-const mockedFrom = jest.mocked(supabase.from);
+const mockedFrom = jest.mocked(getSupabase().from);
+const mockedGetSupabase = jest.mocked(getSupabase);
 const mockedBreakTask = jest.mocked(breakTask);
 
 type QueryResult = { data: unknown; error: unknown };
 
-const CHAIN_METHODS = ['select', 'insert', 'update', 'delete', 'eq', 'order', 'limit', 'single'];
+const CHAIN_METHODS = [
+  'select',
+  'insert',
+  'update',
+  'delete',
+  'eq',
+  'lt',
+  'is',
+  'order',
+  'limit',
+  'range',
+  'single',
+];
 
 // Mimics PostgREST's thenable builder: chained calls return the builder, awaiting it yields `result`.
 function mockQuery(result: QueryResult) {
@@ -31,12 +45,32 @@ function mockQuery(result: QueryResult) {
   return builder;
 }
 
+const cupStep: BreakdownStep = {
+  id: 'step-1',
+  title: 'Carry three cups to the sink',
+  instruction: 'No washing yet.',
+  estimatedMinutes: 2,
+  difficulty: 'easy',
+};
+
 const row = {
   id: 'task-1',
   title: 'Clean the kitchen',
   empathy_bridge: 'Kitchens feel endless, I know.',
   first_step_hook: 'Stand up.',
-  steps: ['Grab one cup', 42, 'Rinse it'],
+  stopping_point: 'You can stop here.',
+  // A legacy string step, a malformed entry and a structured step side by side.
+  steps: [
+    'Grab one cup',
+    42,
+    {
+      id: 'step-2',
+      title: 'Rinse it',
+      instruction: 'Warm water, ten seconds.',
+      estimated_minutes: 1,
+      difficulty: 'easy',
+    },
+  ],
   completed_step_count: 1,
   completed_at: null,
   created_at: '2026-09-15T10:00:00Z',
@@ -47,7 +81,7 @@ beforeEach(() => {
 });
 
 describe('taskRepository.listRecent', () => {
-  it('maps rows to domain objects and drops malformed steps', async () => {
+  it('maps rows to domain objects, upgrading legacy steps and dropping malformed ones', async () => {
     mockQuery({ data: [row], error: null });
 
     await expect(taskRepository.listRecent(8)).resolves.toEqual([
@@ -56,7 +90,23 @@ describe('taskRepository.listRecent', () => {
         title: 'Clean the kitchen',
         empathyBridge: 'Kitchens feel endless, I know.',
         firstStepHook: 'Stand up.',
-        steps: ['Grab one cup', 'Rinse it'],
+        stoppingPoint: 'You can stop here.',
+        steps: [
+          {
+            id: 'step-1',
+            title: 'Grab one cup',
+            instruction: '',
+            estimatedMinutes: null,
+            difficulty: null,
+          },
+          {
+            id: 'step-2',
+            title: 'Rinse it',
+            instruction: 'Warm water, ten seconds.',
+            estimatedMinutes: 1,
+            difficulty: 'easy',
+          },
+        ],
         completedStepCount: 1,
         completedAt: null,
         createdAt: '2026-09-15T10:00:00Z',
@@ -64,8 +114,27 @@ describe('taskRepository.listRecent', () => {
     ]);
   });
 
+  it('pages through history newest first with a stable tie-break', async () => {
+    const query = mockQuery({ data: [row], error: null });
+
+    await taskRepository.listPage({ offset: 20, limit: 20 });
+
+    expect(query.order).toHaveBeenNthCalledWith(1, 'created_at', { ascending: false });
+    expect(query.order).toHaveBeenNthCalledWith(2, 'id', { ascending: false });
+    // PostgREST ranges are inclusive on both ends.
+    expect(query.range).toHaveBeenCalledWith(20, 39);
+  });
+
   it('reports a missing table as unavailable', async () => {
     mockQuery({ data: null, error: { code: 'PGRST205', message: 'relation not found' } });
+
+    await expect(taskRepository.listRecent(8)).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('reports a missing backend configuration as unavailable', async () => {
+    mockedGetSupabase.mockImplementationOnce(() => {
+      throw new Error('Supabase is not configured');
+    });
 
     await expect(taskRepository.listRecent(8)).rejects.toMatchObject({ code: 'unavailable' });
   });
@@ -82,12 +151,41 @@ describe('taskRepository.breakDown', () => {
     mockedBreakTask.mockResolvedValue({
       success: false,
       fallbackReason: FallbackReason.CONTENT_FLAGGED,
+      crisis: true,
     });
 
     await expect(taskRepository.breakDown('something heavy')).resolves.toEqual({
       status: 'flagged',
+      crisis: true,
     });
     expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  // Only self-harm calls for crisis support. Anything else moderation refuses is explained
+  // plainly instead of answered with "you are not alone, reach out to a support line".
+  it('tells a refusal apart from a crisis', async () => {
+    mockedBreakTask.mockResolvedValue({
+      success: false,
+      fallbackReason: FallbackReason.CONTENT_FLAGGED,
+      crisis: false,
+    });
+
+    await expect(taskRepository.breakDown('I hate my coworker')).resolves.toEqual({
+      status: 'flagged',
+      crisis: false,
+    });
+  });
+
+  it('treats a server that does not say as a crisis', async () => {
+    mockedBreakTask.mockResolvedValue({
+      success: false,
+      fallbackReason: FallbackReason.CONTENT_FLAGGED,
+    });
+
+    await expect(taskRepository.breakDown('something heavy')).resolves.toEqual({
+      status: 'flagged',
+      crisis: true,
+    });
   });
 
   it('surfaces the fallback reason when the AI call fails', async () => {
@@ -100,11 +198,7 @@ describe('taskRepository.breakDown', () => {
   });
 
   it('never saves generic offline fallback steps', async () => {
-    mockedBreakTask.mockResolvedValue({
-      success: true,
-      steps: ['Take one small step'],
-      isOfflineFallback: true,
-    });
+    mockedBreakTask.mockResolvedValue({ success: true, steps: [cupStep], source: 'offline' });
 
     const outcome = await taskRepository.breakDown('Clean the kitchen');
 
@@ -112,12 +206,24 @@ describe('taskRepository.breakDown', () => {
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
-  it('saves successful breakdowns under the trimmed title', async () => {
+  it("never saves the server's deterministic fallback plan either", async () => {
+    mockedBreakTask.mockResolvedValue({ success: true, steps: [cupStep], source: 'fallback' });
+
+    const outcome = await taskRepository.breakDown('Clean the kitchen');
+
+    expect(outcome).toMatchObject({ status: 'ready', saved: null, isOffline: false });
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('saves structured breakdowns under the trimmed title', async () => {
     mockedBreakTask.mockResolvedValue({
       success: true,
-      steps: ['Grab one cup', 'Rinse it'],
+      steps: [cupStep],
       empathyBridge: 'Kitchens feel endless, I know.',
       firstStepHook: 'Stand up.',
+      stoppingPoint: 'You can stop here.',
+      requestId: 'req-1',
+      source: 'model',
     });
     const query = mockQuery({ data: row, error: null });
 
@@ -126,22 +232,69 @@ describe('taskRepository.breakDown', () => {
     expect(outcome).toMatchObject({
       status: 'ready',
       isOffline: false,
-      content: { title: 'Clean the kitchen' },
+      // Carried through so the finished session can be scored against this exact request.
+      requestId: 'req-1',
+      content: { title: 'Clean the kitchen', stoppingPoint: 'You can stop here.' },
       saved: { id: 'task-1' },
     });
     expect(query.insert).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Clean the kitchen', steps: ['Grab one cup', 'Rinse it'] })
+      expect.objectContaining({
+        title: 'Clean the kitchen',
+        stopping_point: 'You can stop here.',
+        steps: [
+          {
+            id: 'step-1',
+            title: 'Carry three cups to the sink',
+            instruction: 'No washing yet.',
+            estimated_minutes: 2,
+            difficulty: 'easy',
+          },
+        ],
+      })
     );
   });
 
   it('still returns the breakdown when saving fails', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
-    mockedBreakTask.mockResolvedValue({ success: true, steps: ['Grab one cup'] });
+    mockedBreakTask.mockResolvedValue({ success: true, steps: [cupStep], source: 'model' });
     mockQuery({ data: null, error: { code: '42501', message: 'permission denied' } });
 
     await expect(taskRepository.breakDown('Clean the kitchen')).resolves.toMatchObject({
       status: 'ready',
       saved: null,
     });
+  });
+});
+
+describe('progress', () => {
+  // Two writes in flight can land in either order, and a second device can resume at an earlier
+  // step. Only the filter keeps a smaller count from overwriting a larger one.
+  it('only ever moves progress forward', async () => {
+    const builder = mockQuery({ data: null, error: null });
+
+    await taskRepository.recordProgress('task-1', 3);
+
+    expect(builder.update).toHaveBeenCalledWith({ completed_step_count: 3 });
+    expect(builder.eq).toHaveBeenCalledWith('id', 'task-1');
+    expect(builder.lt).toHaveBeenCalledWith('completed_step_count', 3);
+  });
+
+  it('records the first completion and ignores any repeat of it', async () => {
+    const builder = mockQuery({ data: null, error: null });
+
+    await taskRepository.markCompleted('task-1', 5);
+
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ completed_step_count: 5, completed_at: expect.any(String) })
+    );
+    expect(builder.is).toHaveBeenCalledWith('completed_at', null);
+  });
+
+  it('reports a failed write so the caller can try again', async () => {
+    mockQuery({ data: null, error: { message: 'offline', code: 'PGRST000' } as never });
+
+    await expect(taskRepository.recordProgress('task-1', 2)).rejects.toBeInstanceOf(
+      TaskRepositoryError
+    );
   });
 });

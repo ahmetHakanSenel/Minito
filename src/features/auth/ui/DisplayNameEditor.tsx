@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../../../lib/ui/haptics';
 import { DISPLAY_NAME_MAX_LENGTH } from '../../../repositories/authRepository';
 
 type DisplayNameEditorProps = {
@@ -35,11 +35,11 @@ export function DisplayNameEditor({
     setHasError(false);
     try {
       await onSave(trimmed);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
     } catch {
       setIsSaving(false);
       setHasError(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      haptics.error();
     }
   };
 

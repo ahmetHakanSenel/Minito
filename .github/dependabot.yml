@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Expo pins its native modules to the SDK, so app dependencies are upgraded together with
+  # `npx expo install --fix`. Dependabot only raises security updates for them.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, BarChart3 } from 'lucide-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import {
   FlowStateVisualizer,
@@ -13,6 +13,7 @@ import {
   EnergyFlowBars,
 } from '../src/components';
 import { useProjects } from '../src/context/ProjectContext';
+import { EmptyState } from '../src/components/feedback/EmptyState';
 import {
   getFocusSessions,
   aggregateHourly,
@@ -21,6 +22,7 @@ import {
   computeFlowMetrics,
   type FocusSessionRecord,
 } from '../src/lib/stats/sessionStore';
+import { haptics } from '../src/lib/ui/haptics';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ANALYTICS SCREEN — computed from real recorded sessions only
@@ -38,9 +40,12 @@ export default function AnalyticsScreen() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getFocusSessions().then((loaded) => {
-        if (!cancelled) setSessions(loaded);
-      });
+      getFocusSessions()
+        .then((loaded) => {
+          if (!cancelled) setSessions(loaded);
+        })
+        // An unreadable history leaves the empty state, which is the honest thing to show.
+        .catch(() => {});
       return () => {
         cancelled = true;
       };
@@ -70,7 +75,7 @@ export default function AnalyticsScreen() {
   );
 
   const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     router.replace({
       pathname: '/',
       params: { openDashboard: 'true' },
@@ -78,12 +83,17 @@ export default function AnalyticsScreen() {
   };
 
   return (
-    <View style={[styles.safeArea, { paddingTop: 40 }]}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={1.8} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('stats.title')}</Text>
@@ -128,16 +138,18 @@ export default function AnalyticsScreen() {
           </>
         ) : (
           /* Honest empty state — no fabricated charts */
-          <Animated.View entering={FadeIn.delay(300).duration(500)} style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>{t('stats.emptyTitle')}</Text>
-            <Text style={styles.emptyStateText}>{t('stats.emptyText')}</Text>
-          </Animated.View>
+          <EmptyState
+            icon={BarChart3}
+            title={t('stats.emptyTitle')}
+            description={t('stats.emptyText')}
+            action={{ label: t('stats.emptyAction'), onPress: () => router.push('/planner') }}
+          />
         )}
 
         {/* Bottom padding */}
         <View style={{ height: 100 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -175,23 +187,5 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
     marginVertical: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.85)',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyStateText: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.45)',
-    textAlign: 'center',
-    lineHeight: 19,
   },
 });

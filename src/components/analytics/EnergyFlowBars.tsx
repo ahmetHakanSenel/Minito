@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import {
   Briefcase,
   GraduationCap,
@@ -74,6 +75,7 @@ const projectColors: string[] = [
 ];
 
 export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({ projects, maxProjects = 5 }) => {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
 
   // Sort by focus time and take top N
@@ -96,9 +98,9 @@ export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({ projects, maxPro
   if (sortedProjects.length === 0) {
     return (
       <Animated.View entering={FadeInUp.delay(600).duration(500)} style={styles.container}>
-        <Text style={styles.sectionTitle}>Enerji Akışı</Text>
+        <Text style={styles.sectionTitle}>{t('stats.energyFlow')}</Text>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Henüz proje verisi yok</Text>
+          <Text style={styles.emptyText}>{t('stats.noProjectData')}</Text>
         </View>
       </Animated.View>
     );
@@ -106,7 +108,7 @@ export const EnergyFlowBars: React.FC<EnergyFlowBarsProps> = ({ projects, maxPro
 
   return (
     <Animated.View entering={FadeInUp.delay(600).duration(500)} style={styles.container}>
-      <Text style={styles.sectionTitle}>Enerji Akışı</Text>
+      <Text style={styles.sectionTitle}>{t('stats.energyFlow')}</Text>
 
       <View style={styles.barsContainer}>
         {sortedProjects.map((project, index) => {

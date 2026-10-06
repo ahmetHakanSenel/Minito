@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -10,7 +10,7 @@ import {
   ArrowRight,
   Target,
   ThumbsUp,
-  Flame,
+  Sprout,
 } from 'lucide-react-native';
 import Animated, {
   FadeIn,
@@ -23,10 +23,12 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
 import { ConfettiAnimation } from '../components/ConfettiAnimation';
+import { useTranslation } from 'react-i18next';
+import { splitDuration } from '../lib/time/duration';
+import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING } from '../lib/ui/motion';
 
-const { width } = Dimensions.get('window');
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 // ============================================================================
@@ -36,11 +38,11 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 export interface SessionCompletionModalProps {
   visible: boolean;
   onClose: () => void;
-  sessionDuration: number; // in minutes
+  sessionDuration: number; // in seconds
   pickupCount: number;
   taskTitle: string;
   onTaskCompleted: () => void; // Marks task as done
-  onJustSession: () => void; // Keeps task active, adds XP
+  onJustSession: () => void; // Keeps the task open
 }
 
 // ============================================================================
@@ -56,6 +58,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
   onTaskCompleted,
   onJustSession,
 }) => {
+  const { t } = useTranslation();
   const [showConfetti, setShowConfetti] = React.useState(false);
   const celebrationScale = useSharedValue(0.5);
   const buttonAScale = useSharedValue(1);
@@ -63,44 +66,46 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
 
   useEffect(() => {
     if (visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the celebration belongs to the modal opening
       setShowConfetti(true);
       celebrationScale.value = withSequence(
         withTiming(1.2, { duration: 300, easing: Easing.out(Easing.back(2)) }),
-        withSpring(1, { damping: 10, stiffness: 100 })
+        // Mass named: Reanimated 4's default of 4 would double the bounce and stretch it to 3 s.
+        withSpring(1, { damping: 10, stiffness: 100, mass: 1 })
       );
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
     } else {
       setShowConfetti(false);
       celebrationScale.value = 0.5;
     }
-  }, [visible]);
+  }, [celebrationScale, visible]);
 
   const handleTaskCompleted = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    haptics.success();
     onTaskCompleted();
     onClose();
   };
 
   const handleJustSession = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onJustSession();
     onClose();
   };
 
   const handlePressInA = () => {
-    buttonAScale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+    buttonAScale.value = withSpring(0.96, PRESS_SPRING);
   };
 
   const handlePressOutA = () => {
-    buttonAScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    buttonAScale.value = withSpring(1, PRESS_SPRING);
   };
 
   const handlePressInB = () => {
-    buttonBScale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+    buttonBScale.value = withSpring(0.96, PRESS_SPRING);
   };
 
   const handlePressOutB = () => {
-    buttonBScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    buttonBScale.value = withSpring(1, PRESS_SPRING);
   };
 
   const celebrationStyle = useAnimatedStyle(() => ({
@@ -115,18 +120,27 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
     transform: [{ scale: buttonBScale.value }],
   }));
 
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) {
-      return `${minutes} dakika`;
+  // Sessions can be set to the second, so a 30-second one must not read as "1 minute".
+  const formatDuration = (totalSeconds: number) => {
+    const { hours, minutes, seconds } = splitDuration(totalSeconds);
+    if (hours > 0) {
+      return minutes > 0
+        ? t('duration.hoursMinutes', { hours, minutes })
+        : t('duration.hours', { count: hours });
     }
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours} saat ${mins} dakika` : `${hours} saat`;
+    if (minutes > 0) {
+      return seconds > 0
+        ? t('duration.minutesSeconds', { minutes, seconds })
+        : t('duration.minutes', { count: minutes });
+    }
+    return t('duration.seconds', { count: seconds });
   };
 
-  // Calculate focus score (less pickups = better)
+  // Fewer pickups, higher score. It is a summary, not a verdict: the icon and the wording stay
+  // encouraging at the bottom of the range, because being told off is what stops people coming
+  // back to a session at all.
   const focusScore = Math.max(0, 100 - pickupCount * 10);
-  const FocusIcon = focusScore >= 80 ? Target : focusScore >= 50 ? ThumbsUp : Flame;
+  const FocusIcon = focusScore >= 80 ? Target : focusScore >= 50 ? ThumbsUp : Sprout;
 
   return (
     <Modal
@@ -143,7 +157,11 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
         <ConfettiAnimation visible={showConfetti} onComplete={() => {}} />
 
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <View style={styles.content}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
             {/* Celebration Icon */}
             <AnimatedView
               entering={FadeInDown.delay(100).springify()}
@@ -160,11 +178,14 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
             {/* Title */}
             <AnimatedView entering={FadeInDown.delay(200).springify()}>
               <View style={styles.titleRow}>
-                <Text style={styles.title}>Harika!</Text>
+                <Text style={styles.title}>{t('sessionComplete.title')}</Text>
                 <FocusIcon size={22} color="#C4B5FD" strokeWidth={2} />
               </View>
               <Text style={styles.subtitle} numberOfLines={2}>
-                “{taskTitle}” için {formatDuration(sessionDuration)} odaklandın
+                {t('sessionComplete.subtitle', {
+                  task: taskTitle,
+                  duration: formatDuration(sessionDuration),
+                })}
               </Text>
             </AnimatedView>
 
@@ -178,7 +199,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                 <View style={styles.statIconContainer}>
                   <Clock size={24} color="#60A5FA" strokeWidth={2} />
                 </View>
-                <Text style={styles.statLabel}>Süre</Text>
+                <Text style={styles.statLabel}>{t('sessionComplete.duration')}</Text>
                 <Text style={styles.statValue}>{formatDuration(sessionDuration)}</Text>
               </View>
 
@@ -189,8 +210,10 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                 >
                   <Smartphone size={24} color="#FBBF24" strokeWidth={2} />
                 </View>
-                <Text style={styles.statLabel}>Kaldırma</Text>
-                <Text style={styles.statValue}>{pickupCount} kez</Text>
+                <Text style={styles.statLabel}>{t('sessionComplete.pickups')}</Text>
+                <Text style={styles.statValue}>
+                  {t('sessionComplete.pickupCount', { count: pickupCount })}
+                </Text>
               </View>
             </AnimatedView>
 
@@ -199,8 +222,14 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
               entering={FadeInDown.delay(400).springify()}
               style={styles.focusScoreContainer}
             >
-              <Text style={styles.focusScoreLabel}>Odak Skoru</Text>
-              <Text style={styles.focusScoreValue}>{focusScore}</Text>
+              <Text style={styles.focusScoreLabel}>{t('sessionComplete.focusScore')}</Text>
+              {/* A bare number leaves people guessing what it is out of. */}
+              <View style={styles.focusScoreRow}>
+                <Text style={styles.focusScoreValue}>{focusScore}</Text>
+                <Text style={styles.focusScoreOutOf}>
+                  {t('sessionComplete.outOf', { max: 100 })}
+                </Text>
+              </View>
             </AnimatedView>
 
             {/* Action Buttons */}
@@ -215,6 +244,8 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                   onPressIn={handlePressInA}
                   onPressOut={handlePressOutA}
                   activeOpacity={1}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('sessionComplete.taskDone')}
                 >
                   <LinearGradient
                     colors={['#34D399', '#10B981']}
@@ -223,7 +254,7 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                     style={styles.buttonPrimary}
                   >
                     <CheckCircle2 size={22} color="#FFFFFF" strokeWidth={2.5} />
-                    <Text style={styles.buttonPrimaryText}>Görev Tamamlandı</Text>
+                    <Text style={styles.buttonPrimaryText}>{t('sessionComplete.taskDone')}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </Animated.View>
@@ -236,18 +267,18 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
                   onPressOut={handlePressOutB}
                   activeOpacity={1}
                   style={styles.buttonSecondary}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('sessionComplete.justSession')}
                 >
-                  <Text style={styles.buttonSecondaryText}>Sadece Oturum</Text>
+                  <Text style={styles.buttonSecondaryText}>{t('sessionComplete.justSession')}</Text>
                   <ArrowRight size={18} color="rgba(255,255,255,0.7)" strokeWidth={2} />
                 </TouchableOpacity>
               </Animated.View>
             </AnimatedView>
 
             {/* Helper Text */}
-            <Text style={styles.helperText}>
-              “Sadece Oturum” seçersen görev aktif kalır ve XP kazanırsın
-            </Text>
-          </View>
+            <Text style={styles.helperText}>{t('sessionComplete.helper')}</Text>
+          </ScrollView>
         </SafeAreaView>
       </AnimatedView>
     </Modal>
@@ -267,9 +298,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  focusScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  focusScoreOutOf: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.4)',
+  },
   content: {
+    // Centred while it fits, scrollable once it does not.
+    flexGrow: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 24,
   },
   iconContainer: {
     marginBottom: 24,

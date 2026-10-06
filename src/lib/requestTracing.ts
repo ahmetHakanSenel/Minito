@@ -1,64 +1,36 @@
-import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 import * as Crypto from 'expo-crypto';
-import { getOrCreateGuestId } from './guestIdentity';
+
+/** A fresh tracing id. */
+export function newRequestId(): string {
+  return Crypto.randomUUID();
+}
 
 /**
- * Creates an Axios instance with request tracing enabled.
- * All requests will automatically include:
- * - x-request-id: A unique UUID for each request
- * - x-guest-id: The guest identity UUID (if available)
- *
- * @returns AxiosInstance - Configured axios instance with interceptors
+ * An Axios instance that tags every request with an `x-request-id`, so a client log line can be
+ * matched with the server's. A caller that already set one keeps it: the id it logs and the id
+ * the server logs must be the same.
  */
+/**
+ * Axios waits for ever unless told otherwise. A connection that stalls rather than fails — a
+ * train going into a tunnel — then leaves a spinner turning with no error and no way out. Every
+ * request gets a ceiling here; a caller with a tighter budget, like breaking down a task, sets
+ * its own.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
 export function createTracedAxiosInstance(): AxiosInstance {
-  const instance = axios.create();
+  const instance = axios.create({ timeout: DEFAULT_TIMEOUT_MS });
 
-  // Request interceptor to add tracing headers
-  instance.interceptors.request.use(
-    async (config: InternalAxiosRequestConfig) => {
-      // Generate unique request ID for this request
-      const requestId = await Crypto.randomUUID();
-
-      // Ensure headers object exists
-      if (!config.headers) {
-        config.headers = {} as any;
-      }
-
-      // Add request ID header
-      config.headers['x-request-id'] = requestId;
-
-      // Add guest ID header (fail-soft: if it fails, continue without it)
-      try {
-        const guestId = await getOrCreateGuestId();
-        config.headers['x-guest-id'] = guestId;
-      } catch (error) {
-        // Fail-soft: Log but don't block the request
-        console.warn('Failed to get guest ID for request tracing:', error);
-      }
-
-      return config;
-    },
-    (error) => {
-      // Fail-soft: If interceptor fails, still reject the promise
-      return Promise.reject(error);
+  instance.interceptors.request.use((config) => {
+    if (!config.headers.has('x-request-id')) {
+      config.headers.set('x-request-id', newRequestId());
     }
-  );
-
-  // Response interceptor for error handling (optional, for future use)
-  instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      // You can add error logging here if needed
-      // For now, just pass through the error
-      return Promise.reject(error);
-    }
-  );
+    return config;
+  });
 
   return instance;
 }
 
-/**
- * Default traced axios instance for use throughout the app.
- * Use this instead of the default axios import.
- */
+/** The traced instance for all app HTTP calls. Use this instead of the default axios import. */
 export const tracedAxios = createTracedAxiosInstance();

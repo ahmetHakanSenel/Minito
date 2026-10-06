@@ -1,31 +1,43 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, ChevronRight } from 'lucide-react-native';
+import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react-native';
+import { EmptyState } from '../../../components/feedback/EmptyState';
 import type { TaskBreakdown } from '../../../repositories/taskRepository';
 import type { HistoryStatus } from '../controller/useTaskBreakdowns';
+import { relativeTime } from '../../../lib/time/relativeTime';
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-const WEEK_MS = 7 * DAY_MS;
+/** "just now", "5 min ago" … then a locale date once it is over a week old. */
+export function useRelativeTime() {
+  const { t, i18n } = useTranslation();
+  return useCallback(
+    (iso: string) => {
+      const ago = relativeTime(Date.now() - new Date(iso).getTime());
+      switch (ago.unit) {
+        case 'justNow':
+          return t('tasks.time.justNow');
+        case 'minutes':
+          return t('tasks.time.minutesAgo', { count: ago.count });
+        case 'hours':
+          return t('tasks.time.hoursAgo', { count: ago.count });
+        case 'days':
+          return t('tasks.time.daysAgo', { count: ago.count });
+        default:
+          return new Date(iso).toLocaleDateString(i18n.language);
+      }
+    },
+    [t, i18n.language]
+  );
+}
 
-type TaskHistoryListProps = {
-  items: TaskBreakdown[];
-  status: HistoryStatus;
-  onOpen: (item: TaskBreakdown) => void;
-  onDelete: (item: TaskBreakdown) => void;
-  onRetry: () => void;
-};
-
-type TaskBreakdownRowProps = {
+type TaskHistoryRowProps = {
   item: TaskBreakdown;
   timeLabel: string;
   onOpen: (item: TaskBreakdown) => void;
   onDelete: (item: TaskBreakdown) => void;
 };
 
-function TaskBreakdownRow({ item, timeLabel, onOpen, onDelete }: TaskBreakdownRowProps) {
+export function TaskHistoryRow({ item, timeLabel, onOpen, onDelete }: TaskHistoryRowProps) {
   const { t } = useTranslation();
   const total = item.steps.length;
   const isCompleted = item.completedAt !== null;
@@ -73,35 +85,40 @@ function TaskBreakdownRow({ item, timeLabel, onOpen, onDelete }: TaskBreakdownRo
   );
 }
 
+type TaskHistoryListProps = {
+  items: TaskBreakdown[];
+  status: HistoryStatus;
+  /** Older breakdowns exist beyond the ones shown here. */
+  hasMore: boolean;
+  onOpen: (item: TaskBreakdown) => void;
+  onDelete: (item: TaskBreakdown) => void;
+  onRetry: () => void;
+  onSeeAll: () => void;
+};
+
+/** The home screen's short list: the latest few, and the way into the full history. */
 export function TaskHistoryList({
   items,
   status,
+  hasMore,
   onOpen,
   onDelete,
   onRetry,
+  onSeeAll,
 }: TaskHistoryListProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const formatTime = useRelativeTime();
 
   // Without the backing table there is no history to show; the breakdown flow still works.
   if (status === 'unavailable') {
     return null;
   }
 
-  const formatTime = (iso: string) => {
-    const elapsed = Date.now() - new Date(iso).getTime();
-    if (elapsed < MINUTE_MS) return t('tasks.time.justNow');
-    if (elapsed < HOUR_MS)
-      return t('tasks.time.minutesAgo', { count: Math.floor(elapsed / MINUTE_MS) });
-    if (elapsed < DAY_MS) return t('tasks.time.hoursAgo', { count: Math.floor(elapsed / HOUR_MS) });
-    if (elapsed < WEEK_MS) return t('tasks.time.daysAgo', { count: Math.floor(elapsed / DAY_MS) });
-    return new Date(iso).toLocaleDateString(i18n.language);
-  };
-
   const renderBody = () => {
     if (items.length > 0) {
       return items.map((item, index) => (
         <View key={item.id} className={index > 0 ? 'border-t border-white/5' : undefined}>
-          <TaskBreakdownRow
+          <TaskHistoryRow
             item={item}
             timeLabel={formatTime(item.createdAt)}
             onOpen={onOpen}
@@ -128,14 +145,34 @@ export function TaskHistoryList({
         </View>
       );
     }
-    return <Text className="text-textMuted text-sm leading-5 py-3">{t('tasks.empty')}</Text>;
+    return (
+      <EmptyState
+        compact
+        icon={Sparkles}
+        title={t('tasks.emptyTitle')}
+        description={t('tasks.empty')}
+      />
+    );
   };
 
   return (
     <View className="px-4 mt-7">
-      <Text className="text-textMuted text-[11px] font-semibold uppercase tracking-widest mb-1">
-        {t('tasks.recentTitle')}
-      </Text>
+      <View className="flex-row items-center justify-between mb-1">
+        <Text className="text-textMuted text-[11px] font-semibold uppercase tracking-widest">
+          {t('tasks.recentTitle')}
+        </Text>
+        {hasMore ? (
+          <TouchableOpacity
+            onPress={onSeeAll}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="link"
+            className="flex-row items-center"
+          >
+            <Text className="text-primary text-xs font-semibold">{t('tasks.seeAll')}</Text>
+            <ChevronRight size={14} color="#8B5CF6" strokeWidth={2.25} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
       {renderBody()}
     </View>
   );

@@ -8,7 +8,9 @@
     "save": "Save",
     "delete": "Delete",
     "edit": "Edit",
-    "close": "Close"
+    "close": "Close",
+    "ok": "OK",
+    "back": "Back"
   },
   "home": {
     "title": "Welcome to Minito",
@@ -18,7 +20,11 @@
     "breaking": "Minitizing...",
     "noSteps": "No steps available. Please go back and try again.",
     "resumeTitle": "Pick up where you left off",
-    "resumeFallbackLabel": "Your task"
+    "resumeFallbackLabel": "Your task",
+    "resumeDismiss": "Dismiss the unfinished session",
+    "backHome": "Back to home",
+    "inputLabel": "What are you putting off?",
+    "charactersLeft": "{{count}} characters left"
   },
   "focus": {
     "step": "Step {{current}} of {{total}}",
@@ -27,7 +33,16 @@
     "previous": "Previous",
     "complete": "DONE",
     "startWith": "Start with:",
-    "ready": "I'm Ready"
+    "ready": "I'm Ready",
+    "stoppingPoint": "Permission to stop",
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    },
+    "stepDone": "Step {{done}} of {{total}} done",
+    "addTimer": "Add a timer to this step",
+    "hideTimer": "Hide the timer"
   },
   "success": {
     "title": "You Minitized {{count}} steps!",
@@ -48,8 +63,10 @@
     "continueWithApple": "Continue with Apple",
     "continueWithGoogle": "Continue with Google",
     "checkEmail": "Check your inbox to confirm your email, then sign in.",
+    "backendUnavailable": "Minito can't reach its server right now, so signing in is unavailable. Please try again later.",
     "errors": {
       "invalid_input": "Enter a valid email and a password of at least 6 characters.",
+      "backend_unavailable": "Minito can't reach its server right now. Please try again later.",
       "invalid_name": "Tell us what to call you.",
       "invalid_credentials": "Incorrect email or password.",
       "email_not_confirmed": "Please confirm your email before signing in.",
@@ -107,6 +124,14 @@
       }
     }
   },
+  "feedback": {
+    "question": "Was this breakdown the right size?",
+    "helpful": "Just right",
+    "tooLarge": "Steps too big",
+    "tooSmall": "Steps too small",
+    "wrongTone": "Tone was off",
+    "thanks": "Noted. Thank you."
+  },
   "offline": {
     "banner": "You're offline. Using fallback content.",
     "title": "Offline Mode"
@@ -118,37 +143,134 @@
     "signOutFailed": "Failed to sign out",
     "exportFailed": "Failed to export data",
     "deleteFailed": "Failed to delete account",
+    "sessionExpired": "Your session has expired. Please sign in again.",
     "cancelled": "Operation was cancelled"
   },
   "timer": {
     "title": "Timer",
-    "completed": "Completed!",
     "start": "Start",
     "pause": "Pause",
     "reset": "Reset",
-    "back": "Back",
-    "stop": "Stop",
-    "tapToStop": "Tap to stop"
+    "editHint": "Opens a dial to set minutes and seconds",
+    "done": "Done",
+    "increase": "Add a minute",
+    "decrease": "Remove a minute",
+    "timeUp": "Time's up",
+    "editTitle": "Set the time",
+    "adjust": "Set time",
+    "stopAlarm": "Stop the alarm",
+    "resume": "Resume"
   },
   "focusMode": {
-    "warning": "Focus!",
-    "gentleWarning": "Seems like you're getting distracted...",
-    "remainingMinutes": "{{minutes}} min left",
+    "gentleWarning": "Phone down, back to focus",
     "focusLabel": "Focus",
     "pause": "Pause",
-    "resume": "Resume"
+    "resume": "Resume",
+    "paused": "Paused",
+    "end": "End session",
+    "remainingA11y": "{{time}} remaining",
+    "pickupsA11y": "Picked up: {{count}}"
   },
   "dashboard": {
     "guest": "Guest",
     "welcome": "Welcome back",
     "signOut": "Sign Out",
     "coreFeatureTitle": "Core Minito Feature",
-    "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps."
+    "coreFeatureSubtitle": "Turn any overwhelming task into small, doable steps.",
+    "controlCenter": "Control Center",
+    "quickAccess": "Quick access"
   },
   "errorBoundary": {
     "title": "Something went wrong",
     "message": "This screen hit an unexpected error. It has been reported, and trying again usually helps.",
     "retry": "Try again"
+  },
+  "health": {
+    "backendDown": "Minito's server can't be reached right now. Check your connection; meanwhile tasks are split with offline steps.",
+    "aiDown": "The AI service isn't responding right now, so tasks are split with offline steps for the moment.",
+    "retry": "Try again"
+  },
+  "settings": {
+    "title": "Settings",
+    "preferences": "Preferences",
+    "notifications": "Notifications",
+    "haptics": "Haptic feedback",
+    "hapticsHint": "A light vibration on taps, dials and timers",
+    "language": "Language",
+    "support": "Support",
+    "privacy": "Privacy & data",
+    "help": "Help & FAQ",
+    "account": "Account",
+    "signOut": "Sign out",
+    "signOutConfirmTitle": "Sign out?",
+    "signOutConfirmMessage": "You can sign back in anytime; your breakdowns stay synced.",
+    "comingSoon": "Coming soon",
+    "version": "Minito v{{version}}"
+  },
+  "planner": {
+    "deleteTitle": "Delete this project?",
+    "deleteMessage": "Delete “{{title}}” and its steps from all your devices?",
+    "deleteHint": "Long press to delete",
+    "emptyTitle": "No projects yet",
+    "emptyText": "Group bigger goals into projects and Minito keeps the next step in view.",
+    "emptyAction": "Add a project",
+    "demoSuggest": "Suggest sample tasks",
+    "demoSuggesting": "Preparing samples…",
+    "demoBadge": "DEMO",
+    "demoNote": "Sample steps for now; AI-powered planning is coming soon.",
+    "title": "Planner",
+    "activeProjects": "Active projects",
+    "newProject": "New project",
+    "projectName": "Project name",
+    "projectNamePlaceholder": "e.g. Graduation thesis",
+    "color": "Color",
+    "suggestionsTitle": "Suggested tasks (tap to add):",
+    "subtasks": "Subtasks",
+    "subtaskPlaceholder": "Add a task…",
+    "create": "Create project",
+    "nextStep": "Next step",
+    "due": "Due {{date}}",
+    "samples": {
+      "thesis": [
+        "Research the topic",
+        "Gather sources",
+        "Draft an outline",
+        "Write the first chapter",
+        "Send it to your advisor"
+      ],
+      "fitness": [
+        "Set a goal",
+        "Build a routine",
+        "Do the first workout",
+        "Plan your meals",
+        "Review the week"
+      ],
+      "language": [
+        "Learn core vocabulary",
+        "Practice a little every day",
+        "Practice speaking",
+        "Study grammar",
+        "Watch a film or series"
+      ],
+      "default": [
+        "Define the first step",
+        "Do some research",
+        "Make a plan",
+        "Start doing it",
+        "Review how it went"
+      ]
+    },
+    "addSubtask": "Add subtask",
+    "removeSubtask": "Remove {{title}}",
+    "colors": {
+      "purple": "Purple",
+      "green": "Green",
+      "blue": "Blue",
+      "pink": "Pink",
+      "amber": "Amber",
+      "red": "Red"
+    },
+    "startFocusOn": "Start a focus session on {{title}}"
   },
   "profile": {
     "namePrompt": "What should we call you?",
@@ -161,6 +283,13 @@
   },
   "tasks": {
     "recentTitle": "Recent breakdowns",
+    "emptyTitle": "No breakdowns yet",
+    "progress": {
+      "title": "Minito is on it",
+      "analyzing": "Analyzing cognitive load…",
+      "generating": "Generating micro-steps…",
+      "finalizing": "Finalizing focus mode…"
+    },
     "empty": "Your breakdowns will appear here, synced across your devices.",
     "stepsProgress": "{{done}}/{{total}} steps",
     "completed": "Completed",
@@ -176,16 +305,65 @@
       "minutesAgo": "{{count}}m ago",
       "hoursAgo": "{{count}}h ago",
       "daysAgo": "{{count}}d ago"
-    }
+    },
+    "seeAll": "See all",
+    "historyTitle": "Task history",
+    "historyUnavailable": "Your history could not be loaded right now. Your tasks are safe; try again in a moment.",
+    "loadMoreFailed": "Could not load older tasks.",
+    "refusedTitle": "I can't break this one down",
+    "refusedMessage": "Something in how it's written is outside what Minito can help with. Try describing the task a different way."
   },
   "audio": {
     "title": "Focus Sounds",
-    "stop": "Stop sound"
+    "stop": "Stop sound",
+    "sectionTitle": "Background sounds",
+    "sectionSubtitle": "Pick a sound to deepen your focus",
+    "tracks": {
+      "deep_brown": {
+        "name": "Deep brown",
+        "description": "Low, steady focus"
+      },
+      "infinite_drift": {
+        "name": "Infinite drift",
+        "description": "Soft ambient space"
+      },
+      "rushing_river": {
+        "name": "Rushing river",
+        "description": "Flowing water"
+      },
+      "theta_focus": {
+        "name": "Theta focus",
+        "description": "Slow, spacious pulse"
+      },
+      "slow_binaural": {
+        "name": "Slow binaural",
+        "description": "Quiet deep focus"
+      },
+      "ambient_pulse": {
+        "name": "Ambient pulse",
+        "description": "Steady focus rhythm"
+      },
+      "modern_classical": {
+        "name": "Modern classical",
+        "description": "Calm instrumental focus"
+      }
+    },
+    "playHint": "Plays this ambience",
+    "pauseHint": "Pauses this ambience"
   },
   "stats": {
     "title": "Insights",
     "emptyTitle": "No insights yet",
-    "emptyText": "Complete a focus session from the Planner and your rhythm, consistency and flow data will appear here — all of it real, none of it made up."
+    "emptyText": "Complete a focus session from the Planner and your rhythm, consistency and flow data will appear here — all of it real, none of it made up.",
+    "emptyAction": "Open the Planner",
+    "energyFlow": "Energy flow",
+    "noProjectData": "No project data yet",
+    "focusRhythm": "Focus rhythm",
+    "noData": "No data yet",
+    "peakTime": "Your peak hours:",
+    "consistency": "Consistency",
+    "legendLess": "Less",
+    "legendMore": "More"
   },
   "flowState": {
     "flow": {
@@ -206,11 +384,101 @@
     "focusSession": "FOCUS SESSION",
     "duration": "DURATION",
     "ambience": "AMBIENCE",
-    "customDuration": "Custom duration...",
-    "minutes": "minutes",
     "mute": "Mute",
-    "brownNoise": "Brown Noise",
-    "rain": "Rain",
-    "lofi": "Lo-Fi"
+    "durationOption": "{{count}}m",
+    "minDuration": "Pick at least 10 seconds."
+  },
+  "sessionComplete": {
+    "title": "Great job!",
+    "subtitle": "{{duration}} of focus on “{{task}}”",
+    "duration": "Duration",
+    "pickups": "Pickups",
+    "pickupCount": "{{count}}×",
+    "focusScore": "Focus score",
+    "taskDone": "Task done",
+    "justSession": "Just the session",
+    "helper": "Choose “Just the session” to keep the task open for later.",
+    "outOf": "/ {{max}}"
+  },
+  "duration": {
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
+    "hoursMinutes": "{{hours}} h {{minutes}} min",
+    "minutesShort": "{{count}} min",
+    "seconds": "{{count}} sec",
+    "minutesSeconds": "{{minutes}} min {{seconds}} sec"
+  },
+  "offlineSteps": {
+    "cleaning": [
+      "Start with one small area (e.g., your desk or a corner)",
+      "Gather cleaning supplies: trash bag, cleaning cloth, and a container for items to relocate",
+      "Sort items into three piles: keep, donate, and trash",
+      "Clean surfaces with appropriate cleaner",
+      "Put items back in their designated places",
+      "Take out trash and recycling",
+      "Take a moment to appreciate your clean space"
+    ],
+    "study": [
+      "Find a quiet, distraction-free space",
+      "Gather all necessary materials (books, notes, laptop, etc.)",
+      "Break the material into smaller, manageable chunks",
+      "Set a timer for focused study sessions (e.g., 25 minutes)",
+      "Take short breaks between sessions (5-10 minutes)",
+      "Use active recall: test yourself on what you learned",
+      "Review and summarize key points at the end"
+    ],
+    "work": [
+      "Clarify the goal and expected outcome",
+      "Break the project into smaller tasks",
+      "Prioritize tasks by importance and deadline",
+      "Set specific time blocks for each task",
+      "Remove distractions (phone, notifications)",
+      "Start with the most challenging task when energy is highest",
+      "Review progress and adjust plan as needed"
+    ],
+    "health": [
+      "Choose an activity that feels achievable today",
+      "Set a specific time and place",
+      "Prepare any needed equipment or clothing",
+      "Start with a warm-up or gentle movement",
+      "Do the activity at your own pace",
+      "Cool down and stretch afterward",
+      "Hydrate and rest as needed"
+    ],
+    "social": [
+      "Identify what kind of social interaction you need",
+      "Reach out to one person you trust",
+      "Suggest a specific activity or time",
+      "Be flexible if plans need to change",
+      "Focus on quality time over quantity",
+      "Respect your own boundaries and energy levels",
+      "Follow up afterward to maintain connection"
+    ],
+    "financial": [
+      "Gather all relevant financial documents",
+      "Review your current financial situation",
+      "Identify your financial goals",
+      "Create a simple budget or spending plan",
+      "Set up automatic savings if possible",
+      "Track expenses for a week to see patterns",
+      "Make one small change to improve your financial health"
+    ],
+    "general": [
+      "Break the task into smaller, specific steps",
+      "Identify what resources or tools you need",
+      "Set a realistic deadline or time frame",
+      "Start with the easiest or most motivating step",
+      "Work on it for a set amount of time (e.g., 15 minutes)",
+      "Take breaks when needed",
+      "Celebrate small wins along the way"
+    ]
+  },
+  "wheel": {
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "seconds": "Seconds",
+    "hoursShort": "h",
+    "minutesShort": "min",
+    "secondsShort": "sec"
   }
 }

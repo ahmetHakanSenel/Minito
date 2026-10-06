@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,20 +8,47 @@ import {
   StatusBar,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { ArrowLeft, Check, Plus, X, Sparkles, Trash2, ListChecks } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInUp, Easing } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useProjects, formatDueDate } from '../src/context/ProjectContext';
+import { useProjects } from '../src/context/ProjectContext';
+import { TITLE_LIMITS } from '../src/features/planner/model';
 import { ProjectCard } from '../src/components/planner/ProjectCard';
-import { DashboardModal } from '../src/modals';
+import { EmptyState } from '../src/components/feedback/EmptyState';
+import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
+
+const demoStyles = StyleSheet.create({
+  badge: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+  },
+  badgeText: {
+    color: '#FBBF24',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  note: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+});
 
 // ============================================================================
 // ADD PROJECT MODAL COMPONENT
@@ -39,14 +66,17 @@ interface AddProjectModalProps {
   onGenerateSubtasks: (title: string) => Promise<string[]>;
 }
 
-const PROJECT_COLORS = [
-  '#8B5CF6', // Purple
-  '#34D399', // Green
-  '#60A5FA', // Blue
-  '#F472B6', // Pink
-  '#FBBF24', // Yellow
-  '#F87171', // Red
-];
+const PROJECT_COLORS = ['#8B5CF6', '#34D399', '#60A5FA', '#F472B6', '#FBBF24', '#F87171'];
+
+// Six unlabelled circles are six identical buttons to a screen reader.
+const PROJECT_COLOR_NAMES: Record<string, string> = {
+  '#8B5CF6': 'planner.colors.purple',
+  '#34D399': 'planner.colors.green',
+  '#60A5FA': 'planner.colors.blue',
+  '#F472B6': 'planner.colors.pink',
+  '#FBBF24': 'planner.colors.amber',
+  '#F87171': 'planner.colors.red',
+};
 
 const AddProjectModal: React.FC<AddProjectModalProps> = ({
   visible,
@@ -54,12 +84,28 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   onAdd,
   onGenerateSubtasks,
 }) => {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [selectedColor, setSelectedColor] = useState(PROJECT_COLORS[0]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedTasks, setSuggestedTasks] = useState<string[]>([]);
   const [manualTasks, setManualTasks] = useState<ManualTask[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+  // A counter, not a timestamp: two subtasks added in the same millisecond would share a key,
+  // and React would then reuse one row's state for the other.
+  const lastTaskId = useRef(0);
+
+  const nextTaskId = () => {
+    lastTaskId.current += 1;
+    return `task-${lastTaskId.current}`;
+  };
+
+  // A new subtask lands below the fold once the list is long. Bring it into view, after the
+  // layout that added it.
+  const revealNewTask = () => {
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  };
 
   const handleClose = () => {
     setTitle('');
@@ -72,43 +118,41 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleAdd = () => {
     if (title.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const allTasks = manualTasks.map((t) => t.title);
-      onAdd(title.trim(), selectedColor, allTasks);
+      haptics.success();
+      onAdd(
+        title.trim(),
+        selectedColor,
+        manualTasks.map((task) => task.title)
+      );
       handleClose();
     }
   };
 
   const handleAddManualTask = () => {
     if (newTaskText.trim()) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setManualTasks((prev) => [
-        ...prev,
-        { id: `manual-${Date.now()}`, title: newTaskText.trim() },
-      ]);
+      haptics.tap();
+      setManualTasks((prev) => [...prev, { id: nextTaskId(), title: newTaskText.trim() }]);
       setNewTaskText('');
+      revealNewTask();
     }
   };
 
   const handleRemoveManualTask = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setManualTasks((prev) => prev.filter((t) => t.id !== id));
+    haptics.tap();
+    setManualTasks((prev) => prev.filter((task) => task.id !== id));
   };
 
   const handleAddSuggestedToManual = (task: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!manualTasks.find((t) => t.title === task)) {
-      setManualTasks((prev) => [
-        ...prev,
-        { id: `suggested-${Date.now()}-${Math.random()}`, title: task },
-      ]);
-    }
+    haptics.tap();
+    if (manualTasks.some((existing) => existing.title === task)) return;
+    setManualTasks((prev) => [...prev, { id: nextTaskId(), title: task }]);
+    revealNewTask();
   };
 
   const handleGenerateSubtasks = async () => {
     if (!title.trim()) return;
     setIsGenerating(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     try {
       const tasks = await onGenerateSubtasks(title.trim());
       setSuggestedTasks(tasks);
@@ -120,130 +164,205 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={modalStyles.overlay}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      // Without this the overlay stops short of the status bar on Android, leaving a strip of
+      // the screen behind it showing through.
+      statusBarTranslucent
+      onRequestClose={handleClose}
+    >
+      {/* iOS reports the keyboard to JavaScript; on Android the window resizes underneath. */}
+      <KeyboardAvoidingView
+        style={modalStyles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <AnimatedView
           entering={SlideInUp.duration(300).easing(Easing.out(Easing.cubic))}
           exiting={FadeOut.duration(200)}
           style={modalStyles.container}
         >
-          {/* Header */}
+          {/* Header: pinned, so the way out never scrolls off the screen. */}
           <View style={modalStyles.header}>
-            <Text style={modalStyles.title}>Yeni Proje</Text>
-            <TouchableOpacity onPress={handleClose} style={modalStyles.closeButton}>
+            <Text style={modalStyles.title}>{t('planner.newProject')}</Text>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={modalStyles.closeButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.close')}
+            >
               <X size={24} color="rgba(255,255,255,0.6)" />
             </TouchableOpacity>
           </View>
 
-          {/* Title Input */}
-          <View style={modalStyles.inputContainer}>
-            <Text style={modalStyles.label}>Proje Adı</Text>
-            <TextInput
-              style={modalStyles.input}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Örn: Bitirme Tezi"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-            />
-          </View>
-
-          {/* Color Picker */}
-          <View style={modalStyles.colorSection}>
-            <Text style={modalStyles.label}>Renk</Text>
-            <View style={modalStyles.colorGrid}>
-              {PROJECT_COLORS.map((color) => (
-                <TouchableOpacity
-                  key={color}
-                  style={[
-                    modalStyles.colorOption,
-                    { backgroundColor: color },
-                    selectedColor === color && modalStyles.colorSelected,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedColor(color);
-                  }}
-                />
-              ))}
-            </View>
-          </View>
-
-          {/* AI Subtask Generation */}
-          <TouchableOpacity
-            style={[modalStyles.aiButton, !title.trim() && { opacity: 0.5 }]}
-            onPress={handleGenerateSubtasks}
-            disabled={!title.trim() || isGenerating}
+          {/* The sheet grows with every subtask, so past a point the middle has to scroll. */}
+          <ScrollView
+            ref={scrollRef}
+            style={modalStyles.body}
+            contentContainerStyle={modalStyles.bodyContent}
+            showsVerticalScrollIndicator={false}
+            // A tap on add or delete lands on the button, instead of only closing the keyboard.
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           >
-            <Sparkles size={18} color="#FBBF24" />
-            <Text style={modalStyles.aiButtonText}>
-              {isGenerating ? 'Düşünüyorum...' : 'AI ile Görev Öner'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Suggested Tasks Preview */}
-          {suggestedTasks.length > 0 && (
-            <AnimatedView entering={FadeIn.duration(200)} style={modalStyles.suggestedContainer}>
-              <Text style={modalStyles.suggestedTitle}>
-                Önerilen Görevler (eklemek için dokun):
-              </Text>
-              {suggestedTasks.map((task, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={modalStyles.suggestedTaskButton}
-                  onPress={() => handleAddSuggestedToManual(task)}
-                >
-                  <Plus size={14} color="#8B5CF6" />
-                  <Text style={modalStyles.suggestedTask}>{task}</Text>
-                </TouchableOpacity>
-              ))}
-            </AnimatedView>
-          )}
-
-          {/* Manual Task Input */}
-          <View style={modalStyles.manualTaskSection}>
-            <Text style={modalStyles.label}>Alt Görevler</Text>
-            <View style={modalStyles.manualTaskInputRow}>
+            {/* Title Input */}
+            <View style={modalStyles.inputContainer}>
+              <Text style={modalStyles.label}>{t('planner.projectName')}</Text>
               <TextInput
-                style={modalStyles.manualTaskInput}
-                value={newTaskText}
-                onChangeText={setNewTaskText}
-                placeholder="Yeni görev ekle..."
+                style={modalStyles.input}
+                value={title}
+                onChangeText={setTitle}
+                placeholder={t('planner.projectNamePlaceholder')}
                 placeholderTextColor="rgba(255,255,255,0.3)"
-                onSubmitEditing={handleAddManualTask}
-                returnKeyType="done"
+                // The ceiling the planner model already enforces, so nothing the person types
+                // is silently cut off after the fact.
+                maxLength={TITLE_LIMITS.project}
+                returnKeyType="next"
               />
-              <TouchableOpacity
-                style={modalStyles.manualTaskAddButton}
-                onPress={handleAddManualTask}
-                disabled={!newTaskText.trim()}
-              >
-                <Plus size={20} color={newTaskText.trim() ? '#8B5CF6' : 'rgba(255,255,255,0.3)'} />
-              </TouchableOpacity>
             </View>
 
-            {/* Added Tasks List */}
-            {manualTasks.length > 0 && (
-              <View style={modalStyles.manualTasksList}>
-                {manualTasks.map((task) => (
-                  <View key={task.id} style={modalStyles.manualTaskItem}>
-                    <Text style={modalStyles.manualTaskText}>{task.title}</Text>
-                    <TouchableOpacity
-                      onPress={() => handleRemoveManualTask(task.id)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Trash2 size={16} color="rgba(255,255,255,0.4)" />
-                    </TouchableOpacity>
-                  </View>
+            {/* Color Picker */}
+            <View style={modalStyles.colorSection}>
+              <Text style={modalStyles.label}>{t('planner.color')}</Text>
+              <View style={modalStyles.colorGrid}>
+                {PROJECT_COLORS.map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      modalStyles.colorOption,
+                      { backgroundColor: color },
+                      selectedColor === color && modalStyles.colorSelected,
+                    ]}
+                    onPress={() => {
+                      haptics.selection();
+                      setSelectedColor(color);
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityLabel={t(PROJECT_COLOR_NAMES[color])}
+                    accessibilityState={{ selected: selectedColor === color }}
+                  />
                 ))}
               </View>
-            )}
-          </View>
+            </View>
 
-          {/* Add Button */}
+            {/* Sample subtask suggestions, labeled as a demo until AI planning ships */}
+            <TouchableOpacity
+              style={[modalStyles.aiButton, !title.trim() && { opacity: 0.5 }]}
+              onPress={handleGenerateSubtasks}
+              disabled={!title.trim() || isGenerating}
+            >
+              <Sparkles size={18} color="#FBBF24" />
+              <Text style={modalStyles.aiButtonText}>
+                {isGenerating ? t('planner.demoSuggesting') : t('planner.demoSuggest')}
+              </Text>
+              <View style={demoStyles.badge}>
+                <Text style={demoStyles.badgeText}>{t('planner.demoBadge')}</Text>
+              </View>
+            </TouchableOpacity>
+            <Text style={demoStyles.note}>{t('planner.demoNote')}</Text>
+
+            {/* Suggested Tasks Preview */}
+            {suggestedTasks.length > 0 && (
+              <AnimatedView entering={FadeIn.duration(200)} style={modalStyles.suggestedContainer}>
+                <Text style={modalStyles.suggestedTitle}>{t('planner.suggestionsTitle')}</Text>
+                {suggestedTasks.map((task) => {
+                  const alreadyAdded = manualTasks.some((existing) => existing.title === task);
+                  return (
+                    <TouchableOpacity
+                      key={task}
+                      style={[
+                        modalStyles.suggestedTaskButton,
+                        alreadyAdded && modalStyles.suggestedTaskButtonAdded,
+                      ]}
+                      onPress={() => handleAddSuggestedToManual(task)}
+                      disabled={alreadyAdded}
+                      accessibilityRole="button"
+                      accessibilityLabel={task}
+                      accessibilityState={{ disabled: alreadyAdded }}
+                    >
+                      {/* Tapping an already-added suggestion did nothing, and looked no
+                          different from one that would. */}
+                      {alreadyAdded ? (
+                        <Check size={14} color="rgba(255,255,255,0.35)" />
+                      ) : (
+                        <Plus size={14} color="#8B5CF6" />
+                      )}
+                      <Text
+                        style={[
+                          modalStyles.suggestedTask,
+                          alreadyAdded && modalStyles.suggestedTaskAdded,
+                        ]}
+                      >
+                        {task}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </AnimatedView>
+            )}
+
+            {/* Manual Task Input */}
+            <View style={modalStyles.manualTaskSection}>
+              <Text style={modalStyles.label}>{t('planner.subtasks')}</Text>
+              <View style={modalStyles.manualTaskInputRow}>
+                <TextInput
+                  style={modalStyles.manualTaskInput}
+                  value={newTaskText}
+                  onChangeText={setNewTaskText}
+                  placeholder={t('planner.subtaskPlaceholder')}
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  onSubmitEditing={handleAddManualTask}
+                  // Stays open for the next one: adding several subtasks in a row is the
+                  // normal way this sheet is used.
+                  blurOnSubmit={false}
+                  maxLength={TITLE_LIMITS.task}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  style={modalStyles.manualTaskAddButton}
+                  onPress={handleAddManualTask}
+                  disabled={!newTaskText.trim()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('planner.addSubtask')}
+                  accessibilityState={{ disabled: !newTaskText.trim() }}
+                >
+                  <Plus
+                    size={20}
+                    color={newTaskText.trim() ? '#8B5CF6' : 'rgba(255,255,255,0.3)'}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Added Tasks List */}
+              {manualTasks.length > 0 && (
+                <View style={modalStyles.manualTasksList}>
+                  {manualTasks.map((task) => (
+                    <View key={task.id} style={modalStyles.manualTaskItem}>
+                      <Text style={modalStyles.manualTaskText}>{task.title}</Text>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveManualTask(task.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('planner.removeSubtask', { title: task.title })}
+                      >
+                        <Trash2 size={16} color="rgba(255,255,255,0.4)" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </ScrollView>
+
+          {/* Create stays in reach however long the subtask list grows. */}
           <TouchableOpacity
             style={[modalStyles.addButton, !title.trim() && { opacity: 0.5 }]}
             onPress={handleAdd}
             disabled={!title.trim()}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !title.trim() }}
           >
             <LinearGradient
               colors={['#8B5CF6', '#6D28D9']}
@@ -251,11 +370,11 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               end={{ x: 1, y: 1 }}
               style={modalStyles.addButtonGradient}
             >
-              <Text style={modalStyles.addButtonText}>Proje Oluştur</Text>
+              <Text style={modalStyles.addButtonText}>{t('planner.create')}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </AnimatedView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -273,6 +392,17 @@ const modalStyles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    // The sheet grows with its content, but never past the screen: beyond this the middle
+    // scrolls instead of pushing the create button off the bottom.
+    maxHeight: '86%',
+  },
+  body: {
+    // Without this the scroll view claims its full content height and the sheet overflows
+    // again; shrinking is what lets the container's maxHeight actually bind.
+    flexShrink: 1,
+  },
+  bodyContent: {
+    paddingBottom: 4,
   },
   header: {
     flexDirection: 'row',
@@ -370,10 +500,12 @@ const modalStyles = StyleSheet.create({
     color: '#FFFFFF',
     flex: 1,
   },
-  suggestedMore: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.4)',
-    marginTop: 4,
+  suggestedTaskButtonAdded: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  suggestedTaskAdded: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    textDecorationLine: 'line-through',
   },
   manualTaskSection: {
     marginBottom: 16,
@@ -425,6 +557,7 @@ const modalStyles = StyleSheet.create({
   addButton: {
     borderRadius: 16,
     overflow: 'hidden',
+    marginTop: 16,
   },
   addButtonGradient: {
     paddingVertical: 16,
@@ -445,21 +578,26 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function PlannerScreen() {
   const router = useRouter();
-  const { projects, addProject, addTask, generateSubtasks } = useProjects();
+  const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const { projects, addProject, generateSubtasks } = useProjects();
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
 
-  // Sort projects by due date (earliest first, undefined dates at end)
-  const sortedProjects = [...projects].sort((a, b) => {
-    if (!a.dueDate && !b.dueDate) return 0;
-    if (!a.dueDate) return 1;
-    if (!b.dueDate) return -1;
-    return a.dueDate.getTime() - b.dueDate.getTime();
-  });
+  // Soonest deadline first; a project without one sits at the end rather than the top.
+  const sortedProjects = useMemo(
+    () =>
+      [...projects].sort((a, b) => {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.getTime() - b.dueDate.getTime();
+      }),
+    [projects]
+  );
 
   const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     // Navigate back to home and open DashboardModal (Control Center)
     router.replace({
       pathname: '/',
@@ -472,33 +610,31 @@ export default function PlannerScreen() {
   };
 
   const handleAddProject = useCallback(
-    async (title: string, color: string, manualTasks: string[]) => {
-      // Use manual tasks if provided, otherwise generate with AI
-      const tasks = manualTasks.length > 0 ? manualTasks : await generateSubtasks(title);
-
-      addProject({
-        title,
-        color,
-        dueDate: undefined,
-        tasks: tasks.map((taskTitle, index) => ({
-          id: `new-${Date.now()}-${index}`,
-          title: taskTitle,
-          isCompleted: false,
-        })),
-      });
+    // Only the subtasks the person typed or picked from the samples; nothing is invented here.
+    (title: string, color: string, taskTitles: string[]) => {
+      addProject({ title, color, taskTitles });
     },
-    [addProject, generateSubtasks]
+    [addProject]
   );
 
   const handleOpenAddModal = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     setShowAddModal(true);
   };
 
-  const handleDashboardNavigate = (screen: string) => {
-    setShowDashboard(false);
-    router.push(`/${screen}` as any);
-  };
+  // One button, two surfaces: it must not be written twice and drift.
+  const addButton = (
+    <TouchableOpacity
+      style={styles.dockedAddButton}
+      onPress={handleOpenAddModal}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={t('planner.newProject')}
+    >
+      <Plus size={18} color="#71717a" strokeWidth={2} />
+      <Text style={styles.dockedAddText}>{t('planner.newProject')}</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -506,10 +642,15 @@ export default function PlannerScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Planlayıcı</Text>
+        <Text style={styles.headerTitle}>{t('planner.title')}</Text>
         {/* Removed header add button - using bottom bar instead */}
         <View style={styles.headerSpacer} />
       </View>
@@ -521,17 +662,16 @@ export default function PlannerScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Section Title */}
-        <Text style={styles.sectionTitle}>Aktif Projeler</Text>
+        <Text style={styles.sectionTitle}>{t('planner.activeProjects')}</Text>
 
         {/* Empty State */}
         {sortedProjects.length === 0 && (
-          <AnimatedView entering={FadeIn.duration(300)} style={styles.emptyState}>
-            <View style={styles.emptyStateIcon}>
-              <ListChecks size={28} color="#8B5CF6" strokeWidth={1.5} />
-            </View>
-            <Text style={styles.emptyStateTitle}>Henüz proje yok</Text>
-            <Text style={styles.emptyStateText}>İlk projenizi ekleyerek başlayın</Text>
-          </AnimatedView>
+          <EmptyState
+            icon={ListChecks}
+            title={t('planner.emptyTitle')}
+            description={t('planner.emptyText')}
+            action={{ label: t('planner.emptyAction'), onPress: () => setShowAddModal(true) }}
+          />
         )}
 
         {/* Timeline View */}
@@ -548,8 +688,8 @@ export default function PlannerScreen() {
           ))}
         </View>
 
-        {/* Bottom padding for docked bar */}
-        <View style={{ height: 80 }} />
+        {/* Bottom padding for the docked bar and device gesture area */}
+        <View style={{ height: 80 + insets.bottom }} />
       </ScrollView>
 
       {/* Add Project Modal */}
@@ -560,39 +700,17 @@ export default function PlannerScreen() {
         onGenerateSubtasks={generateSubtasks}
       />
 
-      {/* Docked Bottom Bar - "Silent Focus" Add Button */}
-      <View style={styles.dockedBottomBar}>
+      {/* The one way to add a project, docked clear of the system gesture area. */}
+      <View style={[styles.dockedBottomBar, { paddingBottom: insets.bottom }]}>
         {Platform.OS === 'ios' ? (
-          <BlurView intensity={80} tint="dark" style={styles.blurContainer}>
-            <TouchableOpacity
-              style={styles.dockedAddButton}
-              onPress={handleOpenAddModal}
-              activeOpacity={0.7}
-            >
-              <Plus size={18} color="#71717a" strokeWidth={2} />
-              <Text style={styles.dockedAddText}>Yeni Proje</Text>
-            </TouchableOpacity>
+          <BlurView intensity={80} tint="dark" style={styles.bottomBarSurface}>
+            {addButton}
           </BlurView>
         ) : (
-          <View style={styles.androidBottomBar}>
-            <TouchableOpacity
-              style={styles.dockedAddButton}
-              onPress={handleOpenAddModal}
-              activeOpacity={0.7}
-            >
-              <Plus size={18} color="#71717a" strokeWidth={2} />
-              <Text style={styles.dockedAddText}>Yeni Proje</Text>
-            </TouchableOpacity>
-          </View>
+          // Android's blur is costly and uneven across versions; a flat surface reads the same.
+          <View style={[styles.bottomBarSurface, styles.androidBottomBar]}>{addButton}</View>
         )}
       </View>
-
-      {/* Dashboard Modal (Navigation) */}
-      <DashboardModal
-        visible={showDashboard}
-        onClose={() => setShowDashboard(false)}
-        onNavigate={handleDashboardNavigate}
-      />
     </SafeAreaView>
   );
 }
@@ -642,53 +760,24 @@ const styles = StyleSheet.create({
   timeline: {
     paddingLeft: 20,
   },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  emptyStateIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.28)',
-    marginBottom: 16,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.5)',
-    textAlign: 'center',
-  },
   // Docked Bottom Bar - "Silent Focus" Design
   dockedBottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 60,
+    // As tall as its button plus whatever the system reserves below it, so the button never
+    // ends up under a home indicator.
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
-  blurContainer: {
-    flex: 1,
+  bottomBarSurface: {
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
   },
   androidBottomBar: {
-    flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   dockedAddButton: {
     flexDirection: 'row',

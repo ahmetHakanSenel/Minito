@@ -57,6 +57,8 @@ export async function saveLanguagePreference(language: SupportedLanguage): Promi
 export async function initI18n(): Promise<void> {
   const initialLanguage = await getInitialLanguage();
 
+  // The instance method on purpose: i18next's named `use` export is unbound and loses `this`.
+  // eslint-disable-next-line import/no-named-as-default-member
   await i18n.use(initReactI18next).init({
     resources: {
       en: { translation: en },
@@ -71,15 +73,6 @@ export async function initI18n(): Promise<void> {
       useSuspense: false, // Disable suspense for React Native
     },
   });
-
-  // Load database translations (fail-soft: if it fails, continue with JSON)
-  try {
-    const { initDatabaseTranslations } = await import('./databaseLoader');
-    await initDatabaseTranslations();
-  } catch (error) {
-    console.warn('Failed to initialize database translations:', error);
-    // Continue with JSON translations only
-  }
 }
 
 export default i18n;

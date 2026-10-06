@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 interface HourlyFocusData {
   hour: number; // 0-23
@@ -55,6 +55,7 @@ const formatPeakTime = (bucketIndex: number): string => {
 };
 
 export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) => {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
 
   const chartData = useMemo(() => aggregateData(hourlyData), [hourlyData]);
@@ -95,7 +96,7 @@ export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) =>
 
   return (
     <Animated.View entering={FadeInUp.delay(200).duration(500)} style={styles.container}>
-      <Text style={styles.sectionTitle}>Odak Ritmi</Text>
+      <Text style={styles.sectionTitle}>{t('stats.focusRhythm')}</Text>
 
       <View style={styles.chartContainer}>
         {hasData ? (
@@ -125,7 +126,7 @@ export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) =>
           />
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Henüz veri yok</Text>
+            <Text style={styles.emptyText}>{t('stats.noData')}</Text>
           </View>
         )}
       </View>
@@ -135,7 +136,7 @@ export const FocusEqualizer: React.FC<FocusEqualizerProps> = ({ hourlyData }) =>
         <Animated.View entering={FadeInUp.delay(600).duration(400)} style={styles.insightContainer}>
           <View style={styles.insightDot} />
           <Text style={styles.insightText}>
-            Zirve saatin: <Text style={styles.insightHighlight}>{peakTime}</Text>
+            {t('stats.peakTime')} <Text style={styles.insightHighlight}>{peakTime}</Text>
           </Text>
         </Animated.View>
       )}

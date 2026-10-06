@@ -1,0 +1,7 @@
+# Placeholder Supabase anon keys from early documentation and scaffolding. Each was decoded and
+# checked: the project refs are "placeholder" and "xxxxxxxxxxxxx", and the README value is a
+# truncated example. They are listed by fingerprint, so any other value in those files still fails.
+decbc5e5b1bd3ae7f2df5c92078bb818c23641fc:SUPABASE_KURULUM_REHBERI.md:jwt:33
+decbc5e5b1bd3ae7f2df5c92078bb818c23641fc:README.md:generic-api-key:113
+74cb508de51162ffb746044158a3d9af3c191c8e:docs/SUPABASE_SETUP.md:jwt:56
+74cb508de51162ffb746044158a3d9af3c191c8e:src/lib/supabase/client.ts:jwt:18

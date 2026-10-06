@@ -5,7 +5,8 @@ export enum FallbackReason {
   RATE_DOWN = 'RATE_DOWN',
   VALIDATION = 'VALIDATION',
   CONTENT_FLAGGED = 'CONTENT_FLAGGED',
-  USER_LIMIT = 'USER_LIMIT',
+  /** The session is missing or was rejected: the user has to sign in again. */
+  AUTH_EXPIRED = 'AUTH_EXPIRED',
 }
 
 /**
@@ -19,7 +20,7 @@ export const FallbackReasonLabels: Record<FallbackReason, string> = {
   [FallbackReason.RATE_DOWN]: 'Too many requests; rate limiting is active',
   [FallbackReason.VALIDATION]: 'There was an issue validating your request',
   [FallbackReason.CONTENT_FLAGGED]: 'Content flagged by safety filters',
-  [FallbackReason.USER_LIMIT]: 'You have reached the current usage limit',
+  [FallbackReason.AUTH_EXPIRED]: 'Your session has expired; please sign in again',
 };
 
 export type FallbackMetadata = {

@@ -33,7 +33,6 @@ yarn-error.*
 # local env files
 .env
 .env*.local
-.env.example
 
 # typescript
 *.tsbuildinfo
@@ -46,3 +45,15 @@ yarn-error.*
 supabase/.env.functions
 supabase/.temp/
 
+
+# Dry-run evaluation output is noise; real runs are committed deliberately.
+docs/eval/results/*dry-run*
+
+# README artwork previews (npm run readme:art -- --preview)
+docs/assets/*.preview.png
+
+# Agent tooling state. A worktree here is a full second checkout of the repository; every
+# tool that walks the tree (ESLint, Prettier, Jest, tsc) would otherwise lint, format, count
+# and typecheck it as if it were source.
+.claude/worktrees/
+.claude/scheduled_tasks.lock

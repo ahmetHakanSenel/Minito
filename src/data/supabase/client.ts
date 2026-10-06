@@ -1,33 +1,63 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, processLock } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 import type { Database } from './database.types';
+import { secureSessionStorage } from './secureSessionStorage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Define them in .env before starting the app.'
+export const isBackendConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+export class BackendUnavailableError extends Error {
+  constructor() {
+    super(
+      'Supabase is not configured: EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY is missing.'
+    );
+    this.name = 'BackendUnavailableError';
+  }
+}
+
+type MinitoSupabaseClient = ReturnType<typeof createClient<Database>>;
+
+const client: MinitoSupabaseClient | null =
+  supabaseUrl && supabaseAnonKey
+    ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          storage: secureSessionStorage,
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+          // React Native has no Web Locks API, so without this the client runs unlocked and two
+          // token refreshes can interleave their storage writes.
+          lock: processLock,
+        },
+      })
+    : null;
+
+if (!client && __DEV__) {
+  console.warn(
+    'Supabase is not configured, so the app runs in offline mode. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env.'
   );
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: AsyncStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: false,
-  },
-});
+/**
+ * Returns the configured client, or throws BackendUnavailableError so callers can degrade to
+ * an offline state instead of crashing at import time.
+ */
+export function getSupabase(): MinitoSupabaseClient {
+  if (!client) {
+    throw new BackendUnavailableError();
+  }
+  return client;
+}
 
 // Refresh timers are unreliable while a mobile app is backgrounded, so tie them to foreground state.
-if (Platform.OS !== 'web') {
+if (client && Platform.OS !== 'web') {
   AppState.addEventListener('change', (state) => {
     if (state === 'active') {
-      supabase.auth.startAutoRefresh();
+      client.auth.startAutoRefresh();
     } else {
-      supabase.auth.stopAutoRefresh();
+      client.auth.stopAutoRefresh();
     }
   });
 }

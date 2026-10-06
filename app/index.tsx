@@ -1,31 +1,39 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { LogOut, X } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
 import { TaskInput, OfflineBanner, MinitoIcon } from '../src/components';
 import { HeaderUserWidget } from '../src/components/layout';
 import { DashboardModal } from '../src/modals';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import { DisplayNameEditor } from '../src/features/auth/ui/DisplayNameEditor';
+import { useSystemHealth } from '../src/features/health/controller/useSystemHealth';
+import { ServiceNotice } from '../src/features/health/ui/ServiceNotice';
 import { useTaskBreakdowns } from '../src/features/tasks/controller/useTaskBreakdowns';
+import { BreakdownProgress } from '../src/features/tasks/ui/BreakdownProgress';
 import { TaskHistoryList } from '../src/features/tasks/ui/TaskHistoryList';
 import type { BreakdownContent, TaskBreakdown } from '../src/repositories/taskRepository';
+import {
+  focusRoute,
+  historyRoute,
+  type FocusLaunchOptions,
+} from '../src/features/tasks/focusLaunch';
+import { confirmDeleteBreakdown } from '../src/features/tasks/ui/confirmDeleteBreakdown';
+import { useDialog } from '../src/components/feedback/Dialog';
+import { haptics } from '../src/lib/ui/haptics';
 import { useKeepAboveKeyboard } from '../src/lib/ui/useKeepAboveKeyboard';
 import { FallbackReason } from '../src/safety';
 import {
@@ -34,17 +42,19 @@ import {
   type ActiveSession,
 } from '../src/lib/storage/activeSessionStore';
 
-type FocusLaunchOptions = {
-  taskId?: string;
-  resumeStepIndex?: number;
-};
-
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
 
 export default function HomeScreen() {
   const { t } = useTranslation();
+  const dialog = useDialog();
   const { user, displayName, signOut, updateDisplayName } = useAuth();
-  const { items, historyStatus, isBreakingDown, refresh, breakDown, remove } = useTaskBreakdowns();
+  const { items, hasMore, historyStatus, isBreakingDown, refresh, breakDown, remove } =
+    useTaskBreakdowns();
+  const {
+    snapshot: healthSnapshot,
+    isChecking: isCheckingHealth,
+    refresh: refreshHealth,
+  } = useSystemHealth();
   const [input, setInput] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [isDashboardVisible, setIsDashboardVisible] = useState(false);
@@ -55,7 +65,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ openDashboard?: string }>();
   const insets = useSafeAreaInsets();
-  const lastHapticTime = useRef<number>(0);
   const scrollRef = useRef<ScrollView>(null);
   const nameEditorRef = useRef<View>(null);
   const taskInputAreaRef = useRef<View>(null);
@@ -66,35 +75,40 @@ export default function HomeScreen() {
   const showNameEditor = isEditingName || (!displayName && !isNamePromptDismissed);
   const menuName = displayName ?? user?.email ?? t('dashboard.guest');
 
-  // Returning from focus mode changes both the resumable session and task progress.
+  // Returning from focus mode changes the resumable session, task progress and possibly
+  // connectivity, so everything the dashboard shows is re-checked on focus.
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      loadActiveSession().then((session) => {
-        if (!cancelled) setResumableSession(session);
-      });
+      loadActiveSession()
+        .then((session) => {
+          if (!cancelled) setResumableSession(session);
+        })
+        // No crumb is the same as no session to resume.
+        .catch(() => {});
       refresh();
+      refreshHealth();
       return () => {
         cancelled = true;
       };
-    }, [refresh])
+    }, [refresh, refreshHealth])
   );
 
   const handleSignOut = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     setIsSigningOut(true);
     try {
       // The root auth guard redirects to /login once the session is cleared.
       await signOut();
     } catch {
       setIsSigningOut(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(t('common.error'), t('errors.signOutFailed'));
+      haptics.error();
+      void dialog.alert({ title: t('common.error'), message: t('errors.signOutFailed') });
     }
   };
 
   const openNameEditor = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     setIsEditingName(true);
   };
 
@@ -111,72 +125,61 @@ export default function HomeScreen() {
     setIsNamePromptDismissed(true);
   };
 
-  const openFocus = (
-    content: BreakdownContent,
-    { taskId, resumeStepIndex }: FocusLaunchOptions = {}
-  ) => {
-    router.push({
-      pathname: '/focus',
-      params: {
-        steps: JSON.stringify(content.steps),
-        input: content.title,
-        empathyBridge: content.empathyBridge ?? '',
-        firstStepHook: content.firstStepHook ?? '',
-        ...(taskId ? { taskId } : {}),
-        ...(resumeStepIndex !== undefined ? { resumeStepIndex: String(resumeStepIndex) } : {}),
-      },
-    });
+  const openFocus = (content: BreakdownContent, options?: FocusLaunchOptions) => {
+    router.push(focusRoute(content, options));
   };
 
   const handleResumeSession = () => {
     if (!resumableSession) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     openFocus(
       {
         title: resumableSession.input,
         steps: resumableSession.steps,
         empathyBridge: resumableSession.empathyBridge,
         firstStepHook: resumableSession.firstStepHook,
+        stoppingPoint: resumableSession.stoppingPoint ?? null,
       },
-      { taskId: resumableSession.taskId, resumeStepIndex: resumableSession.currentStepIndex }
+      {
+        taskId: resumableSession.taskId,
+        resumeStepIndex: resumableSession.currentStepIndex,
+        requestId: resumableSession.requestId,
+      }
     );
   };
 
   const handleDismissSession = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    clearActiveSession();
+    haptics.tap();
+    void clearActiveSession().catch(() => {});
     setResumableSession(null);
   };
 
   // Open DashboardModal when coming back from sub-screens with openDashboard param
   useEffect(() => {
     if (params.openDashboard === 'true') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- arriving with the param is the request to open the dashboard
       setIsDashboardVisible(true);
       router.setParams({ openDashboard: undefined });
     }
-  }, [params.openDashboard]);
+  }, [params.openDashboard, router]);
 
-  // Selection haptic on scroll, debounced to avoid spam
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    keyboardScroll.onScroll(event);
-    const now = Date.now();
-    if (now - lastHapticTime.current > 300) {
-      Haptics.selectionAsync();
-      lastHapticTime.current = now;
-    }
-  };
-
-  const handleBreakdownFailure = (reason: FallbackReason) => {
+  const handleBreakdownFailure = async (reason: FallbackReason) => {
     console.warn('Failed to break task:', reason);
     if (reason === FallbackReason.DB_DOWN || reason === FallbackReason.AI_DOWN) {
       setIsOffline(true);
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    Alert.alert(
-      t('common.error'),
-      reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown')
-    );
+    haptics.error();
+    if (reason === FallbackReason.AUTH_EXPIRED) {
+      await dialog.alert({ title: t('common.error'), message: t('errors.sessionExpired') });
+      // The root guard sends a signed-out user to the login screen.
+      void signOut().catch(() => {});
+      return;
+    }
+    await dialog.alert({
+      title: t('common.error'),
+      message: reason === FallbackReason.RATE_DOWN ? t('tasks.rateLimited') : t('errors.unknown'),
+    });
   };
 
   const handleBreakTask = async () => {
@@ -188,17 +191,28 @@ export default function HomeScreen() {
     try {
       const outcome = await breakDown(trimmed);
       if (outcome.status === 'flagged') {
-        // Panic screen renders its own localized content — no params needed
-        router.push('/panic');
+        if (outcome.crisis) {
+          // The panic screen renders its own localized content; it needs no parameters.
+          router.push('/panic');
+        } else {
+          await dialog.alert({
+            title: t('tasks.refusedTitle'),
+            message: t('tasks.refusedMessage'),
+          });
+        }
         return;
       }
       if (outcome.status === 'failed') {
-        handleBreakdownFailure(outcome.reason);
+        await handleBreakdownFailure(outcome.reason);
         return;
       }
+      haptics.success();
       setIsOffline(outcome.isOffline);
       setInput('');
-      openFocus(outcome.content, { taskId: outcome.saved?.id });
+      openFocus(outcome.content, {
+        taskId: outcome.saved?.id,
+        requestId: outcome.requestId ?? undefined,
+      });
     } catch (error) {
       console.error('Error breaking task:', error);
       setIsOffline(true);
@@ -206,34 +220,17 @@ export default function HomeScreen() {
   };
 
   const handleOpenBreakdown = (item: TaskBreakdown) => {
-    Haptics.selectionAsync();
-    // Completed tasks replay from the start without touching their saved progress.
-    if (item.completedAt !== null) {
-      openFocus(item);
-      return;
-    }
-    const resumeStepIndex =
-      item.completedStepCount > 0
-        ? Math.min(item.completedStepCount, item.steps.length - 1)
-        : undefined;
-    openFocus(item, { taskId: item.id, resumeStepIndex });
+    haptics.selection();
+    router.push(historyRoute(item));
   };
 
   const handleDeleteBreakdown = (item: TaskBreakdown) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(t('tasks.deleteTitle'), t('tasks.deleteMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: () => {
-          remove(item.id).catch(() => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert(t('common.error'), t('tasks.deleteFailed'));
-          });
-        },
-      },
-    ]);
+    void confirmDeleteBreakdown(t, dialog, () => remove(item.id));
+  };
+
+  const handleSeeAllHistory = () => {
+    haptics.tap();
+    router.push('/history');
   };
 
   const handleDashboardNavigate = (screen: string) => {
@@ -262,11 +259,13 @@ export default function HomeScreen() {
         visible={isDashboardVisible}
         onClose={() => setIsDashboardVisible(false)}
         userName={menuName}
-        isPremium={false}
         onNavigate={handleDashboardNavigate}
       />
 
-      <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <ScrollView
           ref={scrollRef}
           style={styles.screen}
@@ -277,11 +276,11 @@ export default function HomeScreen() {
             paddingHorizontal: 20,
           }}
           keyboardShouldPersistTaps="handled"
-          onScroll={handleScroll}
+          onScroll={keyboardScroll.onScroll}
           onLayout={keyboardScroll.onLayout}
           scrollEventThrottle={16}
         >
-          <View className="flex-row items-center justify-between mb-8">
+          <View className="flex-row items-center justify-between mb-6">
             <View className="flex-1 mr-4">
               <Text className="text-textMuted text-sm">{t('dashboard.welcome')}</Text>
               {displayName ? (
@@ -323,6 +322,12 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          <ServiceNotice
+            snapshot={healthSnapshot}
+            isChecking={isCheckingHealth}
+            onRetry={refreshHealth}
+          />
+
           {showNameEditor && (
             <View ref={nameEditorRef} collapsable={false} className="mb-6">
               <DisplayNameEditor
@@ -339,7 +344,7 @@ export default function HomeScreen() {
 
           <View className="flex-1 justify-center">
             <View className="items-center mb-6">
-              <MinitoIcon size={64} color="#8B5CF6" />
+              <MinitoIcon size={64} />
             </View>
 
             <View className="rounded-3xl bg-white/5 border border-white/10 py-6">
@@ -358,6 +363,8 @@ export default function HomeScreen() {
                     style={styles.resumeCard}
                     onPress={handleResumeSession}
                     activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.resumeTitle')}
                   >
                     <View style={styles.resumeTextContainer}>
                       <Text style={styles.resumeTitle}>{t('home.resumeTitle')}</Text>
@@ -375,6 +382,8 @@ export default function HomeScreen() {
                       onPress={handleDismissSession}
                       style={styles.resumeDismiss}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('home.resumeDismiss')}
                     >
                       <X size={16} color="#A1A1AA" />
                     </TouchableOpacity>
@@ -394,13 +403,19 @@ export default function HomeScreen() {
                 />
               </View>
 
-              <TaskHistoryList
-                items={items}
-                status={historyStatus}
-                onOpen={handleOpenBreakdown}
-                onDelete={handleDeleteBreakdown}
-                onRetry={refresh}
-              />
+              {isBreakingDown ? (
+                <BreakdownProgress />
+              ) : (
+                <TaskHistoryList
+                  items={items}
+                  status={historyStatus}
+                  hasMore={hasMore}
+                  onOpen={handleOpenBreakdown}
+                  onDelete={handleDeleteBreakdown}
+                  onRetry={refresh}
+                  onSeeAll={handleSeeAllHistory}
+                />
+              )}
             </View>
           </View>
         </ScrollView>

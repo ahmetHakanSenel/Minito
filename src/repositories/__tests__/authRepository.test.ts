@@ -1,10 +1,12 @@
 import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js';
-import { requestGoogleIdToken } from '../../data/auth/googleAuth';
-import { supabase } from '../../data/supabase/client';
+import { requestAppleCredential } from '../../data/auth/appleAuth';
+import { requestGoogleCredential } from '../../data/auth/googleAuth';
+import { BackendUnavailableError, getSupabase } from '../../data/supabase/client';
 import { authRepository } from '../authRepository';
 
-jest.mock('../../data/supabase/client', () => ({
-  supabase: {
+jest.mock('../../data/supabase/client', () => {
+  class BackendUnavailableError extends Error {}
+  const client = {
     auth: {
       signInWithPassword: jest.fn(),
       signUp: jest.fn(),
@@ -13,19 +15,26 @@ jest.mock('../../data/supabase/client', () => ({
       updateUser: jest.fn(),
       onAuthStateChange: jest.fn(),
     },
-  },
-}));
+  };
+  return {
+    BackendUnavailableError,
+    isBackendConfigured: true,
+    getSupabase: jest.fn(() => client),
+  };
+});
 jest.mock('../../data/auth/googleAuth', () => ({
   isGoogleSignInAvailable: jest.fn(),
-  requestGoogleIdToken: jest.fn(),
+  requestGoogleCredential: jest.fn(),
 }));
 jest.mock('../../data/auth/appleAuth', () => ({
   isAppleSignInAvailable: jest.fn(),
-  requestAppleIdToken: jest.fn(),
+  requestAppleCredential: jest.fn(),
 }));
 
-const auth = jest.mocked(supabase.auth);
-const mockedRequestGoogleIdToken = jest.mocked(requestGoogleIdToken);
+const auth = jest.mocked(getSupabase().auth);
+const mockedGetSupabase = jest.mocked(getSupabase);
+const mockedRequestGoogle = jest.mocked(requestGoogleCredential);
+const mockedRequestApple = jest.mocked(requestAppleCredential);
 
 // Supabase response types are wide; these tests only exercise the fields the repository reads.
 function respond(value: unknown) {
@@ -61,6 +70,16 @@ describe('authRepository email flows', () => {
     });
   });
 
+  it('reports a missing backend configuration as backend_unavailable', async () => {
+    mockedGetSupabase.mockImplementationOnce(() => {
+      throw new BackendUnavailableError();
+    });
+
+    await expect(authRepository.signInWithEmail('a@b.co', 'secret1')).rejects.toMatchObject({
+      code: 'backend_unavailable',
+    });
+  });
+
   it('maps an already registered email to user_already_exists', async () => {
     auth.signUp.mockResolvedValue(
       respond({ data: {}, error: new AuthApiError('User already registered', 422, 'email_exists') })
@@ -89,14 +108,14 @@ describe('authRepository email flows', () => {
 
 describe('authRepository provider flows', () => {
   it('reports a cancelled provider sheet without calling Supabase', async () => {
-    mockedRequestGoogleIdToken.mockResolvedValue(null);
+    mockedRequestGoogle.mockResolvedValue(null);
 
     await expect(authRepository.signInWithGoogle()).rejects.toMatchObject({ code: 'cancelled' });
     expect(auth.signInWithIdToken).not.toHaveBeenCalled();
   });
 
   it('wraps native provider failures as provider_unavailable', async () => {
-    mockedRequestGoogleIdToken.mockRejectedValue(new Error('DEVELOPER_ERROR'));
+    mockedRequestGoogle.mockRejectedValue(new Error('DEVELOPER_ERROR'));
 
     await expect(authRepository.signInWithGoogle()).rejects.toMatchObject({
       code: 'provider_unavailable',
@@ -104,13 +123,25 @@ describe('authRepository provider flows', () => {
   });
 
   it('exchanges the provider ID token for a Supabase session', async () => {
-    mockedRequestGoogleIdToken.mockResolvedValue('google-id-token');
+    mockedRequestGoogle.mockResolvedValue({ token: 'google-id-token' });
     auth.signInWithIdToken.mockResolvedValue(respond({ data: {}, error: null }));
 
     await expect(authRepository.signInWithGoogle()).resolves.toBeUndefined();
     expect(auth.signInWithIdToken).toHaveBeenCalledWith({
       provider: 'google',
       token: 'google-id-token',
+    });
+  });
+
+  it('passes the raw Apple nonce along, so Supabase can check the token was minted for it', async () => {
+    mockedRequestApple.mockResolvedValue({ token: 'apple-id-token', nonce: 'raw-nonce' });
+    auth.signInWithIdToken.mockResolvedValue(respond({ data: {}, error: null }));
+
+    await expect(authRepository.signInWithApple()).resolves.toBeUndefined();
+    expect(auth.signInWithIdToken).toHaveBeenCalledWith({
+      provider: 'apple',
+      token: 'apple-id-token',
+      nonce: 'raw-nonce',
     });
   });
 });

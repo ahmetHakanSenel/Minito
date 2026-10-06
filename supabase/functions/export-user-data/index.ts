@@ -1,75 +1,66 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders, describeError, guardMethod, jsonResponse } from '../_shared/http.ts';
+import {
+  AuthUnavailableError,
+  authenticateRequest,
+  createAdminClient,
+} from '../_shared/supabase.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+/**
+ * Edge Function: export-user-data (right of access and portability)
+ *
+ * Returns everything stored about the caller: the account, the saved breakdown history, the
+ * planner, and the AI request log. The history and the planner hold the person's own text. The
+ * request log holds the generated plans and an HMAC of each task rather than its text; the HMAC
+ * is left out, as it means nothing without the server's secret.
+ */
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+const METHODS = ['GET'];
+const CORS = corsHeaders(METHODS);
+
+const BREAKDOWN_COLUMNS =
+  'title, empathy_bridge, first_step_hook, stopping_point, steps, completed_step_count, completed_at, created_at';
+
+const PROJECT_COLUMNS = 'id, title, color, due_date, deleted_at, created_at, updated_at';
+
+const PLANNER_TASK_COLUMNS =
+  'id, project_id, title, is_completed, position, deleted_at, created_at, updated_at';
+
+const REQUEST_LOG_COLUMNS =
+  'request_id, created_at, prompt_version, ai_model, breakdown_source, fallback_reason, steps, feedback_score, feedback_at';
+
+Deno.serve(async (req) => {
+  const rejected = guardMethod(req, METHODS, CORS);
+  if (rejected) return rejected;
 
   try {
-    // Get authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const admin = createAdminClient();
+    const user = await authenticateRequest(req, admin);
+    if (!user) {
+      return jsonResponse({ success: false, error: 'Unauthorized' }, 401, CORS);
     }
 
-    // Create Supabase client with service role key for admin operations
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    // The service role bypasses RLS, so both queries scope themselves to the verified user.
+    const [breakdowns, requests, projects, plannerTasks] = await Promise.all([
+      admin
+        .from('task_breakdowns')
+        .select(BREAKDOWN_COLUMNS)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      admin
+        .from('tasks')
+        .select(REQUEST_LOG_COLUMNS)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      admin.from('planner_projects').select(PROJECT_COLUMNS).eq('user_id', user.id),
+      admin.from('planner_tasks').select(PLANNER_TASK_COLUMNS).eq('user_id', user.id),
+    ]);
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    // Verify the user's JWT token
-    const token = authHeader.replace('Bearer ', '');
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const userId = user.id;
-
-    const { data: breakdowns, error: breakdownsError } = await supabaseAdmin
-      .from('task_breakdowns')
-      .select(
-        'title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at'
-      )
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (breakdownsError) {
-      console.error('Error fetching task breakdowns:', breakdownsError);
-      return new Response(JSON.stringify({ error: 'Failed to export user data' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const failure = breakdowns.error ?? requests.error ?? projects.error ?? plannerTasks.error;
+    if (failure) {
+      console.error(
+        JSON.stringify({ level: 'error', event: 'export_user_data.failed', error: failure.message })
+      );
+      return jsonResponse({ success: false, error: 'Failed to export user data' }, 500, CORS);
     }
 
     const exportData = {
@@ -79,27 +70,41 @@ serve(async (req) => {
         created_at: user.created_at,
         last_sign_in_at: user.last_sign_in_at,
       },
-      task_breakdowns: breakdowns ?? [],
+      task_breakdowns: breakdowns.data ?? [],
+      ai_requests: requests.data ?? [],
+      // Deleted items are kept briefly as tombstones so other devices learn about the deletion.
+      planner: { projects: projects.data ?? [], tasks: plannerTasks.data ?? [] },
       metadata: {
         export_date: new Date().toISOString(),
-        note: 'Includes every task breakdown saved to your account.',
+        note: 'Includes your saved breakdowns, your planner and the log of your AI requests. Your tasks appear in full in the breakdowns and the planner; the request log keeps only a keyed hash of each one.',
       },
     };
 
-    // Return export data
     return new Response(JSON.stringify(exportData, null, 2), {
       status: 200,
       headers: {
-        ...corsHeaders,
+        ...CORS,
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="minito-export-${userId}-${Date.now()}.json"`,
+        'Content-Disposition': `attachment; filename="minito-export-${Date.now()}.json"`,
+        // Personal data: never let an intermediary cache it.
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error) {
-    console.error('Unexpected error in export-user-data:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    if (error instanceof AuthUnavailableError) {
+      return jsonResponse(
+        { success: false, error: 'Authentication is temporarily unavailable' },
+        503,
+        CORS
+      );
+    }
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: 'export_user_data.unhandled_error',
+        error: describeError(error),
+      })
+    );
+    return jsonResponse({ success: false, error: 'Internal server error' }, 500, CORS);
   }
 });

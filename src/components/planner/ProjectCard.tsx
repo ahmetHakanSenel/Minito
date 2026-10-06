@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ChevronDown, Circle, CheckCircle2, Play } from 'lucide-react-native';
+import { ChevronDown, Circle, CheckCircle2, Play, Trash2 } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
   FadeInRight,
@@ -14,16 +13,14 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { Project, Task, formatDueDate, useProjects } from '../../context/ProjectContext';
-import {
-  FocusMode,
-  SessionCompletionModal,
-  SessionSetupModal,
-  SessionConfig,
-  SoundType,
-} from '../../modals';
+import { FocusMode, SessionCompletionModal, SessionSetupModal, SessionConfig } from '../../modals';
 import { recordFocusSession } from '../../lib/stats/sessionStore';
+import { useAudioContext } from '../../context/AudioContext';
+import { useTranslation } from 'react-i18next';
+import { useDialog } from '../feedback/Dialog';
+import { haptics } from '../../lib/ui/haptics';
+import { PRESS_SPRING } from '../../lib/ui/motion';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -45,7 +42,7 @@ const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({ progress, col
       duration: 400,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-  }, [progress]);
+  }, [animatedProgress, progress]);
 
   const progressStyle = useAnimatedStyle(() => ({
     width: `${animatedProgress.value}%`,
@@ -65,8 +62,6 @@ const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({ progress, col
 
 interface TaskItemProps {
   task: Task;
-  projectId: string;
-  projectTitle: string;
   onToggle: () => void;
   onStartFocus: (task: Task) => void;
   isNextStep?: boolean;
@@ -74,19 +69,18 @@ interface TaskItemProps {
 
 const TaskItem: React.FC<TaskItemProps> = ({
   task,
-  projectId,
-  projectTitle,
   onToggle,
   onStartFocus,
   isNextStep = false,
 }) => {
+  const { t } = useTranslation();
   const handleStartFocus = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     onStartFocus(task);
   }, [task, onStartFocus]);
 
   const handleToggle = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onToggle();
   }, [onToggle]);
 
@@ -99,6 +93,9 @@ const TaskItem: React.FC<TaskItemProps> = ({
         onPress={handleToggle}
         style={styles.taskCheckbox}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="checkbox"
+        accessibilityLabel={task.title}
+        accessibilityState={{ checked: task.isCompleted }}
       >
         {task.isCompleted ? (
           <CheckCircle2 size={20} color="#34D399" strokeWidth={2} />
@@ -111,6 +108,9 @@ const TaskItem: React.FC<TaskItemProps> = ({
         style={styles.taskTextContainer}
         onPress={handleStartFocus}
         disabled={task.isCompleted}
+        accessibilityRole="button"
+        accessibilityLabel={t('planner.startFocusOn', { title: task.title })}
+        accessibilityState={{ disabled: task.isCompleted }}
       >
         <Text
           style={[
@@ -129,6 +129,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
           onPress={handleStartFocus}
           style={[styles.taskPlayButton, isNextStep && styles.taskPlayButtonActive]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('planner.startFocusOn', { title: task.title })}
         >
           <Play
             size={14}
@@ -147,19 +149,13 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
 interface NextStepPreviewProps {
   task: Task;
-  projectId: string;
-  projectTitle: string;
   onStartFocus: (task: Task) => void;
 }
 
-const NextStepPreview: React.FC<NextStepPreviewProps> = ({
-  task,
-  projectId,
-  projectTitle,
-  onStartFocus,
-}) => {
+const NextStepPreview: React.FC<NextStepPreviewProps> = ({ task, onStartFocus }) => {
+  const { t } = useTranslation();
   const handleStartFocus = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     onStartFocus(task);
   }, [task, onStartFocus]);
 
@@ -168,9 +164,11 @@ const NextStepPreview: React.FC<NextStepPreviewProps> = ({
       style={styles.nextStepContainer}
       onPress={handleStartFocus}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={t('planner.startFocusOn', { title: task.title })}
     >
       <View style={styles.nextStepLabelRow}>
-        <Text style={styles.nextStepLabel}>Sonraki Adım</Text>
+        <Text style={styles.nextStepLabel}>{t('planner.nextStep')}</Text>
         {/* Static play icon - no animation, monochrome */}
         <Play size={12} color="#71717a" fill="#71717a" style={{ marginLeft: 6 }} />
       </View>
@@ -199,7 +197,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onToggle,
   totalProjects,
 }) => {
-  const { toggleTask, getNextStep, completeTaskById } = useProjects();
+  const { t } = useTranslation();
+  const dialog = useDialog();
+  const { toggleTask, getNextStep, completeTaskById, deleteProject } = useProjects();
   const scale = useSharedValue(1);
   const chevronRotation = useSharedValue(0);
 
@@ -208,9 +208,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const [focusModeVisible, setFocusModeVisible] = useState(false);
   const [sessionModalVisible, setSessionModalVisible] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const { endAudioSession } = useAudioContext();
   const [sessionConfig, setSessionConfig] = useState<SessionConfig>({
-    duration: 25,
-    sound: 'mute',
+    durationSec: 25 * 60,
+    trackId: null,
   });
   const [sessionData, setSessionData] = useState({
     duration: 0,
@@ -222,18 +223,30 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       duration: 200,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     });
-  }, [isExpanded]);
+  }, [chevronRotation, isExpanded]);
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });
+    scale.value = withSpring(0.98, PRESS_SPRING);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    scale.value = withSpring(1, PRESS_SPRING);
+  };
+
+  const handleLongPress = async () => {
+    haptics.warning();
+    const confirmed = await dialog.confirm({
+      title: t('planner.deleteTitle'),
+      message: t('planner.deleteMessage', { title: project.title }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) deleteProject(project.id);
   };
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     onToggle();
   };
 
@@ -272,7 +285,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const handleFocusModeClose = useCallback(() => {
     setFocusModeVisible(false);
     setActiveTask(null);
-  }, []);
+    // The session is over either way: whatever was playing before it comes back.
+    void endAudioSession();
+  }, [endAudioSession]);
 
   const handleSessionComplete = useCallback(
     (data: {
@@ -283,24 +298,29 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       taskId?: string;
     }) => {
       setFocusModeVisible(false);
-      // Convert seconds to minutes for display
-      setSessionData({
-        duration: Math.ceil(data.duration / 60),
-        pickupCount: data.pickupCount,
-      });
-      // Feed the Insights screen with real behavior (fire-and-forget)
-      recordFocusSession({
+      void endAudioSession();
+
+      // Insights are fed by what happened, finished or not (fire and forget).
+      void recordFocusSession({
         durationSec: data.duration,
         pickupCount: data.pickupCount,
         completed: data.completed,
         source: 'timer',
         projectId: data.projectId,
         taskId: data.taskId,
-      });
-      // Show session completion modal
+      }).catch(() => {});
+
+      // A session someone walked out of is not something to congratulate them for. It is
+      // counted, and the screen simply goes back to the plan.
+      if (!data.completed) {
+        setActiveTask(null);
+        return;
+      }
+
+      setSessionData({ duration: data.duration, pickupCount: data.pickupCount });
       setSessionModalVisible(true);
     },
-    []
+    [endAudioSession]
   );
 
   const handleTaskCompleted = useCallback(() => {
@@ -312,7 +332,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   }, [activeTask, project.id, completeTaskById]);
 
   const handleJustSession = useCallback(() => {
-    // Task remains active, user gets XP (would integrate with gamification context)
+    // The task stays open; the session itself was already recorded when it ended.
     setSessionModalVisible(false);
     setActiveTask(null);
   }, []);
@@ -334,6 +354,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   }));
 
   const nextStep = getNextStep(project);
+  // Found once, rather than once per row inside the map.
+  const nextStepIndex = project.tasks.findIndex((task) => !task.isCompleted);
   const formattedDueDate = formatDueDate(project.dueDate);
 
   return (
@@ -353,6 +375,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         <AnimatedTouchableOpacity
           style={[styles.projectCard, cardAnimatedStyle]}
           onPress={handlePress}
+          onLongPress={() => void handleLongPress()}
+          accessibilityRole="button"
+          accessibilityLabel={project.title}
+          accessibilityState={{ expanded: isExpanded }}
+          accessibilityHint={t('planner.deleteHint')}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           activeOpacity={1}
@@ -361,7 +388,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
               <View style={[styles.colorIndicator, { backgroundColor: project.color }]} />
-              <Text style={styles.projectTitle}>{project.title}</Text>
+              <Text style={styles.projectTitle} numberOfLines={2} ellipsizeMode="tail">
+                {project.title}
+              </Text>
             </View>
             <Animated.View style={chevronAnimatedStyle}>
               <ChevronDown size={20} color="rgba(255,255,255,0.5)" />
@@ -376,40 +405,47 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
           {/* Next Step (Collapsed) or All Tasks (Expanded) */}
           {!isExpanded && nextStep && (
-            <NextStepPreview
-              task={nextStep}
-              projectId={project.id}
-              projectTitle={project.title}
-              onStartFocus={handleStartFocus}
-            />
+            <NextStepPreview task={nextStep} onStartFocus={handleStartFocus} />
           )}
 
           {/* Due Date */}
           {formattedDueDate && !isExpanded && (
-            <Text style={styles.dueDate}>Bitiş: {formattedDueDate}</Text>
+            <Text style={styles.dueDate}>{t('planner.due', { date: formattedDueDate })}</Text>
           )}
 
           {/* Expanded Tasks */}
           {isExpanded && (
             <AnimatedView entering={FadeInDown.duration(200)} style={styles.tasksContainer}>
               <View style={styles.tasksDivider} />
-              <Text style={styles.tasksTitle}>Alt Görevler</Text>
+              <Text style={styles.tasksTitle}>{t('planner.subtasks')}</Text>
               {project.tasks.map((task, taskIndex) => (
                 <TaskItem
                   key={task.id}
                   task={task}
-                  projectId={project.id}
-                  projectTitle={project.title}
                   onToggle={() => handleToggleTask(task.id)}
                   onStartFocus={handleStartFocus}
-                  isNextStep={taskIndex === project.tasks.findIndex((t) => !t.isCompleted)}
+                  isNextStep={taskIndex === nextStepIndex}
                 />
               ))}
 
               {/* Due Date in expanded view */}
               {formattedDueDate && (
-                <Text style={[styles.dueDate, { marginTop: 12 }]}>Bitiş: {formattedDueDate}</Text>
+                <Text style={[styles.dueDate, { marginTop: 12 }]}>
+                  {t('planner.due', { date: formattedDueDate })}
+                </Text>
               )}
+
+              {/* Long-pressing the card deletes it too, but nothing on screen said so. */}
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => void handleLongPress()}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('planner.deleteTitle')}
+              >
+                <Trash2 size={14} color="rgba(255,255,255,0.35)" strokeWidth={2} />
+                <Text style={styles.deleteButtonText}>{t('common.delete')}</Text>
+              </TouchableOpacity>
             </AnimatedView>
           )}
         </AnimatedTouchableOpacity>
@@ -427,7 +463,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       <FocusMode
         visible={focusModeVisible}
         onClose={handleFocusModeClose}
-        duration={sessionConfig.duration * 60} // Convert minutes to seconds
+        duration={sessionConfig.durationSec}
         taskTitle={activeTask?.title || ''}
         projectId={project.id}
         taskId={activeTask?.id}
@@ -437,7 +473,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       {/* Session Completion Modal */}
       <SessionCompletionModal
         visible={sessionModalVisible}
-        onClose={() => setSessionModalVisible(false)}
+        onClose={handleJustSession}
         sessionDuration={sessionData.duration}
         pickupCount={sessionData.pickupCount}
         taskTitle={activeTask?.title || ''}
@@ -489,6 +525,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardTitleRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -499,6 +537,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   projectTitle: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
@@ -551,6 +590,7 @@ const styles = StyleSheet.create({
   },
   nextStepText: {
     fontSize: 14,
+    lineHeight: 20,
     color: '#FFFFFF', // Full brightness - the "anchor"
     fontWeight: '600',
     marginTop: 2,
@@ -610,6 +650,20 @@ const styles = StyleSheet.create({
     // Only the next step gets the accent color
     backgroundColor: 'rgba(139, 92, 246, 0.15)',
   },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.35)',
+  },
 });
-
-export default ProjectCard;

@@ -8,7 +8,9 @@
     "save": "Kaydet",
     "delete": "Sil",
     "edit": "Düzenle",
-    "close": "Kapat"
+    "close": "Kapat",
+    "ok": "Tamam",
+    "back": "Geri"
   },
   "home": {
     "title": "Minito'ya Hoş Geldiniz",
@@ -18,7 +20,11 @@
     "breaking": "Minito'luyor...",
     "noSteps": "Adım bulunamadı. Lütfen geri dönüp tekrar deneyin.",
     "resumeTitle": "Kaldığın yerden devam et",
-    "resumeFallbackLabel": "Görevin"
+    "resumeFallbackLabel": "Görevin",
+    "resumeDismiss": "Yarım kalan oturumu kapat",
+    "backHome": "Ana ekrana dön",
+    "inputLabel": "Neyi erteliyorsun?",
+    "charactersLeft": "{{count}} karakter kaldı"
   },
   "focus": {
     "step": "Adım {{current}} / {{total}}",
@@ -27,7 +33,16 @@
     "previous": "Geri",
     "complete": "YAPTIM",
     "startWith": "İlk adım:",
-    "ready": "Hazırım"
+    "ready": "Hazırım",
+    "stoppingPoint": "Burada bırakabilirsin",
+    "difficulty": {
+      "easy": "Kolay",
+      "medium": "Orta",
+      "hard": "Zor"
+    },
+    "stepDone": "Adım {{done}}/{{total}} tamam",
+    "addTimer": "Bu adıma sayaç ekle",
+    "hideTimer": "Sayacı gizle"
   },
   "success": {
     "title": "{{count}} adımı Minito'ladın!",
@@ -48,8 +63,10 @@
     "continueWithApple": "Apple ile Devam Et",
     "continueWithGoogle": "Google ile Devam Et",
     "checkEmail": "E-postanızı onaylamak için gelen kutunuzu kontrol edin, ardından giriş yapın.",
+    "backendUnavailable": "Minito şu an sunucusuna ulaşamıyor, bu yüzden giriş yapılamıyor. Lütfen daha sonra tekrar deneyin.",
     "errors": {
       "invalid_input": "Geçerli bir e-posta ve en az 6 karakterli bir şifre girin.",
+      "backend_unavailable": "Minito şu an sunucusuna ulaşamıyor. Lütfen daha sonra tekrar deneyin.",
       "invalid_name": "Sana nasıl hitap edeceğimizi yaz.",
       "invalid_credentials": "E-posta veya şifre hatalı.",
       "email_not_confirmed": "Giriş yapmadan önce lütfen e-postanızı onaylayın.",
@@ -107,6 +124,14 @@
       }
     }
   },
+  "feedback": {
+    "question": "Adımlar sana uygun muydu?",
+    "helpful": "Tam kıvamında",
+    "tooLarge": "Adımlar fazla büyük",
+    "tooSmall": "Adımlar fazla küçük",
+    "wrongTone": "Üslup tutmadı",
+    "thanks": "Not aldım, teşekkürler."
+  },
   "offline": {
     "banner": "Çevrimdışısınız. Yedek içerik kullanılıyor.",
     "title": "Çevrimdışı Mod"
@@ -118,37 +143,134 @@
     "signOutFailed": "Çıkış yapılamadı",
     "exportFailed": "Veri dışa aktarılamadı",
     "deleteFailed": "Hesap silinemedi",
+    "sessionExpired": "Oturumunun süresi doldu. Lütfen yeniden giriş yap.",
     "cancelled": "İşlem iptal edildi"
   },
   "timer": {
     "title": "Zamanlayıcı",
-    "completed": "Tamamlandı!",
     "start": "Başla",
     "pause": "Duraklat",
     "reset": "Sıfırla",
-    "back": "Geri",
-    "stop": "Durdur",
-    "tapToStop": "Durdurmak için dokun"
+    "editHint": "Dakika ve saniye ayarlamak için çarkı açar",
+    "done": "Tamam",
+    "increase": "Bir dakika ekle",
+    "decrease": "Bir dakika çıkar",
+    "timeUp": "Süre doldu",
+    "editTitle": "Süreyi ayarla",
+    "adjust": "Ayarla",
+    "stopAlarm": "Alarmı durdur",
+    "resume": "Devam et"
   },
   "focusMode": {
-    "warning": "Odaklan!",
-    "gentleWarning": "⚠️ DİKKATİN DAĞILIYOR",
-    "remainingMinutes": "{{minutes}} dk kaldı",
+    "gentleWarning": "Telefonu bırak, odağa dön",
     "focusLabel": "Odak",
     "pause": "Duraklat",
-    "resume": "Devam Et"
+    "resume": "Devam Et",
+    "paused": "Duraklatıldı",
+    "end": "Oturumu bitir",
+    "remainingA11y": "{{time}} kaldı",
+    "pickupsA11y": "Eline alma: {{count}}"
   },
   "dashboard": {
     "guest": "Misafir",
     "welcome": "Tekrar hoş geldin",
     "signOut": "Çıkış Yap",
     "coreFeatureTitle": "Temel Minito Özelliği",
-    "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl."
+    "coreFeatureSubtitle": "Göz korkutan her görevi küçük, yapılabilir adımlara böl.",
+    "controlCenter": "Kontrol Merkezi",
+    "quickAccess": "Hızlı erişim"
   },
   "errorBoundary": {
     "title": "Bir şeyler ters gitti",
     "message": "Bu ekranda beklenmedik bir hata oluştu. Hata raporlandı; tekrar denemek genellikle işe yarar.",
     "retry": "Tekrar dene"
+  },
+  "health": {
+    "backendDown": "Minito sunucusuna şu an ulaşılamıyor. Bağlantını kontrol et; bu sırada görevler çevrimdışı adımlarla bölünür.",
+    "aiDown": "AI servisi şu an yanıt vermiyor; görevler bu sırada çevrimdışı adımlarla bölünür.",
+    "retry": "Tekrar dene"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "preferences": "Tercihler",
+    "notifications": "Bildirimler",
+    "haptics": "Titreşim",
+    "hapticsHint": "Dokunuşlarda, çarklarda ve sayaçlarda hafif titreşim",
+    "language": "Dil",
+    "support": "Destek",
+    "privacy": "Gizlilik ve veri",
+    "help": "Yardım ve SSS",
+    "account": "Hesap",
+    "signOut": "Çıkış yap",
+    "signOutConfirmTitle": "Çıkış yapılsın mı?",
+    "signOutConfirmMessage": "İstediğin zaman tekrar giriş yapabilirsin; görevlerin senkronize kalır.",
+    "comingSoon": "Yakında",
+    "version": "Minito v{{version}}"
+  },
+  "planner": {
+    "deleteTitle": "Bu proje silinsin mi?",
+    "deleteMessage": "“{{title}}” ve adımları tüm cihazlarından silinsin mi?",
+    "deleteHint": "Silmek için basılı tut",
+    "emptyTitle": "Henüz proje yok",
+    "emptyText": "Büyük hedeflerini projelere ayır; Minito sıradaki adımı hep önünde tutsun.",
+    "emptyAction": "Proje ekle",
+    "demoSuggest": "Örnek görev öner",
+    "demoSuggesting": "Örnekler hazırlanıyor…",
+    "demoBadge": "DEMO",
+    "demoNote": "Şimdilik örnek adımlar; AI destekli planlama yakında.",
+    "title": "Planlayıcı",
+    "activeProjects": "Aktif projeler",
+    "newProject": "Yeni proje",
+    "projectName": "Proje adı",
+    "projectNamePlaceholder": "Örn: Bitirme tezi",
+    "color": "Renk",
+    "suggestionsTitle": "Önerilen görevler (eklemek için dokun):",
+    "subtasks": "Alt görevler",
+    "subtaskPlaceholder": "Yeni görev ekle…",
+    "create": "Proje oluştur",
+    "nextStep": "Sonraki adım",
+    "due": "Bitiş: {{date}}",
+    "samples": {
+      "thesis": [
+        "Konu araştırması yap",
+        "Kaynak topla",
+        "Taslak oluştur",
+        "İlk bölümü yaz",
+        "Danışmana gönder"
+      ],
+      "fitness": [
+        "Hedef belirle",
+        "Program oluştur",
+        "İlk antrenmanı yap",
+        "Beslenme planı hazırla",
+        "Haftayı değerlendir"
+      ],
+      "language": [
+        "Temel kelimeleri öğren",
+        "Her gün biraz pratik yap",
+        "Konuşma pratiği yap",
+        "Gramer çalış",
+        "Bir film ya da dizi izle"
+      ],
+      "default": [
+        "İlk adımı belirle",
+        "Araştırma yap",
+        "Plan oluştur",
+        "Uygulamaya başla",
+        "Nasıl gittiğini değerlendir"
+      ]
+    },
+    "addSubtask": "Alt görev ekle",
+    "removeSubtask": "{{title}} görevini kaldır",
+    "colors": {
+      "purple": "Mor",
+      "green": "Yeşil",
+      "blue": "Mavi",
+      "pink": "Pembe",
+      "amber": "Kehribar",
+      "red": "Kırmızı"
+    },
+    "startFocusOn": "{{title}} için odak oturumu başlat"
   },
   "profile": {
     "namePrompt": "Sana nasıl hitap edelim?",
@@ -161,6 +283,13 @@
   },
   "tasks": {
     "recentTitle": "Son görevler",
+    "emptyTitle": "Henüz görev yok",
+    "progress": {
+      "title": "Minito üzerinde çalışıyor",
+      "analyzing": "Bilişsel yük analiz ediliyor…",
+      "generating": "Mikro adımlar oluşturuluyor…",
+      "finalizing": "Odak modu hazırlanıyor…"
+    },
     "empty": "Parçaladığın görevler burada görünecek ve cihazların arasında senkronize olacak.",
     "stepsProgress": "{{done}}/{{total}} adım",
     "completed": "Tamamlandı",
@@ -176,16 +305,65 @@
       "minutesAgo": "{{count}} dk önce",
       "hoursAgo": "{{count}} sa önce",
       "daysAgo": "{{count}} gün önce"
-    }
+    },
+    "seeAll": "Tümünü gör",
+    "historyTitle": "Görev geçmişi",
+    "historyUnavailable": "Geçmişin şu an yüklenemedi. Görevlerin güvende; birazdan tekrar dene.",
+    "loadMoreFailed": "Eski görevler yüklenemedi.",
+    "refusedTitle": "Bunu adımlara bölemiyorum",
+    "refusedMessage": "Yazılış biçimindeki bir şey Minito'nun yardım edebileceği alanın dışında kalıyor. Görevi başka bir şekilde anlatmayı dener misin?"
   },
   "audio": {
     "title": "Odak Sesleri",
-    "stop": "Sesi durdur"
+    "stop": "Sesi durdur",
+    "sectionTitle": "Arka plan sesleri",
+    "sectionSubtitle": "Odaklanmanı artırmak için bir ses seç",
+    "tracks": {
+      "deep_brown": {
+        "name": "Derin kahverengi",
+        "description": "Düşük ve sabit odak"
+      },
+      "infinite_drift": {
+        "name": "Sonsuz akış",
+        "description": "Yumuşak ambiyans"
+      },
+      "rushing_river": {
+        "name": "Akan nehir",
+        "description": "Akışkan su sesi"
+      },
+      "theta_focus": {
+        "name": "Theta odak",
+        "description": "Yavaş ve geniş bir ritim"
+      },
+      "slow_binaural": {
+        "name": "Yavaş binaural",
+        "description": "Sessiz derin odak"
+      },
+      "ambient_pulse": {
+        "name": "Ambiyans ritmi",
+        "description": "Sabit odak temposu"
+      },
+      "modern_classical": {
+        "name": "Modern klasik",
+        "description": "Sakin enstrümantal odak"
+      }
+    },
+    "playHint": "Bu ambiyansı çalar",
+    "pauseHint": "Bu ambiyansı duraklatır"
   },
   "stats": {
     "title": "İçgörüler",
     "emptyTitle": "Henüz içgörü yok",
-    "emptyText": "Planlayıcıdan bir odak oturumu tamamladığında ritmin, devamlılığın ve akış verilerin burada görünecek — hepsi gerçek, hiçbiri uydurma değil."
+    "emptyText": "Planlayıcıdan bir odak oturumu tamamladığında ritmin, devamlılığın ve akış verilerin burada görünecek — hepsi gerçek, hiçbiri uydurma değil.",
+    "emptyAction": "Planlayıcıyı aç",
+    "energyFlow": "Enerji akışı",
+    "noProjectData": "Henüz proje verisi yok",
+    "focusRhythm": "Odak ritmi",
+    "noData": "Henüz veri yok",
+    "peakTime": "Zirve saatin:",
+    "consistency": "Devamlılık",
+    "legendLess": "Az",
+    "legendMore": "Çok"
   },
   "flowState": {
     "flow": {
@@ -206,11 +384,101 @@
     "focusSession": "ODAK OTURUMU",
     "duration": "SÜRE",
     "ambience": "AMBİYANS",
-    "customDuration": "Özel süre...",
-    "minutes": "dakika",
     "mute": "Sessiz",
-    "brownNoise": "Brown Noise",
-    "rain": "Yağmur",
-    "lofi": "Lo-Fi"
+    "durationOption": "{{count}} dk",
+    "minDuration": "En az 10 saniye seç."
+  },
+  "sessionComplete": {
+    "title": "Harika!",
+    "subtitle": "“{{task}}” için {{duration}} odaklandın",
+    "duration": "Süre",
+    "pickups": "Kaldırma",
+    "pickupCount": "{{count}} kez",
+    "focusScore": "Odak skoru",
+    "taskDone": "Görev tamamlandı",
+    "justSession": "Sadece oturum",
+    "helper": "“Sadece oturum” seçersen görev daha sonrası için açık kalır.",
+    "outOf": "/ {{max}}"
+  },
+  "duration": {
+    "minutes": "{{count}} dakika",
+    "hours": "{{count}} saat",
+    "hoursMinutes": "{{hours}} saat {{minutes}} dakika",
+    "minutesShort": "{{count}} dk",
+    "seconds": "{{count}} saniye",
+    "minutesSeconds": "{{minutes}} dakika {{seconds}} saniye"
+  },
+  "offlineSteps": {
+    "cleaning": [
+      "Küçük bir alanla başla (ör. masan ya da bir köşe)",
+      "Temizlik malzemelerini topla: çöp poşeti, bez ve yeri değişecek eşyalar için bir kutu",
+      "Eşyaları üç gruba ayır: kalacak, bağışlanacak, atılacak",
+      "Yüzeyleri uygun bir temizleyiciyle sil",
+      "Eşyaları yerlerine geri koy",
+      "Çöpü ve geri dönüşümü çıkar",
+      "Bir an dur ve temiz alanının tadını çıkar"
+    ],
+    "study": [
+      "Sessiz, dikkat dağıtıcısız bir yer bul",
+      "Gereken her şeyi topla (kitaplar, notlar, bilgisayar vb.)",
+      "Konuyu küçük, yönetilebilir parçalara böl",
+      "Odaklı çalışma için bir zamanlayıcı kur (ör. 25 dakika)",
+      "Oturumlar arasında kısa molalar ver (5-10 dakika)",
+      "Aktif hatırlama yap: öğrendiklerini kendine sor",
+      "Sonunda ana noktaları gözden geçirip özetle"
+    ],
+    "work": [
+      "Hedefi ve beklenen sonucu netleştir",
+      "Projeyi daha küçük görevlere böl",
+      "Görevleri önem ve teslim tarihine göre sırala",
+      "Her görev için belirli zaman blokları ayır",
+      "Dikkat dağıtıcıları kaldır (telefon, bildirimler)",
+      "Enerjin en yüksekken en zor görevle başla",
+      "İlerlemeyi gözden geçir ve planı gerektiği gibi güncelle"
+    ],
+    "health": [
+      "Bugün yapabileceğini hissettiğin bir aktivite seç",
+      "Belirli bir saat ve yer belirle",
+      "Gereken ekipmanı ya da kıyafeti hazırla",
+      "Isınma ya da hafif hareketlerle başla",
+      "Aktiviteyi kendi temponda yap",
+      "Sonrasında soğuma ve esneme yap",
+      "Su iç ve gerektiği kadar dinlen"
+    ],
+    "social": [
+      "Nasıl bir sosyal etkileşime ihtiyacın olduğunu belirle",
+      "Güvendiğin bir kişiye ulaş",
+      "Belirli bir aktivite ya da zaman öner",
+      "Planlar değişirse esnek ol",
+      "Miktardan çok kaliteli zamana odaklan",
+      "Kendi sınırlarına ve enerjine saygı göster",
+      "Bağı sürdürmek için sonrasında haber ver"
+    ],
+    "financial": [
+      "İlgili tüm finansal belgeleri topla",
+      "Mevcut finansal durumunu gözden geçir",
+      "Finansal hedeflerini belirle",
+      "Basit bir bütçe ya da harcama planı oluştur",
+      "Mümkünse otomatik birikim kur",
+      "Örüntüleri görmek için bir hafta harcamalarını takip et",
+      "Finansal sağlığını iyileştirmek için küçük bir değişiklik yap"
+    ],
+    "general": [
+      "Görevi daha küçük, net adımlara böl",
+      "Hangi kaynaklara ya da araçlara ihtiyacın olduğunu belirle",
+      "Gerçekçi bir süre ya da zaman aralığı belirle",
+      "En kolay ya da en motive edici adımla başla",
+      "Belirli bir süre boyunca üzerinde çalış (ör. 15 dakika)",
+      "Gerektiğinde mola ver",
+      "Yol boyunca küçük kazanımları kutla"
+    ]
+  },
+  "wheel": {
+    "hours": "Saat",
+    "minutes": "Dakika",
+    "seconds": "Saniye",
+    "hoursShort": "sa",
+    "minutesShort": "dk",
+    "secondsShort": "sn"
   }
 }

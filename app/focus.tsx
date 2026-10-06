@@ -1,38 +1,80 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StatusBar, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { View, Text, StatusBar, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+// Gesture-aware, so the step timer's dial can take a vertical drag from the page.
+import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, SlideOutRight, LinearTransition } from 'react-native-reanimated';
+import { ArrowRight, Sparkles } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { FocusCard, PremiumStepAnimation, ConfettiAnimation, InlineTimer } from '../src/components';
+import { STEP_CELEBRATION_MS } from '../src/components/PremiumStepAnimation';
 import { parseTimeFromStep } from '../src/lib/timeParser';
+import { normalizeSteps, type BreakdownStep } from '../src/lib/breakdownSteps';
 import { useAuroraContext } from '../src/lib/aurora';
 import { saveActiveSession, clearActiveSession } from '../src/lib/storage/activeSessionStore';
 import { recordFocusSession } from '../src/lib/stats/sessionStore';
 import { useTaskProgressSync } from '../src/features/tasks/controller/useTaskProgressSync';
-import * as Haptics from 'expo-haptics';
-// Ambient audio temporarily disabled until asset is added
-// import { useAmbientAudio } from '../src/lib/audio/ambientAudio';
+import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
+
+/**
+ * A time the step itself names — "wait 30 seconds", "read for 10 minutes". Only these get a
+ * countdown unasked, because only these are steps where the time is part of the instruction.
+ */
+function statedDuration(step: BreakdownStep) {
+  return parseTimeFromStep(`${step.title} ${step.instruction}`);
+}
+
+/**
+ * The model's estimate, which every step carries because the contract requires it.
+ *
+ * It used to be enough to put a countdown on the step, which meant every step had one, including
+ * "throw away one piece of rubbish". A clock on a step that does not need timing turns a small
+ * action into a test. It now seeds the timer that the reader asks for, and nothing more.
+ */
+function estimatedDuration(step: BreakdownStep) {
+  return step.estimatedMinutes ? { minutes: step.estimatedMinutes, seconds: 0 } : null;
+}
 
 export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/RouteErrorBoundary';
 
 export default function FocusModeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { setCompletionPulse } = useAuroraContext();
   const params = useLocalSearchParams<{
     steps: string;
     input: string;
     empathyBridge?: string;
     firstStepHook?: string;
+    stoppingPoint?: string;
+    requestId?: string;
     resumeStepIndex?: string;
     taskId?: string;
   }>();
-  // Restoring a saved session skips the empathy intro and jumps to the step
+  // A malformed param must degrade to the empty state, never crash the screen.
+  const steps: BreakdownStep[] = useMemo(() => {
+    if (!params.steps) return [];
+    try {
+      return normalizeSteps(JSON.parse(params.steps));
+    } catch (error) {
+      console.warn('focus: failed to parse steps param', error);
+      return [];
+    }
+  }, [params.steps]);
+
+  // Restoring a saved session skips the empathy intro and jumps to the step. Route params can
+  // arrive from a link, so the index is held to the steps that exist: an index past the last
+  // step showed the last step without being it, and its Next button then did nothing at all.
   const initialStepIndex = params.resumeStepIndex
-    ? Math.max(0, parseInt(params.resumeStepIndex, 10) || 0)
+    ? Math.min(
+        Math.max(0, parseInt(params.resumeStepIndex, 10) || 0),
+        Math.max(0, steps.length - 1)
+      )
     : -1;
   const [currentStepIndex, setCurrentStepIndex] = useState(initialStepIndex); // -1 = empathy/hook screen
   const { syncProgress, markCompleted } = useTaskProgressSync(
@@ -43,7 +85,8 @@ export default function FocusModeScreen() {
   const [showStepAnimation, setShowStepAnimation] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [timerCompletionLoop, setTimerCompletionLoop] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Asking for a timer is a decision about this step, not about the whole session.
+  const [timerRequested, setTimerRequested] = useState(false);
   const nextTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // A timer's completion pulse belongs to the step that produced it. If the
@@ -52,25 +95,14 @@ export default function FocusModeScreen() {
   // stop — it would otherwise drive the Aurora background forever. Leaving
   // a step is always the authoritative "pulse over" signal.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clearing the pulse when the step changes is what this effect is for
     setTimerCompletionLoop(false);
+    setTimerRequested(false);
   }, [currentStepIndex]);
 
-  // GOD MODE: Neuro-Sonic Ambience - Brown noise with fade in/out
-  // const { startAmbience, stopAmbience } = useAmbientAudio();
-
-  // A malformed param must degrade to the empty state, never crash the screen
-  const steps: string[] = (() => {
-    if (!params.steps) return [];
-    try {
-      const parsed = JSON.parse(params.steps);
-      return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : [];
-    } catch (error) {
-      console.warn('focus: failed to parse steps param', error);
-      return [];
-    }
-  })();
   const empathyBridge = params.empathyBridge || '';
   const firstStepHook = params.firstStepHook || '';
+  const stoppingPoint = params.stoppingPoint || '';
   const hasEmpathyScreen = empathyBridge || firstStepHook;
   const totalSteps = steps.length;
 
@@ -78,22 +110,28 @@ export default function FocusModeScreen() {
   // the core use case) never loses the session
   useEffect(() => {
     if (steps.length === 0) return;
-    saveActiveSession({
+    void saveActiveSession({
       input: params.input || '',
       steps,
       empathyBridge,
       firstStepHook,
+      stoppingPoint,
+      requestId: params.requestId,
       currentStepIndex: Math.max(0, currentStepIndex),
       completedSteps: [...completedSteps],
       taskId: params.taskId,
-    });
+      // Losing the crumb is not worth an unhandled rejection: the session is still on screen.
+    }).catch(() => {});
     // Standing on step N means steps 0..N-1 are done.
     syncProgress(Math.max(0, currentStepIndex));
+    // Saves on progress only. `steps` and the texts are parsed from route params on every render,
+    // so listing them would save on every render instead; they do not change while mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStepIndex, completedSteps, steps.length]);
 
-  // Sync timer completion state with Aurora background pulse
+  // Timer completion state with Aurora background pulse. The timer owns its
+  // local loop; FocusMode is the only owner of the global Aurora state.
   useEffect(() => {
-    // Use requestAnimationFrame to defer the update and avoid "Cannot update a component" warning
     const rafId = requestAnimationFrame(() => {
       setCompletionPulse(timerCompletionLoop);
     });
@@ -102,27 +140,20 @@ export default function FocusModeScreen() {
 
   useEffect(() => {
     // Haptic feedback on mount
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
 
     // If no empathy screen, start at step 0
     if (!hasEmpathyScreen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- with no empathy screen, the first step is where the screen starts
       setCurrentStepIndex(0);
     }
-
-    // GOD MODE: Start ambient audio on Focus Mode start (disabled until asset added)
-    // startAmbience();
-
-    // Cleanup: Stop ambient audio on unmount
-    return () => {
-      // stopAmbience();
-    };
   }, [hasEmpathyScreen]);
 
   const handleNext = () => {
     // From empathy screen (-1) to first step (0)
     if (currentStepIndex === -1) {
       setCurrentStepIndex(0);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      haptics.press();
       return;
     }
 
@@ -133,27 +164,23 @@ export default function FocusModeScreen() {
         nextTimeoutRef.current = null;
       }
 
-      // Mark current step as completed
-      setCompletedSteps(new Set([...completedSteps, currentStepIndex]));
+      setCompletedSteps((previous) => new Set(previous).add(currentStepIndex));
 
-      // Ensure previous animation is cleared before starting new one
-      // PremiumStepAnimation will handle cleanup when visible becomes false
+      // Clear the previous celebration first; PremiumStepAnimation cleans itself up when
+      // `visible` goes false, and a frame later it is safe to start the next one.
       setShowStepAnimation(false);
-
-      // Use requestAnimationFrame to ensure state update is processed
-      // before starting new animation
       requestAnimationFrame(() => {
         setShowStepAnimation(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        haptics.success();
 
-        // Move to next step after animation completes (wait for PremiumStepAnimation to finish)
-        // PremiumStepAnimation duration is 2500ms for non-final steps
+        // Hide the celebration and show the next step in the same update, so the old step never
+        // flashes back in between.
         nextTimeoutRef.current = setTimeout(() => {
           setShowStepAnimation(false);
-          setCurrentStepIndex(currentStepIndex + 1);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setCurrentStepIndex((index) => index + 1);
+          haptics.selection();
           nextTimeoutRef.current = null;
-        }, 2500); // Match PremiumStepAnimation duration
+        }, STEP_CELEBRATION_MS);
       });
     }
   };
@@ -161,44 +188,39 @@ export default function FocusModeScreen() {
   const handlePrevious = () => {
     if (currentStepIndex > 0) {
       setCurrentStepIndex(currentStepIndex - 1);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptics.tap();
     }
   };
 
   const handleComplete = () => {
-    // Mark as completed
-    setCompletedSteps(new Set([...completedSteps, currentStepIndex]));
+    setCompletedSteps((previous) => new Set(previous).add(currentStepIndex));
 
     // For final step: NO tick animation, only confetti
     setShowStepAnimation(false); // Don't show tick animation
     setShowConfetti(true); // Trigger confetti explosion
 
-    // Fire heavy haptics at the moment of explosion
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Fire the success pattern at the moment of explosion
+    haptics.success();
 
     // Navigation will be handled by ConfettiAnimation's onComplete callback
     // after both cannons finish their animations
   };
 
-  const handleConfettiComplete = async () => {
-    // Navigate to success screen when confetti animation completes
+  const handleConfettiComplete = () => {
     setShowConfetti(false);
 
-    // Session finished — nothing left to restore
-    clearActiveSession();
+    // Session finished: there is nothing left to restore.
+    void clearActiveSession().catch(() => {});
     markCompleted(totalSteps);
 
     // Log the completed step-flow for the Insights screen
-    recordFocusSession({
+    void recordFocusSession({
       durationSec: 0, // step flows are untimed; they count toward continuity, not focus minutes
       pickupCount: 0,
       completed: true,
       source: 'steps',
       stepsCompleted: totalSteps,
-    });
-
-    // GOD MODE: Fade out ambient audio before leaving Focus Mode (disabled)
-    // await stopAmbience();
+    }).catch(() => {});
 
     try {
       router.replace({
@@ -206,6 +228,8 @@ export default function FocusModeScreen() {
         params: {
           totalSteps: totalSteps.toString(),
           input: params.input || '',
+          // Carried through so the finished session can be scored where it ends.
+          ...(params.requestId ? { requestId: params.requestId } : {}),
         },
       });
     } catch (error) {
@@ -213,15 +237,11 @@ export default function FocusModeScreen() {
     }
   };
 
-  // Cleanup timeouts on unmount
+  // The ref holds a timer id, not a node: reading it at unmount is the point, because the
+  // pending celebration is exactly what has to be cancelled.
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (nextTimeoutRef.current) {
-        clearTimeout(nextTimeoutRef.current);
-      }
+      if (nextTimeoutRef.current) clearTimeout(nextTimeoutRef.current);
     };
   }, []);
 
@@ -230,8 +250,16 @@ export default function FocusModeScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <StatusBar barStyle="light-content" />
         <View style={styles.emptyContainer}>
-          <View className="bg-surface rounded-2xl p-6">
-            <Text className="text-textMain text-lg text-center">{t('home.noSteps')}</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>{t('home.noSteps')}</Text>
+            {/* Without this the screen is a dead end: no steps, no header, nothing to press. */}
+            <Pressable
+              onPress={() => router.replace('/')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.emptyAction, pressed && styles.readyButtonPressed]}
+            >
+              <Text style={styles.readyButtonText}>{t('home.backHome')}</Text>
+            </Pressable>
           </View>
         </View>
       </SafeAreaView>
@@ -241,7 +269,12 @@ export default function FocusModeScreen() {
   // Empathy/Hook intro screen (currentStepIndex === -1)
   const isEmpathyScreen = currentStepIndex === -1 && hasEmpathyScreen;
 
-  const currentStep = currentStepIndex >= 0 ? steps[currentStepIndex] : '';
+  // Clamped so the intro index (-1) and a stale resume index both land on a real step.
+  const currentStep = steps[Math.min(Math.max(currentStepIndex, 0), totalSteps - 1)];
+  const stated = statedDuration(currentStep);
+  const estimated = estimatedDuration(currentStep);
+  // The step's own time, or the estimate once the reader has asked to see a clock.
+  const timerDuration = stated ?? (timerRequested ? estimated : null);
   const isCompleted = currentStepIndex >= 0 && completedSteps.has(currentStepIndex);
 
   const isFinalStep = currentStepIndex === totalSteps - 1;
@@ -252,21 +285,14 @@ export default function FocusModeScreen() {
       <StatusBar barStyle="light-content" />
       {/* Confetti animation for final step only - triggers on Focus Screen */}
       {isFinalStep && (
-        <ConfettiAnimation
-          visible={showConfetti}
-          onAnimationStart={() => {
-            // Haptics are already triggered in handleComplete
-            // This callback is here for potential future use
-          }}
-          onComplete={handleConfettiComplete}
-        />
+        <ConfettiAnimation visible={showConfetti} onComplete={handleConfettiComplete} />
       )}
       {/* Premium step completion animation - NOT for final step */}
       {!isFinalStep && (
         <PremiumStepAnimation
           visible={showStepAnimation}
-          onComplete={() => setShowStepAnimation(false)}
-          isFinalStep={false}
+          completedCount={currentStepIndex + 1}
+          totalSteps={totalSteps}
         />
       )}
       {/* NO ADS ALLOWED in Focus Mode - Core Law */}
@@ -277,31 +303,65 @@ export default function FocusModeScreen() {
           entering={FadeInDown.springify().damping(12).mass(0.8).stiffness(150)}
           style={styles.contentContainer}
         >
-          <View style={styles.empathyContainer}>
-            {/* Empathy Bridge */}
-            {empathyBridge && (
-              <View style={styles.empathyCard}>
-                <Text style={styles.empathyText}>{empathyBridge}</Text>
+          <ScrollView
+            contentContainerStyle={[
+              styles.introScrollContent,
+              { paddingHorizontal: Math.max(20, Math.min(32, width * 0.08)) },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.empathyContainer}>
+              <View style={styles.introKicker}>
+                <Sparkles size={15} color="#C4B5FD" strokeWidth={2} />
+                <Text style={styles.introKickerText}>{t('focus.startWith')}</Text>
               </View>
-            )}
+              {empathyBridge ? (
+                <View style={styles.empathyCard}>
+                  <Text style={styles.empathyText}>{empathyBridge}</Text>
+                </View>
+              ) : null}
 
-            {/* First Step Hook */}
-            {firstStepHook && (
-              <View style={styles.hookCard}>
-                <Text style={styles.hookLabel}>{t('focus.startWith') || 'İlk adım:'}</Text>
-                <Text style={styles.hookText}>{firstStepHook}</Text>
-              </View>
-            )}
+              {firstStepHook ? (
+                <View style={styles.hookCard}>
+                  <Text style={styles.hookLabel}>{t('focus.next')}</Text>
+                  <Text style={styles.hookText}>{firstStepHook}</Text>
+                </View>
+              ) : null}
 
-            {/* Ready Button */}
-            <Animated.View entering={FadeInDown.delay(300).springify()}>
-              <View style={styles.readyButton}>
-                <Text style={styles.readyButtonText} onPress={handleNext}>
-                  {t('focus.ready') || 'Hazırım'}
+              <View style={styles.introHint}>
+                <Text style={styles.introHintText}>
+                  {t('focus.step', { current: 1, total: totalSteps })}
                 </Text>
               </View>
-            </Animated.View>
-          </View>
+
+              <Animated.View
+                entering={FadeInDown.delay(300).springify()}
+                style={styles.readyButtonWrap}
+              >
+                {/* The same gradient every other primary action in the app uses: starting a
+                    session, creating a project, confirming a dialog. This one was a flat block
+                    of colour, which made the first thing a person presses the odd one out. */}
+                <Pressable
+                  onPress={handleNext}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.readyButton,
+                    pressed && styles.readyButtonPressed,
+                  ]}
+                >
+                  <LinearGradient
+                    colors={['#8B5CF6', '#6D28D9']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.readyButtonFill}
+                  >
+                    <Text style={styles.readyButtonText}>{t('focus.ready')}</Text>
+                    <ArrowRight size={19} color="#FFFFFF" strokeWidth={2.5} />
+                  </LinearGradient>
+                </Pressable>
+              </Animated.View>
+            </View>
+          </ScrollView>
         </AnimatedView>
       ) : (
         /* Regular Step Card */
@@ -312,33 +372,40 @@ export default function FocusModeScreen() {
           layout={LinearTransition.duration(220)}
           style={styles.contentContainer}
         >
-          <View style={styles.stepWrapper}>
-            <FocusCard
-              step={currentStep}
-              stepNumber={currentStepIndex + 1}
-              totalSteps={totalSteps}
-              onNext={handleNext}
-              onPrevious={currentStepIndex > 0 ? handlePrevious : undefined}
-              onComplete={currentStepIndex === totalSteps - 1 ? handleComplete : undefined}
-              isCompleted={isCompleted}
-              isFinalStep={isFinalStep}
-              disabled={isAnimating}
-              timerCompletionLoop={timerCompletionLoop}
-              timerSlot={(() => {
-                const parsedTime = parseTimeFromStep(currentStep);
-                if (parsedTime) {
-                  return (
+          <ScrollView
+            contentContainerStyle={styles.stepScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.stepWrapper}>
+              <FocusCard
+                step={currentStep}
+                stoppingPoint={isFinalStep ? stoppingPoint : undefined}
+                stepNumber={currentStepIndex + 1}
+                totalSteps={totalSteps}
+                onNext={handleNext}
+                onPrevious={currentStepIndex > 0 ? handlePrevious : undefined}
+                onComplete={currentStepIndex === totalSteps - 1 ? handleComplete : undefined}
+                isCompleted={isCompleted}
+                isFinalStep={isFinalStep}
+                disabled={isAnimating}
+                timerCompletionLoop={timerCompletionLoop}
+                // Offered only where the step does not already carry a time of its own.
+                onToggleTimer={
+                  !stated && estimated ? () => setTimerRequested((open) => !open) : undefined
+                }
+                isTimerOpen={timerRequested}
+                timerSlot={
+                  timerDuration ? (
                     <InlineTimer
-                      initialMinutes={parsedTime.minutes}
-                      initialSeconds={parsedTime.seconds}
+                      initialMinutes={timerDuration.minutes}
+                      initialSeconds={timerDuration.seconds}
                       onCompletionStateChange={setTimerCompletionLoop}
                     />
-                  );
+                  ) : undefined
                 }
-                return undefined;
-              })()}
-            />
-          </View>
+              />
+            </View>
+          </ScrollView>
         </AnimatedView>
       )}
     </SafeAreaView>
@@ -363,67 +430,133 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     zIndex: 10,
   },
-  // Empathy/Hook Screen Styles
-  empathyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  emptyCard: {
+    width: '100%',
+    maxWidth: 420,
+    padding: 24,
+    borderRadius: 24,
+    backgroundColor: 'rgba(18,18,30,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  emptyText: {
+    color: '#E5E5E5',
+    fontSize: 17,
+    lineHeight: 25,
+    textAlign: 'center',
+  },
+  emptyAction: {
+    marginTop: 20,
+    alignSelf: 'center',
+    paddingVertical: 12,
     paddingHorizontal: 24,
-    gap: 24,
+    borderRadius: 16,
+    backgroundColor: 'rgba(139, 92, 246, 0.9)',
+  },
+  introScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  empathyContainer: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    alignItems: 'stretch',
+    gap: 14,
+  },
+  introKicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginBottom: 8,
+  },
+  introKickerText: {
+    color: '#C4B5FD',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
   },
   empathyCard: {
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    borderRadius: 20,
-    padding: 24,
+    padding: 22,
+    borderRadius: 24,
+    backgroundColor: 'rgba(139,92,246,0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderColor: 'rgba(167,139,250,0.28)',
   },
   empathyText: {
-    color: '#E5E5E5',
-    fontSize: 18,
-    lineHeight: 28,
+    color: '#F4F4F5',
+    fontSize: 21,
+    lineHeight: 30,
     textAlign: 'center',
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
   hookCard: {
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    padding: 20,
     borderRadius: 20,
-    padding: 24,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   hookLabel: {
-    color: '#34D399',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '700',
     marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
+    textAlign: 'center',
   },
   hookText: {
-    color: '#E5E5E5',
-    fontSize: 20,
-    lineHeight: 30,
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 27,
     textAlign: 'center',
     fontWeight: '500',
   },
+  introHint: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  introHintText: {
+    color: 'rgba(255,255,255,0.42)',
+    fontSize: 13,
+  },
+  readyButtonWrap: {
+    marginTop: 8,
+  },
   readyButton: {
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    borderRadius: 16,
-    marginTop: 16,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  readyButtonFill: {
+    minHeight: 56,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  readyButtonPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
   },
   readyButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    textAlign: 'center',
   },
-  // Step wrapper for FocusCard + InlineTimer
-  stepWrapper: {
-    flex: 1,
+  stepScrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingVertical: 22,
+  },
+  stepWrapper: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
   },
 });

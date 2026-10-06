@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../src/lib/ui/haptics';
 import { MinitoIcon } from '../src/components';
 import { useAuth } from '../src/features/auth/controller/AuthContext';
 import {
@@ -35,8 +36,14 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function LoginScreen() {
   const { t } = useTranslation();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, providers } =
-    useAuth();
+  const {
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signInWithApple,
+    providers,
+    isBackendAvailable,
+  } = useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -51,6 +58,8 @@ export default function LoginScreen() {
   const keyboardScroll = useKeepAboveKeyboard(scrollRef, formRef);
 
   const isBusy = pending !== null;
+  // Without a backend nothing can succeed, so actions stay disabled instead of failing one by one.
+  const isDisabled = isBusy || !isBackendAvailable;
   const isSignUp = mode === 'signUp';
 
   // On success the root auth guard swaps this screen out, so no manual navigation is needed.
@@ -60,12 +69,12 @@ export default function LoginScreen() {
     setPending(action);
     try {
       await task();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
     } catch (error) {
       const code = error instanceof AuthRepositoryError ? error.code : 'unknown';
       if (code !== 'cancelled') {
         setErrorCode(code);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        haptics.error();
       }
     } finally {
       setPending(null);
@@ -102,7 +111,7 @@ export default function LoginScreen() {
   };
 
   const toggleMode = () => {
-    Haptics.selectionAsync();
+    haptics.selection();
     setMode((current) => (current === 'signIn' ? 'signUp' : 'signIn'));
     setErrorCode(null);
     setNotice(null);
@@ -110,8 +119,13 @@ export default function LoginScreen() {
 
   const hasSocialProviders = providers.google || providers.apple;
 
+  // On Android the window is already resized for the keyboard; padding on top of that moves
+  // the form twice.
   return (
-    <KeyboardAvoidingView className="flex-1" behavior="padding">
+    <KeyboardAvoidingView
+      className="flex-1"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StatusBar barStyle="light-content" />
       <ScrollView
         ref={scrollRef}
@@ -127,7 +141,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View className="items-center mb-8">
-          <MinitoIcon size={80} color="#8B5CF6" />
+          <MinitoIcon size={80} />
         </View>
 
         <Text className="text-textMain text-3xl font-bold text-center mb-2">
@@ -140,6 +154,14 @@ export default function LoginScreen() {
           collapsable={false}
           className="rounded-3xl bg-white/5 border border-white/10 p-5"
         >
+          {!isBackendAvailable && (
+            <View className="bg-amber-500/15 border border-amber-500/40 rounded-xl p-4 mb-4">
+              <Text className="text-amber-300 text-center text-sm">
+                {t('login.backendUnavailable')}
+              </Text>
+            </View>
+          )}
+
           {notice && (
             <View className="bg-success/15 border border-success/40 rounded-xl p-4 mb-4">
               <Text className="text-success text-center text-sm">{notice}</Text>
@@ -209,9 +231,9 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={isBusy}
+            disabled={isDisabled}
             accessibilityRole="button"
-            className={`bg-primary rounded-xl h-14 items-center justify-center ${isBusy ? 'opacity-60' : ''}`}
+            className={`bg-primary rounded-xl h-14 items-center justify-center ${isDisabled ? 'opacity-60' : ''}`}
           >
             {pending === 'email' ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
@@ -222,7 +244,12 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={toggleMode} disabled={isBusy} className="mt-4 py-1">
+          <TouchableOpacity
+            onPress={toggleMode}
+            disabled={isBusy}
+            className="mt-4 py-1"
+            accessibilityRole="button"
+          >
             <Text className="text-textMuted text-center text-sm">
               {isSignUp ? t('login.switchToSignIn') : t('login.switchToSignUp')}
             </Text>
@@ -240,10 +267,10 @@ export default function LoginScreen() {
             {providers.google && (
               <TouchableOpacity
                 onPress={() => run('google', signInWithGoogle)}
-                disabled={isBusy}
+                disabled={isDisabled}
                 accessibilityRole="button"
                 className={`bg-white/10 border border-white/20 rounded-xl h-14 items-center justify-center mb-3 ${
-                  isBusy ? 'opacity-60' : ''
+                  isDisabled ? 'opacity-60' : ''
                 }`}
               >
                 {pending === 'google' ? (
@@ -263,7 +290,7 @@ export default function LoginScreen() {
                 cornerRadius={12}
                 style={{ width: '100%', height: 56 }}
                 onPress={() => {
-                  if (!isBusy) {
+                  if (!isDisabled) {
                     run('apple', signInWithApple);
                   }
                 }}

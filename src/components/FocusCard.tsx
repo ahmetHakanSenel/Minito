@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Check, CircleCheck, Timer, TimerOff } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,13 +10,14 @@ import Animated, {
   withTiming,
   Easing,
   FadeInDown,
-  SlideOutRight,
-  LinearTransition,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING } from '../lib/ui/motion';
+import type { BreakdownStep } from '../lib/breakdownSteps';
 
 interface FocusCardProps {
-  step: string;
+  step: BreakdownStep;
+  stoppingPoint?: string;
   stepNumber: number;
   totalSteps: number;
   onComplete?: () => void;
@@ -26,6 +27,13 @@ interface FocusCardProps {
   isFinalStep?: boolean;
   disabled?: boolean;
   timerSlot?: React.ReactNode;
+  /**
+   * Offered when the step does not name a time of its own. Given, the header carries a small
+   * round button that reveals a timer; withheld, the step either has one already or does not
+   * want one.
+   */
+  onToggleTimer?: () => void;
+  isTimerOpen?: boolean;
   timerCompletionLoop?: boolean;
 }
 
@@ -34,6 +42,7 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 
 export const FocusCard: React.FC<FocusCardProps> = ({
   step,
+  stoppingPoint,
   stepNumber,
   totalSteps,
   onComplete,
@@ -43,197 +52,292 @@ export const FocusCard: React.FC<FocusCardProps> = ({
   isFinalStep = false,
   disabled = false,
   timerSlot,
+  onToggleTimer,
+  isTimerOpen = false,
   timerCompletionLoop = false,
 }) => {
   const { t } = useTranslation();
+  const actionScale = useSharedValue(1);
+  const pulse = useSharedValue(0);
 
-  // Button press animations
-  const nextPressed = useSharedValue(0);
-  const prevPressed = useSharedValue(0);
-  const completePressed = useSharedValue(0);
-
-  // Border pulse animation for timer completion
-  const borderPulseOpacity = useSharedValue(0);
-
-  // Start/stop border pulse when timer completion state changes
   useEffect(() => {
-    if (timerCompletionLoop) {
-      // Start pulsing border animation
-      borderPulseOpacity.value = withRepeat(
-        withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
-        -1,
-        true
-      );
-    } else {
-      // Stop pulsing and reset
-      borderPulseOpacity.value = withTiming(0, { duration: 300 });
-    }
-  }, [timerCompletionLoop]);
+    pulse.value = timerCompletionLoop
+      ? withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }), -1, true)
+      : withTiming(0, { duration: 250 });
+  }, [timerCompletionLoop, pulse]);
 
-  // Animated border style for timer completion pulse
-  const cardBorderStyle = useAnimatedStyle(() => {
-    const opacity = borderPulseOpacity.value;
-    return {
-      borderColor:
-        opacity > 0 ? `rgba(168, 85, 247, ${0.3 + opacity * 0.7})` : 'rgba(55, 65, 81, 1)', // gray-800
-      borderWidth: opacity > 0 ? 2 : 1,
-      shadowColor: '#A855F7',
-      shadowOpacity: opacity * 0.5,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 0 },
-    };
-  });
-
-  // GOD MODE: Rigid haptic for step check
-  const handleComplete = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
-    onComplete?.();
-  };
-
-  const handleNext = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onNext?.();
-  };
-
-  const handlePrevious = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPrevious?.();
-  };
-
-  // Button press styles with Spring Physics
-  const nextButtonStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: withSpring(nextPressed.value ? 0.96 : 1, {
-          damping: 10,
-          stiffness: 200,
-        }),
-      },
-    ],
+  const actionStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: actionScale.value }],
   }));
 
-  const prevButtonStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: withSpring(prevPressed.value ? 0.96 : 1, {
-          damping: 10,
-          stiffness: 200,
-        }),
-      },
-    ],
+  const cardStyle = useAnimatedStyle(() => ({
+    borderColor: timerCompletionLoop
+      ? `rgba(167, 139, 250, ${0.35 + pulse.value * 0.45})`
+      : 'rgba(255,255,255,0.10)',
+    shadowOpacity: timerCompletionLoop ? 0.12 + pulse.value * 0.2 : 0,
   }));
 
-  const completeButtonStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: withSpring(completePressed.value ? 0.96 : 1, {
-          damping: 10,
-          stiffness: 200,
-        }),
-      },
-    ],
-  }));
+  const handlePress = (callback?: () => void) => {
+    if (disabled || !callback) return;
+    haptics.tap();
+    callback();
+  };
+
+  const primaryAction = isFinalStep ? onComplete : onNext;
 
   return (
-    <View style={{ backgroundColor: 'transparent', paddingHorizontal: 0, zIndex: 10 }}>
-      {/* Card Entry Animation - Spring Physics */}
-      <AnimatedView
-        className="bg-surface rounded-3xl p-8 border border-gray-800"
-        entering={FadeInDown.springify().damping(12).mass(0.8).stiffness(150)}
-        layout={LinearTransition.springify().damping(15)}
-        style={[{ zIndex: 10 }, cardBorderStyle]}
-      >
-        {/* Step Counter */}
-        <View className="flex-row items-center justify-between mb-6">
-          <Text className="text-textMuted text-sm">
-            {t('focus.step', { current: stepNumber, total: totalSteps })}
-          </Text>
-          {isCompleted && (
-            <AnimatedView
-              className="bg-success/20 px-3 py-1 rounded-full"
-              entering={FadeInDown.springify().damping(12).mass(0.8).stiffness(150)}
+    <AnimatedView entering={FadeInDown.duration(300)} style={styles.screenSection}>
+      <AnimatedView style={[styles.card, cardStyle]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepBadgeText}>{stepNumber}</Text>
+          </View>
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>
+              {t('focus.step', { current: stepNumber, total: totalSteps })}
+            </Text>
+            {step.difficulty ? (
+              <Text style={styles.difficulty}>{t(`focus.difficulty.${step.difficulty}`)}</Text>
+            ) : null}
+          </View>
+          {onToggleTimer ? (
+            <TouchableOpacity
+              onPress={() => handlePress(onToggleTimer)}
+              disabled={disabled}
+              style={[styles.timerToggle, isTimerOpen && styles.timerToggleOpen]}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={isTimerOpen ? t('focus.hideTimer') : t('focus.addTimer')}
+              accessibilityState={{ expanded: isTimerOpen }}
             >
-              <Text className="text-success text-xs font-semibold">{t('focus.completed')}</Text>
-            </AnimatedView>
-          )}
+              {isTimerOpen ? (
+                <TimerOff size={16} color="#C4B5FD" strokeWidth={2.2} />
+              ) : (
+                <Timer size={16} color="rgba(255,255,255,0.45)" strokeWidth={2.2} />
+              )}
+            </TouchableOpacity>
+          ) : null}
+          {isCompleted && <CircleCheck size={22} color="#34D399" strokeWidth={2.2} />}
         </View>
 
-        {/* Step Content */}
-        <Text className="text-textMain text-2xl font-semibold leading-8 mb-8">{step}</Text>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${(stepNumber / totalSteps) * 100}%` }]} />
+        </View>
 
-        {/* Timer Slot with Divider - Only rendered when timerSlot is provided */}
-        {timerSlot && (
-          <View style={{ marginBottom: 24 }}>
-            {/* Subtle Divider */}
-            <View
-              style={{
-                height: 1,
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                marginBottom: 16,
-                marginHorizontal: -32, // Extend to card edges (counteract p-8)
-              }}
-            />
-            {/* Timer Content */}
-            {timerSlot}
-          </View>
-        )}
+        <View style={styles.content}>
+          <Text style={styles.title}>{step.title}</Text>
+          {step.instruction ? <Text style={styles.instruction}>{step.instruction}</Text> : null}
+          {stoppingPoint ? (
+            <View style={styles.stoppingPoint}>
+              <Text style={styles.stoppingPointLabel}>{t('focus.stoppingPoint')}</Text>
+              <Text style={styles.stoppingPointText}>{stoppingPoint}</Text>
+            </View>
+          ) : null}
+        </View>
 
-        {/* Actions */}
-        <View className="flex-row gap-3">
-          {onPrevious && stepNumber > 1 && (
-            <AnimatedTouchableOpacity
-              onPressIn={() => {
-                prevPressed.value = 1;
-              }}
-              onPressOut={() => {
-                prevPressed.value = 0;
-              }}
-              onPress={handlePrevious}
+        {timerSlot ? <View style={styles.timerSection}>{timerSlot}</View> : null}
+
+        <View style={styles.actions}>
+          {onPrevious ? (
+            <TouchableOpacity
+              onPress={() => handlePress(onPrevious)}
               disabled={disabled}
-              className={`flex-1 rounded-xl py-4 ${disabled ? 'bg-gray-800/60' : 'bg-gray-800'}`}
-              style={prevButtonStyle}
+              style={[styles.secondaryButton, disabled && styles.disabledButton]}
+              accessibilityRole="button"
+              accessibilityLabel={t('focus.previous')}
             >
-              <Text className="text-textMain text-center font-medium">{t('focus.previous')}</Text>
-            </AnimatedTouchableOpacity>
-          )}
+              <ArrowLeft size={17} color="#D4D4D8" strokeWidth={2.2} />
+            </TouchableOpacity>
+          ) : null}
 
-          {onNext && stepNumber < totalSteps && (
-            <AnimatedTouchableOpacity
-              onPressIn={() => {
-                nextPressed.value = 1;
-              }}
-              onPressOut={() => {
-                nextPressed.value = 0;
-              }}
-              onPress={handleNext}
-              disabled={disabled}
-              className={`flex-1 rounded-xl py-4 flex-row items-center justify-center gap-2 ${disabled ? 'bg-primary/60' : 'bg-primary'}`}
-              style={nextButtonStyle}
-            >
-              <Text className="text-white text-center font-semibold">{t('focus.next')}</Text>
-              <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
-            </AnimatedTouchableOpacity>
-          )}
-
-          {onComplete && stepNumber === totalSteps && (
-            <AnimatedTouchableOpacity
-              onPressIn={() => {
-                completePressed.value = 1;
-              }}
-              onPressOut={() => {
-                completePressed.value = 0;
-              }}
-              onPress={handleComplete}
-              disabled={disabled}
-              className={`flex-1 rounded-xl py-4 flex-row items-center justify-center gap-2 ${disabled ? 'bg-success/60' : 'bg-success'}`}
-              style={completeButtonStyle}
-            >
-              <Text className="text-white text-center font-semibold">{t('focus.complete')}</Text>
-              <CheckCircle2 size={18} color="#FFFFFF" strokeWidth={2.5} />
-            </AnimatedTouchableOpacity>
-          )}
+          <AnimatedTouchableOpacity
+            onPress={() => handlePress(primaryAction)}
+            disabled={disabled}
+            style={[
+              styles.primaryButton,
+              isFinalStep && styles.completeButton,
+              disabled && styles.disabledButton,
+              actionStyle,
+            ]}
+            onPressIn={() => {
+              actionScale.value = withSpring(0.97, PRESS_SPRING);
+            }}
+            onPressOut={() => {
+              actionScale.value = withSpring(1, PRESS_SPRING);
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.primaryButtonText}>
+              {isFinalStep ? t('focus.complete') : t('focus.next')}
+            </Text>
+            {isFinalStep ? (
+              <Check size={18} color="#FFFFFF" strokeWidth={2.7} />
+            ) : (
+              <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.4} />
+            )}
+          </AnimatedTouchableOpacity>
         </View>
       </AnimatedView>
-    </View>
+    </AnimatedView>
   );
 };
+
+const styles = StyleSheet.create({
+  screenSection: {
+    width: '100%',
+  },
+  card: {
+    width: '100%',
+    backgroundColor: 'rgba(18, 18, 30, 0.94)',
+    borderRadius: 28,
+    padding: 20,
+    borderWidth: 1,
+    shadowColor: '#A78BFA',
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 42,
+  },
+  timerToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  timerToggleOpen: {
+    backgroundColor: 'rgba(139, 92, 246, 0.18)',
+    borderColor: 'rgba(167, 139, 250, 0.45)',
+  },
+  stepBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(139,92,246,0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.35)',
+  },
+  stepBadgeText: {
+    color: '#C4B5FD',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  headerCopy: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  eyebrow: {
+    color: 'rgba(255,255,255,0.64)',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  difficulty: {
+    color: 'rgba(255,255,255,0.38)',
+    fontSize: 12,
+    marginTop: 3,
+  },
+  progressTrack: {
+    height: 5,
+    borderRadius: 3,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: 20,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#A78BFA',
+  },
+  content: {
+    paddingTop: 28,
+    paddingBottom: 24,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    lineHeight: 35,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  instruction: {
+    color: 'rgba(255,255,255,0.64)',
+    fontSize: 16,
+    lineHeight: 24,
+    marginTop: 14,
+  },
+  stoppingPoint: {
+    marginTop: 20,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(52,211,153,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(52,211,153,0.22)',
+  },
+  stoppingPointLabel: {
+    color: '#6EE7B7',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 5,
+  },
+  stoppingPointText: {
+    color: 'rgba(255,255,255,0.74)',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  // The timer brings its own surface; a divider on top of it would only add a second edge.
+  timerSection: {
+    paddingBottom: 2,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+  },
+  secondaryButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  primaryButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 17,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    backgroundColor: '#7C3AED',
+  },
+  completeButton: {
+    backgroundColor: '#059669',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.48,
+  },
+});

@@ -1,4 +1,5 @@
 import { readJson, writeJson } from '../storage/jsonStore';
+import { daysBefore, localDateKey, splitByHour } from '../time/calendar';
 
 /**
  * Local, file-backed log of completed focus sessions.
@@ -27,17 +28,27 @@ export interface FocusSessionRecord {
   stepsCompleted?: number;
 }
 
-export async function recordFocusSession(
+// Appending is read, add, write. Two appends that overlapped would each read the same list, and
+// the second write would erase the first record without a trace. They are chained instead: each
+// starts once the previous one has written. A failed append is not allowed to break the chain.
+let lastAppend: Promise<void> = Promise.resolve();
+
+export function recordFocusSession(
   record: Omit<FocusSessionRecord, 'id' | 'endedAt'> & { endedAt?: number }
 ): Promise<void> {
-  const sessions = (await readJson<FocusSessionRecord[]>(KEY)) ?? [];
-  sessions.push({
-    ...record,
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    endedAt: record.endedAt ?? Date.now(),
+  const endedAt = record.endedAt ?? Date.now();
+  const append = lastAppend.then(async () => {
+    const sessions = (await readJson<FocusSessionRecord[]>(KEY)) ?? [];
+    sessions.push({
+      ...record,
+      id: `${endedAt}-${Math.random().toString(36).slice(2, 9)}`,
+      endedAt,
+    });
+    // Cap file size; oldest records rotate out
+    await writeJson(KEY, sessions.slice(-MAX_RECORDS));
   });
-  // Cap file size; oldest records rotate out
-  await writeJson(KEY, sessions.slice(-MAX_RECORDS));
+  lastAppend = append.catch(() => {});
+  return append;
 }
 
 export async function getFocusSessions(): Promise<FocusSessionRecord[]> {
@@ -52,18 +63,26 @@ export async function getFocusSessions(): Promise<FocusSessionRecord[]> {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// A corrupt record must not turn one loop into millions; no session runs longer than a day.
+const MAX_SESSION_MS = DAY_MS;
 
-/** Focus minutes per hour-of-day over the last `windowDays` days */
+/**
+ * Focus minutes per local hour of day over the last `windowDays` days. A session counts in every
+ * hour it covered, in proportion, rather than all at once in the hour it ended.
+ */
 export function aggregateHourly(
   sessions: FocusSessionRecord[],
-  windowDays = 14
+  windowDays = 14,
+  now: number = Date.now()
 ): { hour: number; focusMinutes: number }[] {
-  const cutoff = Date.now() - windowDays * DAY_MS;
-  const byHour = new Array(24).fill(0);
+  const cutoff = now - windowDays * DAY_MS;
+  const byHour = new Array<number>(24).fill(0);
   for (const s of sessions) {
     if (s.endedAt < cutoff) continue;
-    const hour = new Date(s.endedAt).getHours();
-    byHour[hour] += s.durationSec / 60;
+    const length = Math.min(Math.max(0, s.durationSec * 1000), MAX_SESSION_MS);
+    for (const [hour, ms] of splitByHour(s.endedAt - length, s.endedAt)) {
+      byHour[hour] += ms / 60_000;
+    }
   }
   return byHour.map((minutes, hour) => ({
     hour,
@@ -71,22 +90,23 @@ export function aggregateHourly(
   }));
 }
 
-/** Focus minutes per calendar day for the last `days` days (heatmap) */
+/**
+ * Focus minutes per local calendar day for the last `days` days, today first (heatmap). A session
+ * belongs to the day it ended on, where the person was.
+ */
 export function aggregateDaily(
   sessions: FocusSessionRecord[],
-  days = 84
+  days = 84,
+  now: number = Date.now()
 ): { date: string; focusMinutes: number }[] {
   const byDate = new Map<string, number>();
   for (const s of sessions) {
-    const date = new Date(s.endedAt).toISOString().split('T')[0];
+    const date = localDateKey(s.endedAt);
     byDate.set(date, (byDate.get(date) ?? 0) + s.durationSec / 60);
   }
   const result: { date: string; focusMinutes: number }[] = [];
-  const today = new Date();
   for (let i = 0; i < days; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const date = d.toISOString().split('T')[0];
+    const date = localDateKey(daysBefore(now, i));
     result.push({ date, focusMinutes: Math.round(byDate.get(date) ?? 0) });
   }
   return result;

@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Play, Pause, Volume2 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 import { useAudioContext, AUDIO_TRACKS } from '../src/context';
+import { haptics } from '../src/lib/ui/haptics';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -18,19 +19,24 @@ interface SoundCardProps {
 }
 
 const SoundCard: React.FC<SoundCardProps> = ({ track, isActive, isPlaying, onPress, index }) => {
+  const { t } = useTranslation();
   return (
     <AnimatedView entering={FadeInDown.delay(index * 60).duration(300)}>
       <TouchableOpacity
         style={[styles.soundCard, isActive && styles.soundCardActive]}
         onPress={onPress}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={t(`audio.tracks.${track.id}.name`)}
+        accessibilityState={{ selected: isActive }}
+        accessibilityHint={isActive && isPlaying ? t('audio.pauseHint') : t('audio.playHint')}
       >
         <View style={[styles.soundIcon, { backgroundColor: `${track.color}20` }]}>
           <Volume2 size={24} color={track.color} strokeWidth={2} />
         </View>
         <View style={styles.soundInfo}>
-          <Text style={styles.soundName}>{track.name}</Text>
-          <Text style={styles.soundDesc}>{track.description}</Text>
+          <Text style={styles.soundName}>{t(`audio.tracks.${track.id}.name`)}</Text>
+          <Text style={styles.soundDesc}>{t(`audio.tracks.${track.id}.description`)}</Text>
         </View>
         {isActive && (
           <View style={[styles.playIndicator, { backgroundColor: track.color }]}>
@@ -50,10 +56,11 @@ export { RouteErrorBoundary as ErrorBoundary } from '../src/components/feedback/
 
 export default function SoundsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { currentTrack, isPlaying, play, pause, resume } = useAudioContext();
 
   const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
     // Navigate back to home and open DashboardModal (Control Center)
     router.replace({
       pathname: '/',
@@ -62,7 +69,7 @@ export default function SoundsScreen() {
   };
 
   const handleTrackPress = async (trackId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.tap();
 
     if (currentTrack?.id === trackId) {
       if (isPlaying) {
@@ -81,10 +88,15 @@ export default function SoundsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+        >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Odak Sesleri</Text>
+        <Text style={styles.headerTitle}>{t('audio.title')}</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -94,8 +106,8 @@ export default function SoundsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>Arka Plan Sesleri</Text>
-        <Text style={styles.sectionSubtitle}>Odaklanmanı artırmak için bir ses seç</Text>
+        <Text style={styles.sectionTitle}>{t('audio.sectionTitle')}</Text>
+        <Text style={styles.sectionSubtitle}>{t('audio.sectionSubtitle')}</Text>
 
         <View style={styles.soundsList}>
           {AUDIO_TRACKS.map((track, index) => (
@@ -104,7 +116,7 @@ export default function SoundsScreen() {
               track={track}
               isActive={currentTrack?.id === track.id}
               isPlaying={currentTrack?.id === track.id && isPlaying}
-              onPress={() => handleTrackPress(track.id)}
+              onPress={() => void handleTrackPress(track.id)}
               index={index}
             />
           ))}

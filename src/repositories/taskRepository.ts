@@ -1,8 +1,8 @@
 import type { PostgrestError } from '@supabase/supabase-js';
-import { supabase } from '../data/supabase/client';
+import { getSupabase } from '../data/supabase/client';
 import type { Tables } from '../data/supabase/database.types';
 import { breakTask } from '../lib/api/breakTask';
-import { getOrCreateGuestId } from '../lib/guestIdentity';
+import { normalizeSteps, type BreakdownStep } from '../lib/breakdownSteps';
 import { FallbackReason } from '../safety';
 
 export type TaskBreakdown = {
@@ -10,7 +10,9 @@ export type TaskBreakdown = {
   title: string;
   empathyBridge: string | null;
   firstStepHook: string | null;
-  steps: string[];
+  /** Permission to stop after the last step. Null for breakdowns saved before the v1 contract. */
+  stoppingPoint: string | null;
+  steps: BreakdownStep[];
   completedStepCount: number;
   completedAt: string | null;
   createdAt: string;
@@ -18,12 +20,23 @@ export type TaskBreakdown = {
 
 export type BreakdownContent = Pick<
   TaskBreakdown,
-  'title' | 'empathyBridge' | 'firstStepHook' | 'steps'
+  'title' | 'empathyBridge' | 'firstStepHook' | 'stoppingPoint' | 'steps'
 >;
 
 export type BreakdownOutcome =
-  | { status: 'ready'; content: BreakdownContent; saved: TaskBreakdown | null; isOffline: boolean }
-  | { status: 'flagged' }
+  | {
+      status: 'ready';
+      content: BreakdownContent;
+      saved: TaskBreakdown | null;
+      isOffline: boolean;
+      /** Tracing id of the analytics row behind this breakdown, for the feedback loop. */
+      requestId: string | null;
+    }
+  /**
+   * Refused by moderation. `crisis` means the content suggests self-harm, and only then is the
+   * person shown crisis support; any other refusal gets a plain explanation instead.
+   */
+  | { status: 'flagged'; crisis: boolean }
   | { status: 'failed'; reason: FallbackReason };
 
 export type TaskRepositoryErrorCode = 'unavailable' | 'unknown';
@@ -44,6 +57,7 @@ type TaskBreakdownRow = Pick<
   | 'title'
   | 'empathy_bridge'
   | 'first_step_hook'
+  | 'stopping_point'
   | 'steps'
   | 'completed_step_count'
   | 'completed_at'
@@ -52,7 +66,7 @@ type TaskBreakdownRow = Pick<
 
 const TABLE = 'task_breakdowns';
 const COLUMNS =
-  'id, title, empathy_bridge, first_step_hook, steps, completed_step_count, completed_at, created_at';
+  'id, title, empathy_bridge, first_step_hook, stopping_point, steps, completed_step_count, completed_at, created_at';
 
 // The table does not exist yet, i.e. the migration has not been applied.
 const MISSING_TABLE_CODES = new Set(['PGRST205', '42P01']);
@@ -64,41 +78,72 @@ function toRepositoryError(error: PostgrestError): TaskRepositoryError {
   );
 }
 
+// A missing backend configuration degrades to the same "no history" state as a missing table.
+function table() {
+  try {
+    return getSupabase().from(TABLE);
+  } catch (error) {
+    throw new TaskRepositoryError('unavailable', error);
+  }
+}
+
+// Rows use the edge function's snake_case step shape, so one reader handles rows and responses.
+function toStepRows(steps: BreakdownStep[]) {
+  return steps.map((step) => ({
+    id: step.id,
+    title: step.title,
+    instruction: step.instruction,
+    estimated_minutes: step.estimatedMinutes,
+    difficulty: step.difficulty,
+  }));
+}
+
 function toTaskBreakdown(row: TaskBreakdownRow): TaskBreakdown {
   return {
     id: row.id,
     title: row.title,
     empathyBridge: row.empathy_bridge,
     firstStepHook: row.first_step_hook,
-    steps: Array.isArray(row.steps)
-      ? row.steps.filter((step): step is string => typeof step === 'string')
-      : [],
+    stoppingPoint: row.stopping_point,
+    // Rows saved before structured output hold plain strings; they are upgraded on read.
+    steps: normalizeSteps(row.steps),
     completedStepCount: row.completed_step_count,
     completedAt: row.completed_at,
     createdAt: row.created_at,
   };
 }
 
-async function listRecent(limit: number): Promise<TaskBreakdown[]> {
-  const { data, error } = await supabase
-    .from(TABLE)
+/** Newest first. `id` breaks ties, so a page boundary never splits the order differently twice. */
+async function listPage({
+  offset,
+  limit,
+}: {
+  offset: number;
+  limit: number;
+}): Promise<TaskBreakdown[]> {
+  const { data, error } = await table()
     .select(COLUMNS)
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1);
   if (error) {
     throw toRepositoryError(error);
   }
   return (data ?? []).map(toTaskBreakdown);
 }
 
+async function listRecent(limit: number): Promise<TaskBreakdown[]> {
+  return listPage({ offset: 0, limit });
+}
+
 async function save(content: BreakdownContent): Promise<TaskBreakdown> {
-  const { data, error } = await supabase
-    .from(TABLE)
+  const { data, error } = await table()
     .insert({
       title: content.title,
       empathy_bridge: content.empathyBridge,
       first_step_hook: content.firstStepHook,
-      steps: content.steps,
+      stopping_point: content.stoppingPoint,
+      steps: toStepRows(content.steps),
     })
     .select(COLUMNS)
     .single();
@@ -110,11 +155,13 @@ async function save(content: BreakdownContent): Promise<TaskBreakdown> {
 
 async function breakDown(input: string): Promise<BreakdownOutcome> {
   const title = input.trim();
-  const result = await breakTask(title, await getOrCreateGuestId());
+  const result = await breakTask(title);
 
   if (!result.success) {
+    // A server too old to say counts as a crisis: offering support to someone who did not need
+    // it is a far smaller mistake than withholding it from someone who did.
     return result.fallbackReason === FallbackReason.CONTENT_FLAGGED
-      ? { status: 'flagged' }
+      ? { status: 'flagged', crisis: result.crisis !== false }
       : { status: 'failed', reason: result.fallbackReason };
   }
 
@@ -122,46 +169,58 @@ async function breakDown(input: string): Promise<BreakdownOutcome> {
     title,
     empathyBridge: result.empathyBridge ?? null,
     firstStepHook: result.firstStepHook ?? null,
+    stoppingPoint: result.stoppingPoint ?? null,
     steps: result.steps,
   };
-  const isOffline = result.isOfflineFallback === true;
+  const isOffline = result.source === 'offline';
+  const requestId = result.requestId ?? null;
 
-  // Offline fallback steps are generic, so they are not worth keeping in history.
-  if (isOffline) {
-    return { status: 'ready', content, saved: null, isOffline };
+  // Offline steps and the server's deterministic fallback are generic, so they are not worth
+  // keeping in history.
+  if (isOffline || result.source === 'fallback') {
+    return { status: 'ready', content, saved: null, isOffline, requestId };
   }
 
   // History is a convenience: a failed save must never stop the user from starting.
   try {
-    return { status: 'ready', content, saved: await save(content), isOffline };
+    return { status: 'ready', content, saved: await save(content), isOffline, requestId };
   } catch (error) {
     console.warn('Failed to save task breakdown:', error);
-    return { status: 'ready', content, saved: null, isOffline };
+    return { status: 'ready', content, saved: null, isOffline, requestId };
   }
 }
 
+/**
+ * Records progress, forward only.
+ *
+ * Two writes in flight can arrive in either order, and a second device resuming an earlier step
+ * can write a smaller count after a larger one. An unconditional update let the later arrival win
+ * whatever it said, so progress could go backwards — even below a finished task's step count.
+ * The filter makes the larger count win, in whatever order the writes land.
+ */
 async function recordProgress(id: string, completedStepCount: number): Promise<void> {
-  const { error } = await supabase
-    .from(TABLE)
+  const { error } = await table()
     .update({ completed_step_count: completedStepCount })
-    .eq('id', id);
+    .eq('id', id)
+    .lt('completed_step_count', completedStepCount);
   if (error) {
     throw toRepositoryError(error);
   }
 }
 
+/** Marks the task finished. The first completion is the one recorded; repeating it changes nothing. */
 async function markCompleted(id: string, totalSteps: number): Promise<void> {
-  const { error } = await supabase
-    .from(TABLE)
+  const { error } = await table()
     .update({ completed_step_count: totalSteps, completed_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .is('completed_at', null);
   if (error) {
     throw toRepositoryError(error);
   }
 }
 
 async function remove(id: string): Promise<void> {
-  const { error } = await supabase.from(TABLE).delete().eq('id', id);
+  const { error } = await table().delete().eq('id', id);
   if (error) {
     throw toRepositoryError(error);
   }
@@ -169,6 +228,7 @@ async function remove(id: string): Promise<void> {
 
 export const taskRepository = {
   listRecent,
+  listPage,
   breakDown,
   recordProgress,
   markCompleted,

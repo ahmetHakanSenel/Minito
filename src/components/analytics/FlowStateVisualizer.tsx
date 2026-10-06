@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 
 import { LivingAuraOrb, type OrbState } from './LivingAuraOrb';
+import { haptics } from '../../lib/ui/haptics';
 
 // Title tint per state — lighter than the orb colors so text stays readable
 const TITLE_COLORS: Record<OrbState, string> = {
@@ -47,22 +47,35 @@ export const FlowStateVisualizer: React.FC<FlowStateVisualizerProps> = ({
 
   useEffect(() => {
     if (!isDebugOverride) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the shown state follows the calculated one unless a demo overrides it
       setCurrentState(calculatedState);
     }
   }, [calculatedState, isDebugOverride]);
 
   const handleLongPress = useCallback(() => {
     if (!enableDebugMode) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.press();
     setCurrentState((prev) => STATE_ORDER[(STATE_ORDER.indexOf(prev) + 1) % STATE_ORDER.length]);
     setIsDebugOverride(true);
   }, [enableDebugMode]);
 
   return (
     <Animated.View entering={FadeIn.duration(800)} style={styles.container}>
-      <Pressable onLongPress={handleLongPress} delayLongPress={400} style={styles.orbContainer}>
-        <LivingAuraOrb state={currentState} />
-      </Pressable>
+      {/* In a release build there is nothing to press, so it is not a button: the orb is a
+          picture of what the two lines under it already say. */}
+      {enableDebugMode ? (
+        <Pressable onLongPress={handleLongPress} delayLongPress={400} style={styles.orbContainer}>
+          <LivingAuraOrb state={currentState} />
+        </Pressable>
+      ) : (
+        <View
+          style={styles.orbContainer}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          <LivingAuraOrb state={currentState} />
+        </View>
+      )}
 
       <Animated.Text
         entering={FadeIn.delay(300).duration(600)}

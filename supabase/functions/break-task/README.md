@@ -1,72 +1,137 @@
-# break-task Edge Function
+# break-task
 
-This Supabase Edge Function breaks down user tasks into actionable steps using OpenAI or Gemini.
-Only signed-in users can call it.
+Turns one overwhelming task into a validated, structured plan of micro-steps. Only signed-in users
+can call it. Operations, secrets and deploys are covered in
+[`docs/RUNBOOK.md`](../../../docs/RUNBOOK.md).
 
-## Setup
+## Files
 
-1. Apply the migrations in `supabase/migrations` (009 adds `tasks.user_id`, which rate limiting relies on).
+| File | Responsibility |
+| ---- | -------------- |
+| `index.ts` | Wiring only: turns secrets and the service-role client into the handler's dependencies |
+| `handler.ts` | The request path: method guard, readiness, auth, body, moderation and quota, pipeline, telemetry |
+| `pipeline.ts` | The AI pipeline: layered prompt, output contract, validation, one repair, deterministic fallback |
+| `providers.ts` | OpenAI and Gemini adapters, with the timeout, retry and model-time policy |
+| `moderation.ts` | OpenAI moderation, with its own timeout and a fail-open verdict that says it failed open |
+| `*.test.ts` | Deno tests for each of the above. Run them with `npm run test:edge` |
 
-2. Set secrets (`supabase secrets set NAME=value`):
-   - `HMAC_SECRET` (required): key for HMAC-SHA256 input hashing, e.g. `openssl rand -hex 32`. The function refuses to run without it.
-   - `AI_PROVIDER`: `openai` (default) or `gemini`
-   - `OPENAI_API_KEY`: required for the OpenAI provider and for moderation
-   - `GEMINI_API_KEY` / `GEMINI_MODEL`: required for the Gemini provider
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`: set automatically by Supabase
+Every side effect reaches `handler.ts` through `BreakTaskDeps`. That is what lets
+`handler.test.ts` cover the whole request path, ordering rules included, without a network or a
+database.
 
-3. Deploy the function:
-   ```bash
-   supabase functions deploy break-task
-   ```
+## Request path
+
+```
+POST ─► method guard ─► readiness ─► JWT ─► body ─┬─► moderation ─┬─► pipeline ─► reply
+                         (503)       (401)  (400) └─► IP quota,   ┘                │
+                                                      user quota                   └─► telemetry row
+                                                      (429)                            (after reply)
+```
+
+1. **Readiness** is checked before auth, so the app's anonymous health probe sees a
+   misconfigured deployment (`503 AI_DOWN` / `503 MOD_DOWN`) instead of a healthy-looking `401`.
+2. **Auth.** A token that Auth rejects gets `401`. If Auth itself is unreachable, the answer is
+   `503`: a `401` would tell every client to sign out.
+3. **Body.** `input` is trimmed, then checked for 1–1000 characters, in that order, so a
+   whitespace-only task never reaches the model.
+4. **Moderation and quota** run in parallel.
+   - The IP quota is checked before the user quota, so a request refused by IP never spends the
+     user's allowance.
+   - A flagged input wins over an exhausted quota.
+   - Both fail open, and every failure is logged.
+5. **Pipeline.** Generate, validate, at most one repair, then the deterministic fallback, all
+   inside a 17 s budget.
+6. **Telemetry** is written after the reply, kept alive with `EdgeRuntime.waitUntil`. The insert
+   is idempotent: `request_id` is unique.
 
 ## API
 
-**Endpoint:** `https://<project-ref>.supabase.co/functions/v1/break-task`
+`POST /functions/v1/break-task`
 
-**Method:** POST
+| Header | Value |
+| ------ | ----- |
+| `Authorization` | `Bearer <user access token>` (required) |
+| `apikey` | The anon key (required by the Supabase gateway) |
+| `x-request-id` | Optional client tracing id, logged as `client_request_id` |
 
-**Headers:**
-- `Content-Type: application/json`
-- `apikey: <anon-key>`
-- `Authorization: Bearer <user-access-token>` (required; anon-key or expired tokens get `401`)
-
-**Request Body:**
 ```json
-{
-  "input": "Learn React Native",
-  "guest_id": "uuid-here",
-  "request_id": "uuid-here"
-}
+{ "input": "Learn React Native", "request_id": "3f8e…" }
 ```
 
-**Success Response:**
+`request_id` is optional and only correlates logs. The server issues its own id and returns it in
+`meta.request_id` and in the `x-request-id` response header; feedback must use that one.
+
+**200, a plan**
+
 ```json
 {
   "success": true,
-  "empathy_bridge": "…",
-  "first_step_hook": "…",
-  "steps": ["Step 1", "Step 2", "Step 3"],
-  "token_usage": 150,
-  "latency_ms": 1234
+  "breakdown": {
+    "language": "en",
+    "empathy_bridge": "…",
+    "first_step_hook": "…",
+    "steps": [
+      {
+        "id": "step-1",
+        "title": "Open the course page",
+        "instruction": "Open the first lesson and read only its title.",
+        "estimated_minutes": 2,
+        "difficulty": "easy"
+      }
+    ],
+    "stopping_point": "…"
+  },
+  "meta": { "prompt_version": "task-breakdown-v2", "source": "model", "request_id": "b1c2…" },
+  "token_usage": 612,
+  "latency_ms": 3120
 }
 ```
 
-**Error Response (Content Flagged):**
-```json
-{
-  "success": false,
-  "fallback_reason": "CONTENT_FLAGGED"
-}
-```
-The client renders the panic kit in the user's own locale; the server never ships crisis copy.
+`meta.source` says where the plan came from:
 
-## Implementation Details
+- `model`: the first reply was valid.
+- `repaired`: the reply was valid after one repair.
+- `fallback`: the deterministic plan was used.
 
-- **Authentication**: The bearer token must belong to a signed-in user; the user's display name personalizes the reply
-- **Fail-Soft Philosophy**: Provider and persistence failures are handled gracefully, never blocking UX
-- **Privacy**: Input is hashed with HMAC-SHA256, never stored in raw form
-- **Moderation**: Fail-Safe - if flagged, returns `CONTENT_FLAGGED` (requires `OPENAI_API_KEY`)
-- **Rate Limiting**: 20 requests/hour per authenticated user (`429 RATE_DOWN`); fails open only if the check itself errors
-- **Caching**: System prompt cached for 60 seconds
-- **Retries**: AI calls retry 3 times with exponential backoff
-- **Persistence**: Task records retry 3 times, failures are logged but don't block response
+**Other answers**
+
+| Status | Body | Meaning |
+| ------ | ---- | ------- |
+| 200 | `{ "success": false, "fallback_reason": "CONTENT_FLAGGED" }` | The app shows its support screen, in the user's own language |
+| 400 | `fallback_reason: "VALIDATION"` | The body was invalid |
+| 401 | `error: "Unauthorized"` | No user, or a rejected token |
+| 405 | | Not a POST |
+| 429 | `fallback_reason: "RATE_DOWN"` | A quota was exhausted: 40/h per IP, 20/h per user |
+| 503 | `fallback_reason: "AI_DOWN"` or `"MOD_DOWN"`, or no reason for Auth | A dependency is down or not configured |
+| 500 | `error: "Internal server error"` | A bug. Details are only in the logs |
+
+## Prompt and contract
+
+- **Prompt.** Five layers (Identity, Rules, Tone, Decomposition, Output Contract) are joined into
+  one system prompt, versioned as `PROMPT_VERSION`. Bump the version whenever the prompt or the
+  contract changes.
+- **Fence.** The task goes inside `<task_input>` and the display name inside `<user_name>`. Every
+  angle bracket in either value becomes a look-alike character (`‹ ›`), so neither can open or
+  close a tag, however the tag is spelled.
+- **Display name.** Read from the verified JWT, never from the body. It is stripped of control
+  characters, quotes, backticks, braces and brackets, and capped at 30 characters.
+- **Contract (zod).**
+  - 3–7 steps with unique ids.
+  - The first step is `easy`.
+  - `estimated_minutes` is between 1 and 10.
+  - Every string has a length cap.
+- **Repair and fallback.** A reply that breaks the contract gets one repair request carrying the
+  issues, with no transport retries. If that also fails, the task's language gets a deterministic
+  plan, which is itself validated at module load.
+- **Log safety.** Validation issues are logged and stored, so they are rewritten to never quote
+  the model's output.
+
+## Time budget
+
+| Limit | Value | Why |
+| ----- | ----- | --- |
+| Client timeout | 20 s | Past this, offline steps beat waiting |
+| Request budget | 17 s | Generation plus one repair, inside the client's limit |
+| Per provider call | 9 s | Leaves room for a retry within the budget |
+| Moderation call | 3 s | A slow safety check must not eat the model's time |
+| Transport retries | 1, on the first generation only | Network errors and 5xx. A `429` is never retried |
