@@ -20,6 +20,7 @@ import { useAudioContext } from '../../context/AudioContext';
 import { useTranslation } from 'react-i18next';
 import { useDialog } from '../feedback/Dialog';
 import { haptics } from '../../lib/ui/haptics';
+import { PRESS_SPRING } from '../../lib/ui/motion';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -225,11 +226,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   }, [chevronRotation, isExpanded]);
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.98, { damping: 15, stiffness: 300 });
+    scale.value = withSpring(0.98, PRESS_SPRING);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    scale.value = withSpring(1, PRESS_SPRING);
   };
 
   const handleLongPress = async () => {

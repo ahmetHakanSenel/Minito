@@ -43,7 +43,7 @@ History, progress and the project planner sync across devices, and keep working 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/numbers-en-dark.svg">
-    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 343 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
+    <img src="docs/assets/numbers-en-light.svg" alt="Verified in CI: 374 automated tests across 3 suites, 20 of 60 parallel calls granted under a quota of 20, 25 threats modeled each tied to a test, zero lint warnings. Offline AI baseline over 20 tasks: 20 of 20 valid on the first try and language-matched, 6.5 s p95 model latency" width="100%">
   </picture>
 </p>
 
@@ -228,7 +228,7 @@ analysis is in [`THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 | Suite | Tests | What it proves |
 | ----- | ----: | -------------- |
-| App (Jest) | 210 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
+| App (Jest) | 241 | The planner model, sync engine and scheduler; the API client's degradation per status; session storage that rejects tampering and survives crashes; the Apple nonce; the duration wheel, pickup detection and audio fade arithmetic; locale parity, including every static `t()` key |
 | Edge functions (Deno) | 97 | Request-path ordering and failure rules, the AI contract and repair, which language a plan comes back in, provider timeouts and retries, moderation fail-open, Auth outage handling, alert rules and notification transitions |
 | Database (Postgres) | 36 | Cross-user RLS, grants under Supabase's defaults, quota concurrency, cascades, planner sync guards, schema-wide invariants, the runbook's SQL |
 | Schema drift | | The committed TypeScript types equal what the migrations produce |

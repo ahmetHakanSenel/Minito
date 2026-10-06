@@ -25,8 +25,9 @@ import {
   RotateCcw,
 } from 'lucide-react-native';
 import { DurationWheels } from './time/DurationWheels';
-import { formatCountdown } from '../lib/time/duration';
+import { formatCountdown, secondsLeft } from '../lib/time/duration';
 import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING } from '../lib/ui/motion';
 
 interface InlineTimerProps {
   initialMinutes: number;
@@ -105,7 +106,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   useEffect(() => {
     if (phase !== 'running') return;
     const tick = () => {
-      const left = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
+      const left = secondsLeft(endAtRef.current, Date.now());
       setRemaining(left);
       if (left === 0) {
         setPhase('done');
@@ -143,7 +144,7 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   };
 
   const pause = () => {
-    setRemaining(Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000)));
+    setRemaining(secondsLeft(endAtRef.current, Date.now()));
     setPhase('paused');
     haptics.selection();
   };
@@ -193,10 +194,10 @@ export const InlineTimer: React.FC<InlineTimerProps> = ({
   const alarmStyle = useAnimatedStyle(() => ({ opacity: alarmPulse.value }));
   const pressHandlers = {
     onPressIn: () => {
-      pressScale.value = withSpring(0.96, { damping: 18, stiffness: 320 });
+      pressScale.value = withSpring(0.96, PRESS_SPRING);
     },
     onPressOut: () => {
-      pressScale.value = withSpring(1, { damping: 18, stiffness: 320 });
+      pressScale.value = withSpring(1, PRESS_SPRING);
     },
   };
 

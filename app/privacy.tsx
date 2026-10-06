@@ -19,6 +19,7 @@ import * as Sharing from 'expo-sharing';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useDialog } from '../src/components/feedback/Dialog';
 import { haptics } from '../src/lib/ui/haptics';
+import { PRESS_SPRING } from '../src/lib/ui/motion';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -39,7 +40,6 @@ const Button = ({
 }) => {
   const scale = useSharedValue(1);
   const buttonStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const spring = { damping: 10, stiffness: 200 };
 
   const bgColor =
     variant === 'danger' ? 'bg-red-600' : variant === 'secondary' ? 'bg-gray-800' : 'bg-primary';
@@ -47,10 +47,10 @@ const Button = ({
   return (
     <AnimatedTouchableOpacity
       onPressIn={() => {
-        scale.value = withSpring(0.96, spring);
+        scale.value = withSpring(0.96, PRESS_SPRING);
       }}
       onPressOut={() => {
-        scale.value = withSpring(1, spring);
+        scale.value = withSpring(1, PRESS_SPRING);
       }}
       onPress={onPress}
       disabled={disabled || loading}

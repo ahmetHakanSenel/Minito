@@ -88,7 +88,7 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
 
         <SafeAreaView style={styles.safeArea} edges={['bottom']}>
           <AnimatedView
-            entering={SlideInDown.duration(300).damping(20)}
+            entering={SlideInDown.duration(300)}
             exiting={SlideOutDown.duration(200)}
             style={styles.content}
           >

@@ -27,6 +27,7 @@ import { ConfettiAnimation } from '../components/ConfettiAnimation';
 import { useTranslation } from 'react-i18next';
 import { splitDuration } from '../lib/time/duration';
 import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING } from '../lib/ui/motion';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -69,7 +70,8 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
       setShowConfetti(true);
       celebrationScale.value = withSequence(
         withTiming(1.2, { duration: 300, easing: Easing.out(Easing.back(2)) }),
-        withSpring(1, { damping: 10, stiffness: 100 })
+        // Mass named: Reanimated 4's default of 4 would double the bounce and stretch it to 3 s.
+        withSpring(1, { damping: 10, stiffness: 100, mass: 1 })
       );
       haptics.success();
     } else {
@@ -91,19 +93,19 @@ export const SessionCompletionModal: React.FC<SessionCompletionModalProps> = ({
   };
 
   const handlePressInA = () => {
-    buttonAScale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+    buttonAScale.value = withSpring(0.96, PRESS_SPRING);
   };
 
   const handlePressOutA = () => {
-    buttonAScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    buttonAScale.value = withSpring(1, PRESS_SPRING);
   };
 
   const handlePressInB = () => {
-    buttonBScale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+    buttonBScale.value = withSpring(0.96, PRESS_SPRING);
   };
 
   const handlePressOutB = () => {
-    buttonBScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    buttonBScale.value = withSpring(1, PRESS_SPRING);
   };
 
   const celebrationStyle = useAnimatedStyle(() => ({

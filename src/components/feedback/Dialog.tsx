@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { haptics } from '../../lib/ui/haptics';
+import { SETTLE_SPRING } from '../../lib/ui/motion';
 import { current, dismiss, enqueue, type DialogRequest, type PendingDialog } from './dialogQueue';
 
 export type { DialogRequest } from './dialogQueue';
@@ -94,7 +95,10 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               // Keyed by id so a queued dialog animates in as a new one rather than
               // swapping its text underneath the reader.
               key={open.id}
-              entering={ZoomIn.springify().damping(18).stiffness(220)}
+              entering={ZoomIn.springify()
+                .damping(SETTLE_SPRING.damping)
+                .stiffness(SETTLE_SPRING.stiffness)
+                .mass(SETTLE_SPRING.mass)}
               style={styles.card}
               accessibilityViewIsModal
               accessibilityRole="alert"

@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { AUDIO_TRACKS, useAudioContext } from '../context';
 import { DurationWheels } from '../components/time/DurationWheels';
 import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING } from '../lib/ui/motion';
 
 // ============================================================================
 // TYPES
@@ -59,10 +60,10 @@ function StartButton({ onPress, disabled }: { onPress: () => void; disabled: boo
     <Animated.View style={buttonStyle}>
       <TouchableOpacity
         onPressIn={() => {
-          if (!disabled) scale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+          if (!disabled) scale.value = withSpring(0.96, PRESS_SPRING);
         }}
         onPressOut={() => {
-          scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+          scale.value = withSpring(1, PRESS_SPRING);
         }}
         onPress={() => {
           if (disabled) return;

@@ -12,6 +12,7 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING } from '../lib/ui/motion';
 import type { BreakdownStep } from '../lib/breakdownSteps';
 
 interface FocusCardProps {
@@ -159,10 +160,10 @@ export const FocusCard: React.FC<FocusCardProps> = ({
               actionStyle,
             ]}
             onPressIn={() => {
-              actionScale.value = withSpring(0.97);
+              actionScale.value = withSpring(0.97, PRESS_SPRING);
             }}
             onPressOut={() => {
-              actionScale.value = withSpring(1);
+              actionScale.value = withSpring(1, PRESS_SPRING);
             }}
             accessibilityRole="button"
           >

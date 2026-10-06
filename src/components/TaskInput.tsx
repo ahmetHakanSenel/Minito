@@ -10,6 +10,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Sparkles, BrainCircuit } from 'lucide-react-native';
 import { haptics } from '../lib/ui/haptics';
+import { PRESS_SPRING, SETTLE_SPRING } from '../lib/ui/motion';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -39,7 +40,6 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 const TASK_MAX_LENGTH = 500;
 // The counter stays out of the way until the limit is close enough to matter.
 const COUNTER_VISIBLE_AT = 400;
-const BUTTON_SPRING = { damping: 10, stiffness: 200 };
 
 // Generate SVG path for rounded rectangle
 const getRoundedRectPath = (width: number, height: number, radius: number): string => {
@@ -93,17 +93,11 @@ export const TaskInput: React.FC<TaskInputProps> = ({
   // Update glow based on focus state
   useEffect(() => {
     if (isFocused) {
-      // Focus state: increase glow
-      glowOpacity.value = withSpring(0.8, {
-        damping: 12,
-        stiffness: 100,
-      });
+      // Focus state: increase glow. Opacity that overshoots reads as a flicker, so it settles.
+      glowOpacity.value = withSpring(0.8, SETTLE_SPRING);
     } else {
       // Default state: subtle glow
-      glowOpacity.value = withSpring(0.3, {
-        damping: 12,
-        stiffness: 100,
-      });
+      glowOpacity.value = withSpring(0.3, SETTLE_SPRING);
     }
   }, [glowOpacity, isFocused]);
 
@@ -279,10 +273,10 @@ export const TaskInput: React.FC<TaskInputProps> = ({
       {/* Primary action: starts a breakdown, with the app's one heavy haptic */}
       <AnimatedTouchableOpacity
         onPressIn={() => {
-          buttonScale.value = withSpring(0.96, BUTTON_SPRING);
+          buttonScale.value = withSpring(0.96, PRESS_SPRING);
         }}
         onPressOut={() => {
-          buttonScale.value = withSpring(1, BUTTON_SPRING);
+          buttonScale.value = withSpring(1, PRESS_SPRING);
         }}
         onPress={handleSubmit}
         disabled={!value.trim() || isLoading}

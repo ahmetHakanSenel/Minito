@@ -17,6 +17,7 @@ import Animated, {
   Easing,
   FadeIn,
   FadeOut,
+  ReduceMotion,
   cancelAnimation,
   useAnimatedProps,
   useAnimatedStyle,
@@ -33,7 +34,7 @@ import { Accelerometer } from 'expo-sensors';
 import { createPickupDetector, magnitude } from '../lib/focus/pickupDetector';
 import { useTranslation } from 'react-i18next';
 import { haptics } from '../lib/ui/haptics';
-import { formatCountdown, formatWallClock } from '../lib/time/duration';
+import { formatCountdown, formatWallClock, secondsLeft } from '../lib/time/duration';
 
 // ============================================================================
 // TYPES
@@ -75,6 +76,17 @@ const CONTROLS_HIDE_MS = 4_000;
 const TICK_MS = 250;
 
 const noop = () => {};
+
+/**
+ * The ring sweeping toward the end of a session. It is a reading of the time left, not decoration,
+ * so it ignores the system's reduce-motion setting: honoring it would make Reanimated jump the ring
+ * to full the moment a session starts. A sweep this slow is not the motion that setting guards against.
+ */
+const ringTiming = (durationMs: number) => ({
+  duration: durationMs,
+  easing: Easing.linear,
+  reduceMotion: ReduceMotion.Never,
+});
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -213,7 +225,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
 
     cancelAnimation(progress);
     progress.value = 0;
-    progress.value = withTiming(1, { duration: duration * 1000, easing: Easing.linear });
+    progress.value = withTiming(1, ringTiming(duration * 1000));
     warningOpacity.value = 0;
     revealControls();
 
@@ -233,7 +245,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
       cancelAnimation(progress);
       progress.value = duration > 0 ? 1 - leftMs / (duration * 1000) : 1;
       if (leftMs > 0) {
-        progress.value = withTiming(1, { duration: leftMs, easing: Easing.linear });
+        progress.value = withTiming(1, ringTiming(leftMs));
       }
     });
     return () => subscription.remove();
@@ -243,7 +255,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
   useEffect(() => {
     if (!visible || isPaused) return;
     const tick = () => {
-      const left = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
+      const left = secondsLeft(endAtRef.current, Date.now());
       setRemaining(left);
       const nextClock = formatWallClock(new Date());
       setClock((current) => (current === nextClock ? current : nextClock));
@@ -276,10 +288,7 @@ export const FocusMode: React.FC<FocusModeProps> = ({
     haptics.tap();
     if (isPaused) {
       endAtRef.current = Date.now() + pausedRemainingMsRef.current;
-      progress.value = withTiming(1, {
-        duration: pausedRemainingMsRef.current,
-        easing: Easing.linear,
-      });
+      progress.value = withTiming(1, ringTiming(pausedRemainingMsRef.current));
       setIsPaused(false);
       revealControls();
       return;
