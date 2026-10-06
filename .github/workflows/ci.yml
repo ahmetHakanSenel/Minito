@@ -44,6 +44,12 @@ jobs:
     name: Edge functions · check, test, eval harness
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # The app's package.json sits at the repository root. Deno 2 finds it and then expects every
+      # `npm:` import to be installed in node_modules, which this job never creates, so the check
+      # failed here while passing on any machine that had run `npm ci`. The functions declare their
+      # npm dependencies in their own imports; the app's manifest is not theirs to resolve.
+      DENO_NO_PACKAGE_JSON: '1'
     steps:
       - uses: actions/checkout@v4
 
