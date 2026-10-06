@@ -5,29 +5,26 @@ import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react-native';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import type { TaskBreakdown } from '../../../repositories/taskRepository';
 import type { HistoryStatus } from '../controller/useTaskBreakdowns';
-
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-const WEEK_MS = 7 * DAY_MS;
+import { relativeTime } from '../../../lib/time/relativeTime';
 
 /** "just now", "5 min ago" … then a locale date once it is over a week old. */
 export function useRelativeTime() {
   const { t, i18n } = useTranslation();
   return useCallback(
     (iso: string) => {
-      const elapsed = Date.now() - new Date(iso).getTime();
-      if (elapsed < MINUTE_MS) return t('tasks.time.justNow');
-      if (elapsed < HOUR_MS) {
-        return t('tasks.time.minutesAgo', { count: Math.floor(elapsed / MINUTE_MS) });
+      const ago = relativeTime(Date.now() - new Date(iso).getTime());
+      switch (ago.unit) {
+        case 'justNow':
+          return t('tasks.time.justNow');
+        case 'minutes':
+          return t('tasks.time.minutesAgo', { count: ago.count });
+        case 'hours':
+          return t('tasks.time.hoursAgo', { count: ago.count });
+        case 'days':
+          return t('tasks.time.daysAgo', { count: ago.count });
+        default:
+          return new Date(iso).toLocaleDateString(i18n.language);
       }
-      if (elapsed < DAY_MS) {
-        return t('tasks.time.hoursAgo', { count: Math.floor(elapsed / HOUR_MS) });
-      }
-      if (elapsed < WEEK_MS) {
-        return t('tasks.time.daysAgo', { count: Math.floor(elapsed / DAY_MS) });
-      }
-      return new Date(iso).toLocaleDateString(i18n.language);
     },
     [t, i18n.language]
   );

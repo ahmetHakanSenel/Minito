@@ -3,6 +3,7 @@ import {
   deleteProject,
   EMPTY_PLANNER_STATE,
   pendingKey,
+  progressOf,
   selectProjects,
   setTaskCompleted,
   type PlannerState,
@@ -540,5 +541,27 @@ describe('retry timing', () => {
 
   it('starts a first sync from the beginning', () => {
     expect(pullSince(null)).toBeNull();
+  });
+});
+
+describe('project progress', () => {
+  const tasks = (done: number, total: number) =>
+    Array.from({ length: total }, (_, i) => ({ isCompleted: i < done }));
+
+  it('reads 0 with nothing done and 100 with everything done', () => {
+    expect(progressOf([])).toBe(0);
+    expect(progressOf(tasks(0, 4))).toBe(0);
+    expect(progressOf(tasks(4, 4))).toBe(100);
+  });
+
+  it('rounds in between', () => {
+    expect(progressOf(tasks(1, 3))).toBe(33);
+    expect(progressOf(tasks(2, 3))).toBe(67);
+  });
+
+  // A project with one task left must never read as finished, nor one with a task done as untouched.
+  it('never reaches an end it has not reached', () => {
+    expect(progressOf(tasks(199, 200))).toBe(99);
+    expect(progressOf(tasks(1, 201))).toBe(1);
   });
 });

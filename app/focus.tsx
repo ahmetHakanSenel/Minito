@@ -56,9 +56,25 @@ export default function FocusModeScreen() {
     resumeStepIndex?: string;
     taskId?: string;
   }>();
-  // Restoring a saved session skips the empathy intro and jumps to the step
+  // A malformed param must degrade to the empty state, never crash the screen.
+  const steps: BreakdownStep[] = useMemo(() => {
+    if (!params.steps) return [];
+    try {
+      return normalizeSteps(JSON.parse(params.steps));
+    } catch (error) {
+      console.warn('focus: failed to parse steps param', error);
+      return [];
+    }
+  }, [params.steps]);
+
+  // Restoring a saved session skips the empathy intro and jumps to the step. Route params can
+  // arrive from a link, so the index is held to the steps that exist: an index past the last
+  // step showed the last step without being it, and its Next button then did nothing at all.
   const initialStepIndex = params.resumeStepIndex
-    ? Math.max(0, parseInt(params.resumeStepIndex, 10) || 0)
+    ? Math.min(
+        Math.max(0, parseInt(params.resumeStepIndex, 10) || 0),
+        Math.max(0, steps.length - 1)
+      )
     : -1;
   const [currentStepIndex, setCurrentStepIndex] = useState(initialStepIndex); // -1 = empathy/hook screen
   const { syncProgress, markCompleted } = useTaskProgressSync(
@@ -84,16 +100,6 @@ export default function FocusModeScreen() {
     setTimerRequested(false);
   }, [currentStepIndex]);
 
-  // A malformed param must degrade to the empty state, never crash the screen.
-  const steps: BreakdownStep[] = useMemo(() => {
-    if (!params.steps) return [];
-    try {
-      return normalizeSteps(JSON.parse(params.steps));
-    } catch (error) {
-      console.warn('focus: failed to parse steps param', error);
-      return [];
-    }
-  }, [params.steps]);
   const empathyBridge = params.empathyBridge || '';
   const firstStepHook = params.firstStepHook || '';
   const stoppingPoint = params.stoppingPoint || '';

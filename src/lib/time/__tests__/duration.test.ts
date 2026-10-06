@@ -1,4 +1,4 @@
-import { formatCountdown, joinDuration, splitDuration } from '../duration';
+import { formatCountdown, joinDuration, splitDuration, secondsLeft } from '../duration';
 
 describe('duration helpers', () => {
   it('splits and joins without losing a second', () => {
@@ -17,5 +17,30 @@ describe('duration helpers', () => {
     expect(formatCountdown(65)).toBe('01:05');
     expect(formatCountdown(25 * 60)).toBe('25:00');
     expect(formatCountdown(3600 + 4 * 60 + 5)).toBe('1:04:05');
+  });
+});
+
+describe('secondsLeft', () => {
+  const END = 1_000_000;
+
+  it('shows the whole duration at the moment the countdown starts', () => {
+    expect(secondsLeft(END, END - 25 * 60 * 1000)).toBe(25 * 60);
+  });
+
+  // The display must not read 00:00 while any time is left, or a session would look finished a
+  // second early and the completion would seem to lag behind the clock.
+  it('reads zero only once the time is actually over', () => {
+    expect(secondsLeft(END, END - 1)).toBe(1);
+    expect(secondsLeft(END, END - 999)).toBe(1);
+    expect(secondsLeft(END, END)).toBe(0);
+  });
+
+  it('never goes below zero, however late it is asked', () => {
+    expect(secondsLeft(END, END + 60_000)).toBe(0);
+  });
+
+  it('steps once per whole second', () => {
+    expect(secondsLeft(END, END - 1000)).toBe(1);
+    expect(secondsLeft(END, END - 1001)).toBe(2);
   });
 });

@@ -1,4 +1,6 @@
 import {
+  aggregateDaily,
+  aggregateHourly,
   computeFlowMetrics,
   getFocusSessions,
   recordFocusSession,
@@ -140,5 +142,60 @@ describe('computeFlowMetrics', () => {
   it('treats a missing pickup count as no pickups rather than as a crash', () => {
     const noCount = { ...session(), pickupCount: undefined } as unknown as FocusSessionRecord;
     expect(computeFlowMetrics([noCount]).distractionLevel).toBe(0);
+  });
+});
+
+describe('the heatmap and the focus rhythm', () => {
+  const at = (iso: string) => new Date(iso).getTime();
+  const ended = (iso: string, minutes: number): FocusSessionRecord => ({
+    id: iso,
+    endedAt: at(iso),
+    durationSec: minutes * 60,
+    pickupCount: 0,
+    completed: true,
+    source: 'timer',
+  });
+
+  // Finished at half past one in the morning, local time. In UTC that is still the day before,
+  // and that is where it used to be counted.
+  it('files a late-night session under the day it was on the wall', () => {
+    const days = aggregateDaily([ended('2026-10-02T01:30:00', 40)], 3, at('2026-10-02T09:00:00'));
+
+    expect(days[0]).toEqual({ date: '2026-10-02', focusMinutes: 40 });
+    expect(days[1]).toEqual({ date: '2026-10-01', focusMinutes: 0 });
+  });
+
+  it('names today by the local date, even in the small hours', () => {
+    const days = aggregateDaily([], 1, at('2026-10-02T00:30:00'));
+    expect(days[0].date).toBe('2026-10-02');
+  });
+
+  it('counts a session in each hour it covered, not all at once when it ended', () => {
+    const hours = aggregateHourly(
+      [ended('2026-10-02T11:10:00', 90)],
+      14,
+      at('2026-10-02T12:00:00')
+    );
+    const minutesAt = (hour: number) => hours.find((h) => h.hour === hour)!.focusMinutes;
+
+    expect(minutesAt(9)).toBe(20);
+    expect(minutesAt(10)).toBe(60);
+    expect(minutesAt(11)).toBe(10);
+    expect(hours.reduce((sum, h) => sum + h.focusMinutes, 0)).toBe(90);
+  });
+
+  it('leaves out sessions older than the window', () => {
+    const hours = aggregateHourly(
+      [ended('2026-09-01T10:30:00', 30)],
+      14,
+      at('2026-10-02T12:00:00')
+    );
+    expect(hours.every((h) => h.focusMinutes === 0)).toBe(true);
+  });
+
+  // Step flows are recorded with no duration; they must not add time to any hour.
+  it('adds nothing for a session with no duration', () => {
+    const hours = aggregateHourly([ended('2026-10-02T10:30:00', 0)], 14, at('2026-10-02T12:00:00'));
+    expect(hours.every((h) => h.focusMinutes === 0)).toBe(true);
   });
 });

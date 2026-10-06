@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { AppState } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import { localDateKey } from '../lib/time/calendar';
 import { useAuth } from '../features/auth/controller/AuthContext';
 import {
   createProject,
@@ -65,11 +66,6 @@ const EDIT_SYNC_DELAY_MS = 800;
 
 const newId = () => Crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
-
-function toLocalDateString(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
 
 // ─── Sample subtask suggestions ─────────────────────────────────────────────────────────────────
 // Keyword-matched sample steps; the planner labels them as a demo, never as AI output.
@@ -183,7 +179,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const project = {
         title: input.title,
         color: input.color,
-        dueDate: input.dueDate ? toLocalDateString(input.dueDate) : null,
+        dueDate: input.dueDate ? localDateKey(input.dueDate) : null,
         tasks: input.taskTitles.map((title) => ({ title })),
       };
       const now = nowIso();

@@ -26,6 +26,18 @@ export function formatCountdown(totalSeconds: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 
+/**
+ * Whole seconds left on a countdown ending at `endAt`, as of `now` (both epoch ms).
+ *
+ * Rounded up: the display reads 00:00 only once the time is actually over, never for the last
+ * fraction of a second before it, and it shows the full duration at the moment it starts. Both
+ * timers count against an end time this way rather than by ticking a counter down, so a throttled
+ * thread or an app in the background cannot make them drift.
+ */
+export function secondsLeft(endAt: number, now: number): number {
+  return Math.max(0, Math.ceil((endAt - now) / 1000));
+}
+
 export function formatWallClock(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

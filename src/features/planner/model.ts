@@ -207,9 +207,15 @@ export type PlannerProject = {
   tasks: PlannerTask[];
 };
 
-function progressOf(tasks: PlannerTask[]): number {
-  if (tasks.length === 0) return 0;
-  return Math.round((tasks.filter((task) => task.isCompleted).length / tasks.length) * 100);
+/**
+ * Percent done, where the ends mean what they say: 100 only when every task is done, 0 only when
+ * none is. Plain rounding broke both: 199 of 200 rounded to 100, and 1 of 201 to 0.
+ */
+export function progressOf(tasks: { isCompleted: boolean }[]): number {
+  const done = tasks.filter((task) => task.isCompleted).length;
+  if (done === 0) return 0;
+  if (done === tasks.length) return 100;
+  return Math.min(99, Math.max(1, Math.round((done / tasks.length) * 100)));
 }
 
 function localDate(value: string): Date {

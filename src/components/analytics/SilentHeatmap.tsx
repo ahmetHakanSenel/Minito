@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { daysBefore, localDateKey } from '../../lib/time/calendar';
 
 interface DayActivity {
   date: string; // YYYY-MM-DD format
@@ -43,9 +44,8 @@ const generateGridData = (
 
     // Generate 7 days (rows) for each week
     for (let d = 0; d < 7; d++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - (w * 7 + (6 - d)));
-      const dateStr = date.toISOString().split('T')[0];
+      // The local calendar day, the same key the aggregation files sessions under.
+      const dateStr = localDateKey(daysBefore(today, w * 7 + (6 - d)));
 
       const minutes = activityMap.get(dateStr) || 0;
       weekData.push({
