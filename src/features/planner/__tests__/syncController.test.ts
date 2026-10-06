@@ -116,4 +116,48 @@ describe('PlannerSyncController', () => {
 
     expect(remote.pull).not.toHaveBeenCalled();
   });
+
+  // Signing out while a sync is fetching: the controller is disposed, but the fetch is still in
+  // flight, and the store it writes to is shared with whichever account signs in next. What it
+  // brings back must not land in that account's planner.
+  it('writes nothing once disposed, even from a sync already in flight', async () => {
+    let finishPull: (rows: Awaited<ReturnType<PlannerRemote['pull']>>) => void = () => {};
+    const { controller } = controllerWith(
+      () =>
+        new Promise((resolve) => {
+          finishPull = resolve;
+        })
+    );
+    const writes: string[] = [];
+    const store = (controller as unknown as { store: { update: (c: unknown) => void } }).store;
+    const original = store.update;
+    store.update = (change) => {
+      writes.push('write');
+      original(change);
+    };
+
+    controller.request(0);
+    await jest.advanceTimersByTimeAsync(0);
+    // The push phase has already settled its (empty) queue by now, legitimately: the account was
+    // still signed in. Only what happens after disposal is the question.
+    writes.length = 0;
+    controller.dispose();
+    finishPull({
+      projects: [
+        {
+          id: 'previous-account',
+          title: 'Someone else',
+          color: '#60A5FA',
+          dueDate: null,
+          clientUpdatedAt: '2026-09-16T10:00:00.000Z',
+          deletedAt: null,
+          updatedAt: '2026-09-16T10:00:00.000Z',
+        },
+      ],
+      tasks: [],
+    });
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(writes).toEqual([]);
+  });
 });

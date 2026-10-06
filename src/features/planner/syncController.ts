@@ -28,6 +28,23 @@ export class PlannerSyncController {
   private failures = 0;
   private disposed = false;
 
+  /**
+   * The store as a sync run sees it: inert once the controller is disposed.
+   *
+   * Disposing cancels what is scheduled, but a run already in flight keeps going until its
+   * request returns, and the store it writes to belongs to whichever account is signed in by
+   * then. Without this, signing out mid-sync and into another account merged the first
+   * account's projects into the second one's planner, and saved them to its file. Dropped writes
+   * cost nothing: the first account's pending changes stay in its own file and go up again the
+   * next time it signs in, and pushes are idempotent upserts.
+   */
+  private readonly runStore: StateStore = {
+    get: () => this.store.get(),
+    update: (change) => {
+      if (!this.disposed) this.store.update(change);
+    },
+  };
+
   constructor(
     private readonly store: StateStore,
     private readonly remote: PlannerRemote,
@@ -73,7 +90,7 @@ export class PlannerSyncController {
     if (this.disposed) return;
     this.running = true;
     this.rerun = false;
-    const outcome = await syncOnce(this.store, this.remote, (kind, id) =>
+    const outcome = await syncOnce(this.runStore, this.remote, (kind, id) =>
       console.warn(`Planner sync: the server rejected ${kind} ${id}; it stays on this device only.`)
     );
     this.running = false;

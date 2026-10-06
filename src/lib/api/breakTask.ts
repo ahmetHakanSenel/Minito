@@ -147,7 +147,9 @@ export async function breakTask(input: string): Promise<BreakTaskResult> {
       return failure(FallbackReason.AUTH_EXPIRED, 'Not signed in');
     }
 
-    // The Supabase gateway still expects the anon key as `apikey`; identity comes from the JWT.
+    // Identity comes from the JWT alone; the gateway passes a request through without `apikey`
+    // (checked against the deployed functions). The anon key rides along because it is public
+    // anyway and some Supabase deployments do still read it.
     const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
     const payload: BreakTaskRequest = {
       input: task,

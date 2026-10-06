@@ -1,5 +1,5 @@
 import { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
-import { createTracedAxiosInstance } from '../requestTracing';
+import { createTracedAxiosInstance, DEFAULT_TIMEOUT_MS } from '../requestTracing';
 
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'generated-id') }));
 
@@ -23,5 +23,13 @@ describe('traced axios', () => {
     const headers = new AxiosHeaders({ 'x-request-id': 'caller-id' });
     const config = tracingInterceptor()({ headers });
     expect(config.headers.get('x-request-id')).toBe('caller-id');
+  });
+
+  // Axios has no timeout of its own. Without one a stalled connection leaves a spinner turning for
+  // ever — exporting or deleting an account set none of their own.
+  it('gives every request a ceiling', () => {
+    const instance = createTracedAxiosInstance();
+    expect(instance.defaults.timeout).toBe(DEFAULT_TIMEOUT_MS);
+    expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(0);
   });
 });
