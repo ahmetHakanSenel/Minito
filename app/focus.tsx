@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StatusBar, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+} from 'react-native';
 // Gesture-aware, so the step timer's dial can take a vertical drag from the page.
 import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -253,13 +260,14 @@ export default function FocusModeScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>{t('home.noSteps')}</Text>
             {/* Without this the screen is a dead end: no steps, no header, nothing to press. */}
-            <Pressable
+            <TouchableOpacity
               onPress={() => router.replace('/')}
               accessibilityRole="button"
-              style={({ pressed }) => [styles.emptyAction, pressed && styles.readyButtonPressed]}
+              activeOpacity={0.82}
+              style={styles.emptyAction}
             >
               <Text style={styles.readyButtonText}>{t('home.backHome')}</Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
@@ -340,14 +348,14 @@ export default function FocusModeScreen() {
               >
                 {/* The same gradient every other primary action in the app uses: starting a
                     session, creating a project, confirming a dialog. This one was a flat block
-                    of colour, which made the first thing a person presses the odd one out. */}
-                <Pressable
+                    of colour, which made the first thing a person presses the odd one out.
+                    Its rounding is a plain style, as on the other primary buttons: given through
+                    Pressable's style function, it rendered square on an Android device. */}
+                <TouchableOpacity
                   onPress={handleNext}
                   accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.readyButton,
-                    pressed && styles.readyButtonPressed,
-                  ]}
+                  activeOpacity={0.82}
+                  style={styles.readyButton}
                 >
                   <LinearGradient
                     colors={['#8B5CF6', '#6D28D9']}
@@ -358,7 +366,7 @@ export default function FocusModeScreen() {
                     <Text style={styles.readyButtonText}>{t('focus.ready')}</Text>
                     <ArrowRight size={19} color="#FFFFFF" strokeWidth={2.5} />
                   </LinearGradient>
-                </Pressable>
+                </TouchableOpacity>
               </Animated.View>
             </View>
           </ScrollView>
@@ -538,10 +546,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-  },
-  readyButtonPressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
   },
   readyButtonText: {
     color: '#FFFFFF',

@@ -232,7 +232,6 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                     key={color}
                     style={[
                       modalStyles.colorOption,
-                      { backgroundColor: color },
                       selectedColor === color && modalStyles.colorSelected,
                     ]}
                     onPress={() => {
@@ -242,7 +241,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                     accessibilityRole="radio"
                     accessibilityLabel={t(PROJECT_COLOR_NAMES[color])}
                     accessibilityState={{ selected: selectedColor === color }}
-                  />
+                  >
+                    <View style={[modalStyles.colorSwatch, { backgroundColor: color }]} />
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>
@@ -441,20 +442,29 @@ const modalStyles = StyleSheet.create({
   colorSection: {
     marginBottom: 20,
   },
+  // Spread across the row rather than a fixed gap, so six swatches fit a narrow phone too.
   colorGrid: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
   },
+  // The selection is a ring around the swatch, inside the option's own bounds. Scaling the
+  // swatch up instead pushed the first one past the card's edge, which cut its ring off.
   colorOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 3,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
     borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   colorSelected: {
     borderColor: '#FFFFFF',
-    transform: [{ scale: 1.1 }],
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   aiButton: {
     flexDirection: 'row',

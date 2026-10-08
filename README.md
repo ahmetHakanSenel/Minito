@@ -31,14 +31,15 @@ and explicit permission to stop.
 
 History, progress and the project planner sync across devices, and keep working offline.
 
-<!--
-  Product screenshots go here, once they have been captured from a device. Drop the files in
-  docs/assets/ and uncomment:
+<p align="center">
+  <img src="docs/assets/screens-flow.webp" alt="Minito on Android: the task input; the plan opening with a line that shows it understood and a first move; one step in focus mode with its timer; the celebration at the end" width="100%">
+</p>
+<p align="center"><sub>Type what feels too big · the plan opens by showing it understood, then a first move · one step at a time, timed only when the step asks for it · the finish is celebrated</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens-en.png" alt="Minito: the task input, a plan, and focus mode" width="100%">
+  <img src="docs/assets/screens-features.webp" alt="Minito on Android: the last step with its permission to stop; the offline-first planner; setting up a timed focus session; the ambient sounds" width="100%">
 </p>
--->
+<p align="center"><sub>The last step says it is fine to stop · a planner that works offline · timed focus sessions · ambient sounds that fade in and out. Captured on an Android phone, in Turkish.</sub></p>
 
 <p align="center">
   <picture>

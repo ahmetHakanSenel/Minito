@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, Calendar, Headphones, BarChart3, Settings, User } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -53,7 +53,6 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
   onNavigate,
 }) => {
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
   const { displayName, user } = useAuth();
 
   // Screens that do not pass a name still show the signed-in user's handle.
@@ -86,87 +85,94 @@ export const DashboardModal: React.FC<DashboardModalProps> = ({
       >
         <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
 
-        <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-          <AnimatedView
-            entering={SlideInDown.duration(300)}
-            exiting={SlideOutDown.duration(200)}
-            style={styles.content}
-          >
-            {/* Header */}
-            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-              <Text style={styles.headerTitle}>{t('dashboard.controlCenter')}</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={handleClose}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel={t('common.close')}
-              >
-                <X size={24} color="#FFFFFF" strokeWidth={2} />
-              </TouchableOpacity>
-            </View>
+        {/* A modal is a window of its own, laid out under a translucent status bar. Its safe area
+            is measured there, by its own provider. Read from the app's root instead, the inset did
+            not hold inside the modal, and the title was drawn under the status bar. */}
+        <SafeAreaProvider>
+          <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+            <AnimatedView
+              entering={SlideInDown.duration(300)}
+              exiting={SlideOutDown.duration(200)}
+              style={styles.content}
+            >
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={styles.headerTitle}>{t('dashboard.controlCenter')}</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={handleClose}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                >
+                  <X size={24} color="#FFFFFF" strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-              {/* User Summary Card */}
-              <View style={styles.userCard}>
-                <View style={styles.avatarContainer}>
-                  <User size={28} color="#FFFFFF" strokeWidth={2} />
-                </View>
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName} numberOfLines={1}>
-                    {name}
-                  </Text>
-                  {subtitle ? (
-                    <Text style={styles.userSubtitle} numberOfLines={1}>
-                      {subtitle}
+              <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+                {/* User Summary Card */}
+                <View style={styles.userCard}>
+                  <View style={styles.avatarContainer}>
+                    <User size={28} color="#FFFFFF" strokeWidth={2} />
+                  </View>
+                  <View style={styles.userInfo}>
+                    <Text style={styles.userName} numberOfLines={1}>
+                      {name}
                     </Text>
-                  ) : null}
+                    {subtitle ? (
+                      <Text style={styles.userSubtitle} numberOfLines={1}>
+                        {subtitle}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
 
-              {/* Quick Actions Grid */}
-              <Text style={styles.sectionTitle}>{t('dashboard.quickAccess')}</Text>
-              <View style={styles.actionsGrid}>
-                <QuickActionCard
-                  icon={<Calendar size={28} color="#60A5FA" strokeWidth={2} />}
-                  label={t('planner.title')}
-                  bgColor="rgba(96, 165, 250, 0.15)"
-                  onPress={() => handleNavigate('planner')}
-                />
-                <QuickActionCard
-                  icon={<Headphones size={28} color="#A78BFA" strokeWidth={2} />}
-                  label={t('audio.title')}
-                  bgColor="rgba(167, 139, 250, 0.15)"
-                  onPress={() => handleNavigate('sounds')}
-                />
-                <QuickActionCard
-                  icon={<BarChart3 size={28} color="#34D399" strokeWidth={2} />}
-                  label={t('stats.title')}
-                  bgColor="rgba(52, 211, 153, 0.15)"
-                  onPress={() => handleNavigate('stats')}
-                />
-                <QuickActionCard
-                  icon={<Settings size={28} color="#9CA3AF" strokeWidth={2} />}
-                  label={t('settings.title')}
-                  bgColor="rgba(156, 163, 175, 0.15)"
-                  onPress={() => handleNavigate('settings')}
-                />
-              </View>
+                {/* Quick Actions Grid */}
+                <Text style={styles.sectionTitle}>{t('dashboard.quickAccess')}</Text>
+                <View style={styles.actionsGrid}>
+                  <QuickActionCard
+                    icon={<Calendar size={28} color="#60A5FA" strokeWidth={2} />}
+                    label={t('planner.title')}
+                    bgColor="rgba(96, 165, 250, 0.15)"
+                    onPress={() => handleNavigate('planner')}
+                  />
+                  <QuickActionCard
+                    icon={<Headphones size={28} color="#A78BFA" strokeWidth={2} />}
+                    label={t('audio.title')}
+                    bgColor="rgba(167, 139, 250, 0.15)"
+                    onPress={() => handleNavigate('sounds')}
+                  />
+                  <QuickActionCard
+                    icon={<BarChart3 size={28} color="#34D399" strokeWidth={2} />}
+                    label={t('stats.title')}
+                    bgColor="rgba(52, 211, 153, 0.15)"
+                    onPress={() => handleNavigate('stats')}
+                  />
+                  <QuickActionCard
+                    icon={<Settings size={28} color="#9CA3AF" strokeWidth={2} />}
+                    label={t('settings.title')}
+                    bgColor="rgba(156, 163, 175, 0.15)"
+                    onPress={() => handleNavigate('settings')}
+                  />
+                </View>
 
-              {/* Extra spacing at bottom */}
-              <View style={{ height: 40 }} />
-            </ScrollView>
-          </AnimatedView>
-        </SafeAreaView>
+                {/* Extra spacing at bottom */}
+                <View style={{ height: 40 }} />
+              </ScrollView>
+            </AnimatedView>
+          </SafeAreaView>
+        </SafeAreaProvider>
       </AnimatedView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  // Android draws BlurView as a plain tint, not a blur, so at 0.85 the screen underneath stayed
+  // readable through the translucent tiles and its words ran into theirs.
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(5, 5, 16, 0.96)',
   },
   safeArea: {
     flex: 1,
@@ -179,6 +185,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingTop: 16,
     paddingBottom: 16,
     marginBottom: 8,
   },

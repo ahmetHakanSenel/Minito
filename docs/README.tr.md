@@ -32,13 +32,15 @@ her adım, bırakmanın da sorun olmadığını açıkça söyleyerek biter.
 Geçmiş, ilerleme ve proje planlayıcısı cihazlar arasında senkronize olur, çevrimdışıyken de
 çalışmaya devam eder.
 
-<!--
-  Ürün ekran görüntüleri buraya. Dosyalar docs/assets/ içine konduktan sonra yorumu kaldırın:
+<p align="center">
+  <img src="assets/screens-flow.webp" alt="Android'de Minito: görev girişi; anlaşıldığını gösteren bir cümle ve ilk hamleyle açılan plan; zamanlayıcısıyla odak modunda bir adım; sondaki kutlama" width="100%">
+</p>
+<p align="center"><sub>Göz korkutan işi yaz · plan önce anlaşıldığını gösterir, sonra ilk hamleyi verir · her seferinde tek adım; süre yalnızca adım isterse · bitiş kutlanır</sub></p>
 
 <p align="center">
-  <img src="assets/screens-tr.png" alt="Minito: görev girişi, bir plan ve odak ekranı" width="100%">
+  <img src="assets/screens-features.webp" alt="Android'de Minito: bırakmaya izin veren son adım; çevrimdışı çalışan planlayıcı; süreli odak oturumu kurulumu; ortam sesleri" width="100%">
 </p>
--->
+<p align="center"><sub>Son adım durmanın sorun olmadığını söyler · çevrimdışı çalışan planlayıcı · süreli odak oturumları · yumuşak geçişli ortam sesleri. Android bir telefonda çekildi.</sub></p>
 
 <p align="center">
   <picture>
